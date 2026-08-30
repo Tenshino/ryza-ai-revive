@@ -9,7 +9,7 @@
 行为以 `web/assets/` 里的原始 JSON / 音频目录 / 骨骼 / UI 图为准（已与 APK 3609 个 flutter 资源对过，无缺无多）。
 没有 Dart 源码可抄。官方登录/付费/分析等见下面「明确不要做」。
 
-已核对记录：`docs/AUDIT.md`（2026-08-31）。结论：**素材对；主路径已接上。**
+已核对记录：`docs/AUDIT.md`（2026-08-31；增补 2026-09-01 动作抽动修复，§3.7）。结论：**素材对；主路径已接上；抽动已修**。
 音景与源包一致：**对话页没有 BGM**（包里只有 `bgm_opening` / `bgm_world_map` 两首），对话页播地点 ambient；进地图才切 `bgm_world_map`。不要把「地图才出 BGM」当成漏做。腮红 overlay 按 Normal。角色 `Physics.update` **只一次**。
 `config/providers.json` 含水合用的 API Key，**不要进 git**；复制 `config/providers.example.json` 再填。
 不要把 AUDIT 旧段落里的「NPC 调度错、FX_BY_EMOTION、循环 fade_in」当成还没修——那些已经改过。先读 AUDIT 全文再动手。
@@ -107,6 +107,15 @@ desktop/ 有 pywebview 壳，android/ 有 WebView 薄壳（本机尚未打出 ex
 8. idle 重掷不要重抽仍适用的 MotionGroup；同 AnimName 不要 out→in。未标 `poseTypeIds` 的 A_* 不要当所有姿势类型的候选。
 9. 角色 `Physics.update` **只一次**。不要再 `Physics.none`，那会丢掉物理、动作抖。肢体换组时不要 `setEmptyAnimation(mix=0)` 再 delay，也不要 `addAnimation` 接到 looping 当前片段后面（永远不会开始）。
 10. 音景是源设计，不是漏做：对话页 **不要** 播 BGM；进 `world_map_screen` 才播 `bgm_world_map`。对话页 `setRoute('talk')` 必须播地点 ambient。`Sound.unlock` 用独立 Audio；循环 src 记在 `_loopSrc`，禁止写 `_ambientSrc`（会把解析函数覆盖掉，环境音永久没声）。
+
+11. 【动作抽动/不自然 · 2026-09-01 已修，别退回去】详见 `docs/AUDIT.md` §3.7。核心：
+    - 指针偏移（`fingerTrack*`，±514 单位）**必须**乘 `Avatar._ptrW`（按 `gazeReturnToFront` 进出缓动 0.4–0.8s）；平滑指针初值钉在 `rig_face`，鼠标进/出立绘区时眼睛/头/身 IK 目标禁止一帧瞬移。
+    - 张力是连续值（`tensionConfig` decayRates，high→mid→low 约 2s 收尾），band 走 `_tensionBand()`，别退回「说话=high 否则=low」的二值切换。
+    - `ambientBindings.repeatMin/Max` 由 `_lookCyc` 兑现（同一 driver 连做 2–8 次）；`eyeModeEntries.closed`（1.5s 深眨）已实现，用 `addAnimation(open, delay)` 保持闭眼（0 长度 pose 片段上可行，回归验证过）。
+    - DriverDefs 分 `driver:'eye'|'head'`：eye 驱动只打眼睛（幅度系数 ~0.18×unit），head 驱动带 followers。`lookAtUser:true` 的窗口本身跨 0=看着玩家，别改成随机乱飘。
+    - `Util.hashHex` 解析 skel 的有符号两半 hash（`-2a81ab33-1db7ab26`→`d57e54cde24854da`），与 `MixDurationPoses.sourceHash` **坐/站都精确相等**——「hash 对不上」这条旧结论作废。
+    - `_effectNames` 按 `emotion|band` memo；setTalking 不再同步换口型档前先想清楚会不会把腮红重摇。ASMR=weak 档，走 `Avatar.onModeChange()`。
+    - 回归方法：`node` 里 eval `web/vendor/spine-webgl.js` + 桩 Atlas（findRegion 返回假 region 即可 `readSkeletonData`），配桩 DOM 加载真实 `avatar.js` 驱 60s，查 NaN/卡轨（本轮两份 skel 全过）。
 
 【三条必须知道的技术约束】
 1. Spine 4.2 的 skeleton.updateWorldTransform() 必须传参，

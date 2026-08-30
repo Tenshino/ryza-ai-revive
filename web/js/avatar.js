@@ -923,9 +923,15 @@
 
     _pickLayerGroup: function (kind, idleName, poseType, preferRest) {
       var restId = kind === 'arm' ? Avatar._restGroupId() : '';
+      var data0 = Avatar.avatar && Avatar.avatar.data;
+      function resolvable(g) {
+        if (!data0) return true;
+        return !!(pickAnim(data0, g.AnimName_1) || pickAnim(data0, g.AnimName_2));
+      }
       if (preferRest && restId) {
         var rest = Avatar._motionGroups().filter(function (g) {
-          return g.GroupId === restId && Avatar._occKind(g) === kind && Avatar._groupApplies(g, idleName);
+          return g.GroupId === restId && Avatar._occKind(g) === kind &&
+                 Avatar._groupApplies(g, idleName) && resolvable(g);
         });
         if (rest.length) {
           return Avatar._weighted(rest, function (g) { return Number(g.VariantWeight) || 1; });
@@ -936,6 +942,10 @@
                   : Avatar._armWeights(poseType);
       var groups = Avatar._motionGroups().filter(function (g) {
         if (Avatar._occKind(g) !== kind || !Avatar._groupApplies(g, idleName)) return false;
+        /* Some authored groups reference clips the animator retired
+           (…_active_ignore); playing those tracks would silently drop the
+           limb to the base pose. Only groups with a resolvable clip can win. */
+        if (!resolvable(g)) return false;
         if (weights) return Number(weights[g.GroupId]) > 0;
         return (Number(g.GroupWeight) || 0) > 0;
       });
@@ -946,7 +956,7 @@
       if (pick) return pick;
       if (restId) {
         return Avatar._motionGroups().filter(function (g) {
-          return g.GroupId === restId && Avatar._occKind(g) === kind;
+          return g.GroupId === restId && Avatar._occKind(g) === kind && resolvable(g);
         })[0] || null;
       }
       return null;

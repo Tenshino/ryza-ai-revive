@@ -1,6 +1,7 @@
 # 实现核对（相对源 APK v1.0.2）
 
-日期：2026-08-31（音景与源包两首 BGM 对齐；腮红 Normal；Physics 单次 update）  
+日期：2026-08-31（音景与源包两首 BGM 对齐；腮红 Normal；Physics 单次 update）
+增补：2026-09-01（动作抽动与不自然：注视/指针/张力/眨眼/重掷加权/hash；见 §3.7）  
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -84,7 +85,7 @@
 
 | 点 | 源 | 现在 |
 |---|---|---|
-| `MixDurationPoses` | APK 用骨骼距离算 mix | `animPoses` 两边有骨头就走距离 mix；`sourceHash` 对不上也用表。同类型短混合作下限 |
+| `MixDurationPoses` | APK 用骨骼距离算 mix | skel hash 有符号两半已被 `Util.hashHex` 正确解析，sourceHash 坐/站都精确命中 → 距离 mix 走正路；同类型短混合作下限 |
 | 强度档 | `normal` / `strong` / `weak` 整套 profile | 说话时用 `strong`，否则 `normal` |
 | Driver 跟随 delay | `followers[].delay` | 注视历史队列按 delay 取样 |
 | 镜头高度 | JSON 的 zoom/pan | 视野高度仍是 `1720 / (zoom/1.93)`；ASMR panY 会略抬以对着脸（zoom 3.5 特写是表里的） |
@@ -107,6 +108,7 @@
 白斑不是「永远关掉腮红」。setup 姿态里 Multiply 的颊线/鼻高光一直挂着，直通 Alpha 下 `dst*(rgb+1−a)` 会乘亮。idle 必须播 `facial_add_blush_000_off` 并摘掉这两槽。`effectSets` 里的 blush001 等仍会 ON，挂的是 `038_face_cheek`：**按 Normal 画**，不要走 Multiply / PMA 第二遍，否则腮红本身过曝。
 
 ### 3.6 音景（与源包对齐，不要「补」对话 BGM）
+
 
 源 APK 的 `BackgroundTrackId` 只有：
 
@@ -132,6 +134,22 @@
 1. 浏览器要用户手势才让 `audio.play()` 成功。`Sound.unlock` 用独立 `Audio` ping，不要动 BGM/ambient 两个循环元素。
 2. 循环音源记在 `Sound._loopSrc.bgm/ambient`。**禁止** `Sound['_ambientSrc'] = url`：那会把 `_ambientSrc` 函数覆盖成字符串，之后地点音效永久消失。
 3. 对话页 `setRoute('talk')` 必须开始 ambient。不要为了「对话也有 BGM」去播 `bgm_world_map` 或 opening。
+
+### 3.7 动作抽动与不自然（2026-09-01 已修，不要退回去）
+
+按原始数据核出来的根因，全部对坐/站两套 skel+gesture 做了离线行为回归（node + vendor spine 运行时驱 60s，无 NaN、轨道不卡死）：
+
+1. **指针进/出立绘区一帧瞬移（偶发抽动的主因）**。`fingerTrack*` 的偏移最大 ±514 世界单位，直接 `+=` 在 `control_aim_eye/head/body` 上；鼠标一进 `#avatar-hit` 就把眼睛/头/身 IK 目标瞬移过去，离开时又瞬移回来。源数据里 **`projectConfig.gazeReturnToFront`（entry/exit：min 0.4 / max 0.8 / secondsPerDistance 0.8）就是管这个的**，之前没人读。现在 `_ptrW` 权重按该配置进出缓动，且平滑指针初值钉在脸上（偏移从 0 起步），不再 teleport。
+2. **注视驱动没有循环**。`ambientBindings` 每条带 `repeatMin/repeatMax`（同一 driver 连做 2–8 次再换），之前每次随机换 driver，头部模式跳、显得「眼神乱飘」。现在 `_lookCyc` 按 band 记住重复次数。
+3. **driver 的 `eye` 与 `head` 两种不再混用**。98 个 DriverDefs 里 21 个是纯眼球小动作（yaw 窗口 0.4–1.0 rad），此前统一按 head 幅度乘 `unit=110` 打眼睛（作者关键帧眼睛位移只有 ±7–20 单位，之前打出去大一个量级）。现在 eye 驱动走眼睛为主、头只轻微带。`lookAtUser:true` 的 78 个驱动窗口本身跨 0（朝前=朝玩家），保持原窗口即为「看着你」。
+4. **张力档只用了一半**。源有 `tensionConfig`（defaultDecayRate 0.02 + low/mid/high decayRates 0.022/0.033/0.044）和三档 `tensionProfiles.low/mid/high`；之前说话↔不说话在 high/low 之间硬切（mid 带、weak 档永远用不到），说完话手臂/躯干/注视瞬间掉档。现在是 0..1 连续张力：说话拉满、按档位速率衰减（约 2s 收尾），band 阈值 0.66/0.33。ASMR 模式用 `intensityProfiles.weak` + `performanceConfig.intensitySpeedMultipliers.weak`（0.9×），切换走 `Avatar.onModeChange()`。
+5. **眨眼只做了 blink/blinkFast，漏了 `closed`**。`eyeModeEntries` 里 weight 0.1 的 `closed`（闭眼 1.5s）没实现 → 眼睛长时间不眨的「死鱼眼」观感。现在按权重抽三种模式，closed 用 `addAnimation(open, delay=1.5)` 保持闭眼再回开（0 长度 pose 片段 + 延迟队列，回归里验证过不卡死）。
+6. **待机重掷是均匀随机**。站姿 `basePoses` 带 `weight`（如 A_007=0.05 稀有姿势），坐/站的 `PoseTypeSets` 结构不同（站姿的 poseType 就是动画 ID 本身）。现在 `_idlesForType` 返回 `{name,w}` 走 `Util.weighted`。
+7. **`MixDurationPoses.sourceHash` 其实一直对得上**。skel 头里的 hash 是**两个有符号 32 位半**拼出来的字符串（`-2a81ab33` + `-1db7ab26` = `"-2a81ab33-1db7ab26"`），无符号化 = `d57e54cde24854da`，与坐/站两份 gesture 的 sourceHash 完全一致（站姿 `-248f57f7`+`6b63f08c` → `db70a8096b63f08c` 同样一致）。`Util.hashHex` 之前只是剥字符 → 永不命中，只能靠 `_hasPoseBones` 兜底。已按签名解析修正，**AUDIT 旧文「sourceHash 可能对不上」这条作废**。
+8. **FX 名一次回复重摇两次**。setEmotion 与 setTalking 都会 `_syncFx`，`effectSets` 每次重新加权抽 → 同一句话腮红/泪可能换配方。现在 `_effectNames` 按 `emotion|intensityBand` memo；`_syncFx` 的 key 去掉说话标志。
+9. 小修：`samePartDetourDirection` 在 `armInOutPartConfig` 里（之前读 projectConfig 顶层，永远 fallback 'up'，与源值巧合同款）；followers `scale` 缺失时 NaN 防护；口型 `.env.json` 优先于实时 RMS（预录语音用作者包络）。
+
+**App 侧连带**：TTS 失败/无音频不再把 `setTalking(true)` 卡死（说话改在音频就绪、`playUrl` 真正开播时才进 strong 档）；序章旁白改走 `App.playFile(src, null, true)`（吃口型 analyser、语音开关不吞序章）。
 
 ---
 

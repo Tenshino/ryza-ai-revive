@@ -4,7 +4,7 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-08-31）：**玩家主路径已按源数据接上**。音景与源包两首 BGM 对齐：标题 `bgm_opening`、对话只有地点 ambient、地图 `bgm_world_map`。腮红 overlay 走普通 Alpha。动作 Physics 每帧只 `update` 一次。细目见 `docs/AUDIT.md`。
+状态（2026-09-01）：**玩家主路径已按源数据接上；动作抽动/不自然已修**（注视指针进出缓动、张力三带衰减、driver 循环、深眨、重掷加权、skel hash 签名解析——见 `docs/AUDIT.md` §3.7，行为回归在 `node`+vendor spine 上跑过 60s 双姿态无 NaN）。音景与源包两首 BGM 对齐：标题 `bgm_opening`、对话只有地点 ambient、地图 `bgm_world_map`。腮红 overlay 走普通 Alpha。动作 Physics 每帧只 `update` 一次。细目见 `docs/AUDIT.md`。
 
 本目录已 `git init`，作为防错改快照。`config/providers.json` **不要提交**（含 API Key）；模板是 `config/providers.example.json`。
 
@@ -81,6 +81,8 @@ python scripts/serve.py
 - 坐/站骨骼：场景 `midgroundPostures[0]` → `_01` / `_99`；玩家选的是 outfit（`crf_skn_002_0001`），不是带后缀的目录名
 - `setEmotion`：脸/特效/一次性动作；**不换** track 0 待机（`fixedBasePoseMode`）
 - 待机重掷、`PoseTypeSets`、`MotionGroups` Occupancy 分层见 AUDIT §3
+- **注视指针与张力（2026-09-01，见 AUDIT §3.7）**：`fingerTrack*` 的偏移必须乘 `_ptrW`（按 `gazeReturnToFront` entry/exit 进出缓动，平滑指针初值钉在 `rig_face`），禁止裸 `+=`；`ambientBindings.repeatMin/Max` 由 `_lookCyc` 兑现；`tensionConfig` 的三带速率驱动连续 `_tension`（high→mid→low 收尾约 2s），`_tensionBand()` 决定 gaze/torso/眨眼档，ASMR 用 `intensityProfiles.weak` + `onModeChange()`；`eyeModeEntries.closed`（闭眼 1.5s）在 blink 队列里用 delay 兑现；`_effectNames` 按 `emotion|band` memo
+- `Util.hashHex` 把 skel 的**有符号两半** hash（`-2a81ab33-1db7ab26`）转成无符号 `d57e54cde24854da`，与 `MixDurationPoses.sourceHash` 精确相等（坐/站都已验证）——距离 mix 路径因此始终可走
 - 特效只来自 `effectSets` → `fxOnAnimNames` / `fxOffAnimNames`
 - 注视 `DriverDefs` + aim/roll（`followers[].delay` 用注视历史队列）；指尖 `fingerTrack*`；口型 `lipSyncClosure` 或 `.env.json`
 - 轨道：0 待机 / 1 一次性 / 2 眼 / 3 眉 / 4 嘴 / 5 特效 / 6 触摸 / 7+15+16 额外特效 / 8–9 手臂（B 或 FG，`MixBlend.replace`）/ 10 风（`MixBlend.add`）/ 11–12 躯干 / 13–14 腿
@@ -170,7 +172,7 @@ python scripts/serve.py
 
 ## 5. 已知问题 / 剩余
 
-1. `MixDurationPoses.sourceHash` 仍可能对不上 `skeleton.hash`；两边动画在 `animPoses` 里有骨头数据时仍用距离 mix。
+1. ~~`MixDurationPoses.sourceHash` 仍可能对不上 `skeleton.hash`~~（2026-09-01 已解决：skel hash 是两个有符号 32 位半拼的字符串，`Util.hashHex` 已按签名解析，坐/站均精确命中，距离 mix 走正路）。
 2. 闹钟只在应用前台触发。
 3. 参考音频只接受 wav/mp3；克隆用 wav 在 `web/assets/voice/ryza_wav/`。
 4. 桌面/安卓壳未在本机打出安装包。
