@@ -224,8 +224,12 @@
       var hint = document.getElementById('pro-hint');
       label.textContent = n + ' / 9';
       hint.textContent = I18n.t('onb.prologueHint');
-      if (Onboarding._audio) { try { Onboarding._audio.pause(); } catch (e) {} }
+      /* Route through App.audio so the analyser graph (lip-sync RMS) is
+         attached; `force` keeps the prologue audible even with the voice
+         toggle off — it is core onboarding narration, not reply TTS. */
       var src = Sound.prologue(n);
+      if (window.App && App.playFile) { App.playFile(src, null, true); return; }
+      if (Onboarding._audio) { try { Onboarding._audio.pause(); } catch (e) {} }
       var a = new Audio(src);
       Onboarding._audio = a;
       a.volume = Number(Config.section('app').volume) || 0.9;
@@ -236,7 +240,8 @@
 
     prologueNext: function () {
       if (Onboarding._audio) { try { Onboarding._audio.pause(); } catch (e) {} }
-      Avatar.setTalking && Avatar.setTalking(false);
+      if (window.App && App._pauseVoice) App._pauseVoice();
+      else Avatar.setTalking && Avatar.setTalking(false);
       if (Onboarding._proIdx < 9) {
         Onboarding._proIdx++;
         Onboarding._playPrologue();

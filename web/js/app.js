@@ -180,12 +180,17 @@
       document.querySelectorAll('.mode-pill[data-mode]').forEach(function (b) {
         b.classList.toggle('active', b.getAttribute('data-mode') === st.mode);
         b.onclick = function () {
+          var prevMode = st.mode;
           Config.set('state.mode', b.getAttribute('data-mode'));
           document.querySelectorAll('.mode-pill[data-mode]').forEach(function (x) {
             x.classList.toggle('active', x === b);
           });
           App.updateHud();
           if (window.Avatar && Avatar.resize) Avatar.resize();
+          if (window.Avatar && Avatar.onModeChange &&
+              b.getAttribute('data-mode') !== prevMode) {
+            Avatar.onModeChange();
+          }
           document.getElementById('sheet-mode').classList.add('hidden');
         };
       });
@@ -497,8 +502,10 @@
       var st = Config.section('state');
       var app = Config.section('app');
       if (!app.voice || st.style === 'text' || Config.section('tts').mode === 'off') return;
-      Avatar.setTalking(true);
       Api.speak(text).then(function (url) {
+        /* Talking starts when the audio actually exists — before that the
+           mouth sat closed (RMS target 0) for the whole TTS latency, and a
+           failed synth left _talking stuck true forever. */
         if (!url) return;
         App.playUrl(url);
       }).catch(function (e) {
@@ -524,12 +531,18 @@
           App._pendingQuestion = null;
         }
       };
+      Avatar.setTalking(true);
       a.play().catch(function () { Avatar.setTalking(false); });
       App.buzz();
     },
 
-    playFile: function (path, vol) {
-      if (!Config.section('app').voice) return;
+    _pauseVoice: function () {
+      if (App.audio) { try { App.audio.pause(); } catch (e) {} }
+      if (Avatar && Avatar.setTalking) Avatar.setTalking(false);
+    },
+
+    playFile: function (path, vol, force) {
+      if (!force && !Config.section('app').voice) return;
       App._ensureVoiceGraph();
       if (App._voiceCtx && App._voiceCtx.state === 'suspended') {
         App._voiceCtx.resume().catch(function () {});

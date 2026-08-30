@@ -155,6 +155,23 @@
     _typeMap: null,
     _lookMul: 1,
     _fxNames: null,
+    /* FX pick memo (emotion|band) so one reply does not re-roll blush twice */
+    _fxPick: null,
+    /* gaze driver cycle: { band, spec, left } honours ambientBindings
+       repeatMin/repeatMax (source repeats the same driver pattern) */
+    _lookCyc: null,
+    /* pointer-follow weight 0..1, eased with projectConfig.gazeReturnToFront
+       (source returns gaze to front over 0.4–0.8 s, never snaps) */
+    _ptrW: 0,
+    _ptrN: 0,
+    _dt: 0,
+    _blinkMode: 'blink',
+    _closedDur: 0,
+    _closedHold: 0,
+    /* Continuous tension (projectConfig.tensionConfig): ramps to 1 while
+       talking, then decays high → mid → low at the band's decay rate.
+       Drives gaze bindings, torso weights and blink cadence. */
+    _tension: 0,
 
     /* ------------------------------------------------------------- setup */
     init: function (onReady) {
@@ -417,6 +434,11 @@
             if (err) { App && App.toast(err.message, true); cb && cb(err); return; }
             Avatar._loadedSkelId = s.id;
             Avatar._fxKey = '';
+            Avatar._fxPick = null;
+            Avatar._lookCyc = null;
+            Avatar._ptrW = 0;
+            Avatar._ptrN = 0;
+            Avatar._closedHold = 0;
             Avatar._drivers = null;
             Avatar._fxOn = false;
             Avatar._poseType = '';
@@ -515,11 +537,18 @@
       return map[emotion] || map.neutral || null;
     },
 
+    _intensityBand: function () {
+      if (Avatar._talking || Avatar._tension > 0.66) return 'strong';
+      var mode = '';
+      try { mode = Config.section('state').mode; } catch (e) {}
+      return mode === 'asmr' ? 'weak' : 'normal';
+    },
+
     _intensity: function (prof) {
       var ip = prof && prof.intensityProfiles;
       if (!ip) return null;
-      if (Avatar._talking && ip.strong) return ip.strong;
-      return ip.normal || ip.strong || ip.weak || null;
+      var want = ip[Avatar._intensityBand()];
+      return want || ip.normal || ip.strong || ip.weak || null;
     },
 
     _oneShots: function (emotion, attitude) {
@@ -725,12 +754,18 @@
         var ids = Avatar._typesOfPose(p);
         if (!poseType) return true;
         return ids.length > 0 && ids.indexOf(poseType) >= 0;
-      }).map(function (p) { return pickAnim(data, p.id); }).filter(Boolean);
+      }).map(function (p) {
+        var w = Number(p.weight);
+        return { name: pickAnim(data, p.id), w: w > 0 ? w : 1 };
+      }).filter(function (x) { return !!x.name; });
       if (typed.length) return typed;
       if (poseType && poseType !== 'posetype_01_freehand') {
         return Avatar._idlesForType(data, 'posetype_01_freehand');
       }
-      return FALLBACK_IDLE.map(function (n) { return pickAnim(data, n); }).filter(Boolean);
+      return FALLBACK_IDLE.map(function (n) {
+        var hit = pickAnim(data, n);
+        return hit ? { name: hit, w: 1 } : null;
+      }).filter(Boolean);
     },
 
     _idles: function (data) {
@@ -739,7 +774,11 @@
 
     _ioClip: function (data, activeName, phase) {
       if (!activeName) return null;
-      var dir = Avatar._pc().samePartDetourDirection || 'up';
+      /* The direction lives in armInOutPartConfig (gesture.json), not on the
+         project root — read it where it is, keep old root lookup as a nod. */
+      var root = Avatar._pc();
+      var cfg = root.armInOutPartConfig || {};
+      var dir = cfg.samePartDetourDirection || root.samePartDetourDirection || 'up';
       var base = String(activeName).replace(/_active$/, '');
       return pickAnim(data, base + '_' + phase + '_' + dir) ||
              pickAnim(data, base + '_' + phase + '_up') ||
@@ -845,12 +884,27 @@
       return (Number(g.GroupWeight) || 0) > 0 || (Number(g.VariantWeight) || 0) > 0;
     },
 
+    _tensionRate: function (band) {
+      var tc = Avatar._pc().tensionConfig || {};
+      var dr = tc.decayRates || {};
+      var v = Number(dr[band]);
+      if (!(v > 0)) v = Number(tc.defaultDecayRate);
+      if (!(v > 0)) v = 0.02;
+      return Util.clamp(v, 0.002, 0.5);
+    },
+
+    _tensionBand: function () {
+      var v = Avatar._tension;
+      return v > 0.66 ? 'high' : (v > 0.33 ? 'mid' : 'low');
+    },
+
     _tensionBag: function () {
       var prof = Avatar._profile(Avatar._emotion);
       var tps = prof && prof.tensionProfiles;
-      var band = Avatar._talking ? 'high' : 'low';
-      if (!tps || !tps[band]) band = tps && (tps.mid ? 'mid' : (tps.high ? 'high' : 'low'));
-      return (tps && tps[band]) || null;
+      if (!tps) return null;
+      var band = Avatar._tensionBand();
+      if (!tps[band]) band = tps.low ? 'low' : (tps.high ? 'high' : 'mid');
+      return tps[band] || tps.low || tps.high || null;
     },
 
     _armWeights: function (poseType) {
@@ -1101,6 +1155,11 @@
     },
 
     _effectNames: function () {
+      /* Memo per (emotion, band): setEmotion + setTalking both fire _syncFx
+         in the same reply; without the memo the blush/tear set re-rolled
+         twice per utterance (visible FX churn). */
+      var memoKey = Avatar._emotion + '|' + Avatar._intensityBand();
+      if (Avatar._fxPick && Avatar._fxPick.key === memoKey) return Avatar._fxPick.names;
       var inten = Avatar._intensity(Avatar._profile(Avatar._emotion));
       var sets = (inten && inten.effectSets) || [];
       var live = sets.filter(function (s) {
@@ -1111,7 +1170,9 @@
       var pick = Avatar._weighted(live, function (s) {
         return Number(s.weight) > 0 ? Number(s.weight) : 1;
       });
-      return pick ? ((pick.names || []).slice()) : [];
+      var names = pick ? ((pick.names || []).slice()) : [];
+      Avatar._fxPick = { key: memoKey, names: names };
+      return names;
     },
 
     _hideFxSlots: function (keepOn) {
@@ -1139,7 +1200,7 @@
       var L = Avatar.avatar;
       if (!L || !L.ready || !L.state) return;
       var names = Avatar._effectNames();
-      var key = names.slice().sort().join(',') + '|' + (Avatar._talking ? 't' : 'i');
+      var key = names.slice().sort().join(',');
       if (key === Avatar._fxKey && !immediate) return;
       Avatar._fxKey = key;
       Avatar._fxNames = names;
@@ -1188,7 +1249,10 @@
       var perf = Avatar.gesture && Avatar.gesture.emotionalGesture &&
                  Avatar.gesture.emotionalGesture.performanceConfig;
       var mul = perf && perf.intensitySpeedMultipliers;
-      if (mul && Avatar._talking && Number(mul.strong) > 0) ts *= mul.strong;
+      if (mul) {
+        var band = Avatar._intensityBand();
+        if (band !== 'normal' && Number(mul[band]) > 0) ts *= Number(mul[band]);
+      }
       return ts;
     },
 
@@ -1212,7 +1276,9 @@
         nextType = 'posetype_01_freehand';
       }
       if (!idle.length) { Avatar._idleTimer = 0; return; }
-      var name = idle[Math.floor(Math.random() * idle.length)];
+      var pickIdle = Util.weighted(idle, function (x) { return x.w; });
+      var name = pickIdle ? pickIdle.name : null;
+      if (!name) { Avatar._idleTimer = 0; return; }
       var inten = Avatar._intensity(Avatar._profile(Avatar._emotion));
       var a = (inten && inten.poseRerollIntervalMin) || 5;
       var b = (inten && inten.poseRerollIntervalMax) || 8;
@@ -1246,15 +1312,31 @@
     _pickLook: function () {
       var prof = Avatar._profile(Avatar._emotion);
       var tps = prof && prof.tensionProfiles;
-      var band = Avatar._talking ? 'high' : 'low';
-      if (!tps || !tps[band]) band = tps && (tps.mid ? 'mid' : (tps.high ? 'high' : 'low'));
-      var bindings = (tps && tps[band] && tps[band].ambientBindings) || [];
-      var spec = null, i, sum = 0, r, b;
-      for (i = 0; i < bindings.length; i++) sum += bindings[i].weight || 0;
-      r = Math.random() * (sum || 1);
-      for (i = 0; i < bindings.length; i++) {
-        r -= bindings[i].weight || 0;
-        if (r <= 0) { spec = Avatar._driverSpec(bindings[i].driverDefId); break; }
+      var band = Avatar._tensionBand();
+      if (tps && !tps[band]) band = tps.low ? 'low' : 'high';
+      else if (!tps) band = null;
+      var bindings = (band && tps[band] && tps[band].ambientBindings) || [];
+      /* Source cycles ambientBindings by (emotion, band) with per-binding
+         repeatMin/repeatMax: the same head/eye pattern plays N times before
+         a new driver is rolled. Keep the pattern within a band; when the
+         band changes (talk start/stop) start a new pattern cleanly. */
+      var spec = null, i, hit = null;
+      var cyc = Avatar._lookCyc;
+      if (cyc && cyc.band === band && cyc.left > 0 && cyc.spec) {
+        cyc.left--;
+        spec = cyc.spec;
+      } else {
+        var cand = bindings.filter(function (x) { return (x.weight || 0) > 0; });
+        hit = Util.weighted(cand.length ? cand : bindings, function (x) { return x.weight || 0; });
+        spec = hit ? Avatar._driverSpec(hit.driverDefId) : null;
+        var lo = Math.round(Number(hit && hit.repeatMin) || 1);
+        var hi = Math.round(Number(hit && hit.repeatMax) || lo);
+        if (!(lo > 0)) lo = 1;
+        if (hi < lo) hi = lo;
+        Avatar._lookCyc = {
+          band: band, spec: spec,
+          left: lo + Math.floor(Math.random() * (hi - lo + 1)) - 1
+        };
       }
       if (!spec && bindings.length) spec = Avatar._driverSpec(bindings[0].driverDefId);
       var look = Avatar._look;
@@ -1269,12 +1351,17 @@
         a = Number(a) || 0; b = Number(b) || 0;
         return a + Math.random() * (b - a);
       }
+      var isEyeDrv = spec.driver === 'eye';
+      /* 78 of 98 drivers are lookAtUser — their yaw/pitch windows straddle
+         0 (front, i.e. at the player), so the random pick already reads as
+         "looking at you". Keep the window as authored. */
       look.ty = rnd(spec.yawMin, spec.yawMax);
       look.tp = rnd(spec.pitchMin, spec.pitchMax);
       look.tr = rnd(spec.rollMin, spec.rollMax);
       look.trans = Math.max(0.05, rnd(spec.transitionMin, spec.transitionMax));
       look.hold = Math.max(0.2, rnd(spec.holdMin, spec.holdMax));
       look.followers = spec.followers || [];
+      look.eyeDrv = isEyeDrv;
     },
 
     _bindPointer: function () {
@@ -1315,8 +1402,21 @@
       var k = 1 - Math.exp(-dt / Math.max(0.02, Number(pc.fingerTrackDelay) || 0.1));
       if (Avatar._pointer.on) {
         if (!Avatar._ptrInit) {
-          Avatar._ptrSm.x = w.x;
-          Avatar._ptrSm.y = w.y;
+          /* Seed the smoothed point at the FACE, not at the raw cursor:
+             the offset starts at 0 and eases toward the pointer, so a
+             cursor that appears mid-canvas glides in instead of teleporting
+             the eye/head IK targets (the "occasional twitch"). */
+          var sk = Avatar.avatar && Avatar.avatar.skeleton;
+          var fb = sk && (sk.findBone(pc.fingerTrackCenterBone || 'rig_face') ||
+                         sk.findBone('head'));
+          if (fb) {
+            Avatar._ptrSm.x = fb.worldX;
+            Avatar._ptrSm.y = fb.worldY;
+            Avatar._ptrN = 0;
+          } else {
+            Avatar._ptrSm.x = w.x;
+            Avatar._ptrSm.y = w.y;
+          }
           Avatar._ptrInit = true;
         } else {
           Avatar._ptrSm.x += (w.x - Avatar._ptrSm.x) * k;
@@ -1355,16 +1455,28 @@
       var mul = Avatar._lookMul;
       yaw *= mul; pitch *= mul; roll *= mul;
       var fEyeX = 0, fEyeY = 0, fHeadX = 0, fHeadY = 0, fBodyX = 0, fBodyY = 0;
-      if (Avatar._pointer.on) {
+      var maxR = Number(pc.fingerTrackMaxRange) || 514;
+      var on = Avatar._pointer.on;
+      /* gazeReturnToFront (source config): pointer influence must ENTER and
+         EXIT over 0.4–0.8 s, scaled by distance. Before this, fEye/fHead/
+         fBody snapped to the full pointer offset the frame the cursor hit
+         #avatar-hit and to 0 the frame it left — a one-frame teleport of the
+         eye/head IK targets. That is the reported "偶发性抽动". */
+      var gr = pc.gazeReturnToFront || {};
+      var gcfg = on ? (gr.entry || {}) : (gr.exit || {});
+      var gmn = Number(gcfg.minSeconds); if (!(gmn > 0)) gmn = 0.4;
+      var gmx = Number(gcfg.maxSeconds); if (!(gmx >= gmn)) gmx = Math.max(gmn, 0.8);
+      var gsp = Number(gcfg.secondsPerDistance); if (!(gsp > 0)) gsp = 0.8;
+      if (on) {
         var face = L.skeleton.findBone(pc.fingerTrackCenterBone || 'rig_face') ||
                    L.skeleton.findBone('head');
         if (face) {
-          var maxR = Number(pc.fingerTrackMaxRange) || 514;
           var dx = Avatar._ptrSm.x - face.worldX;
           var dy = Avatar._ptrSm.y - face.worldY;
           var dist = Math.sqrt(dx * dx + dy * dy);
           var n = maxR > 0 ? dist / maxR : 0;
           if (n > 1) { dx /= n; dy /= n; n = 1; }
+          Avatar._ptrN = n;
           fEyeX = dx; fEyeY = dy;
           if (n >= (Number(pc.fingerTrackHeadThreshold) || 0.11)) {
             var hs = Number(pc.fingerTrackHeadScale) || 0.7;
@@ -1376,12 +1488,27 @@
           }
         }
       }
+      var wantPtr = on ? 1 : 0;
+      var sec = Util.clamp(gsp * Math.max(0.25, Avatar._ptrN), gmn, gmx);
+      var dtL = Avatar._dt > 0 ? Avatar._dt : 0.016;
+      Avatar._ptrW += (wantPtr - Avatar._ptrW) * (1 - Math.exp(-dtL / sec));
+      if (!on && Avatar._ptrW < 0.004) Avatar._ptrW = 0;
+      fEyeX *= Avatar._ptrW; fEyeY *= Avatar._ptrW;
+      fHeadX *= Avatar._ptrW; fHeadY *= Avatar._ptrW;
+      fBodyX *= Avatar._ptrW; fBodyY *= Avatar._ptrW;
       var unit = 110;
       var bodyScale = 0.55, neckScale = 0.55, bodyDelay = 0, neckDelay = 0, headDelay = 0;
       (look.followers || []).forEach(function (f) {
         if (!f) return;
-        if (f.part === 'body') { bodyScale = Number(f.scale); bodyDelay = Number(f.delay) || 0; }
-        if (f.part === 'neck') { neckScale = Number(f.scale); neckDelay = Number(f.delay) || 0; }
+        var sc = Number(f.scale);
+        if (f.part === 'body') {
+          bodyScale = (sc || sc === 0) ? sc : 0.55;
+          bodyDelay = Number(f.delay) || 0;
+        }
+        if (f.part === 'neck') {
+          neckScale = (sc || sc === 0) ? sc : 0.55;
+          neckDelay = Number(f.delay) || 0;
+        }
         if (f.part === 'head') headDelay = Number(f.delay) || 0;
       });
       var headL = Avatar._lookAt(headDelay);
@@ -1403,14 +1530,23 @@
         if (pc.lockSittingAxis && part === 'body2') return;
         b.rotation += r * 16 * (scale == null ? 1 : scale);
       }
-      nudgeAim('eye', yaw * 0.35, pitch * 0.35, fEyeX, fEyeY);
-      nudgeAim('head', headL.y, headL.p, fHeadX, fHeadY);
-      nudgeAim('body', bodyL.y * bodyScale, bodyL.p * bodyScale * 0.8, fBodyX, fBodyY);
-      nudgeAim('center', yaw * 0.4, pitch * 0.4, fHeadX * 0.5, fHeadY * 0.5);
-      nudgeRoll('head', headL.r, 1);
-      nudgeRoll('neck', neckL.r, neckScale);
-      nudgeRoll('body', bodyL.r, bodyScale * 0.6);
-      nudgeRoll('body2', bodyL.r, 0.2);
+      /* driver:'eye' patterns move the eye targets fully and barely tilt
+         the head; driver:'head' patterns lead with head + body followers.
+         The authored aim-bone deltas are tiny (±7–20 units), so keep the
+         rad→world scale modest. */
+      var eyeDrv = !!look.eyeDrv;
+      /* Eye aim bone authored deltas are ~±8–20 world units; head aim ~±25–75.
+         eyeK converts the radian window to those caps (110 = rad→units). */
+      var eyeK = eyeDrv ? 0.18 : 0.35;
+      var headK = eyeDrv ? 0.18 : 1;
+      nudgeAim('eye', yaw * eyeK, pitch * eyeK, fEyeX, fEyeY);
+      nudgeAim('head', headL.y * headK, headL.p * headK, fHeadX, fHeadY);
+      nudgeAim('body', bodyL.y * bodyScale * headK, bodyL.p * bodyScale * 0.8 * headK, fBodyX, fBodyY);
+      nudgeAim('center', yaw * 0.4 * headK, pitch * 0.4 * headK, fHeadX * 0.5, fHeadY * 0.5);
+      nudgeRoll('head', headL.r * headK, 1);
+      nudgeRoll('neck', neckL.r * neckScale * headK, neckScale);
+      nudgeRoll('body', bodyL.r * bodyScale * headK, bodyScale * 0.6);
+      nudgeRoll('body2', bodyL.r * 0.2 * headK, 0.2);
     },
 
     _voiceDb: function () {
@@ -1432,12 +1568,10 @@
       var pc = Avatar._pc().lipSyncClosure || {};
       var target = 0, db, amp, i, env;
       if (Avatar._talking) {
-        db = Avatar._voiceDb();
-        if (db != null && pc.opennessMappingEnabled !== false) {
-          var lo = Number(pc.opennessFloorDb); if (!(lo < 0) && lo !== 0) lo = -40;
-          var hi = Number(pc.opennessCeilingDb); if (!(hi > lo)) hi = -3;
-          target = (db - lo) / (hi - lo);
-        } else if (Avatar._env) {
+        if (Avatar._env) {
+          /* Pre-recorded alarm/prologue clips ship a sibling .env.json —
+             that envelope is the authored mouth curve, so it wins over
+             live RMS (which only exists for TTS blob playback). */
           Avatar._env.t += dt;
           env = Avatar._env;
           i = env.window > 0 ? Math.floor(env.t / env.window) : 0;
@@ -1445,7 +1579,14 @@
           target = Math.max(0, amp);
           if (env.duration > 0 && env.t >= env.duration) Avatar.setTalking(false);
         } else {
-          target = 0;
+          db = Avatar._voiceDb();
+          if (db != null && pc.opennessMappingEnabled !== false) {
+            var lo = Number(pc.opennessFloorDb); if (!(lo < 0) && lo !== 0) lo = -40;
+            var hi = Number(pc.opennessCeilingDb); if (!(hi > lo)) hi = -3;
+            target = (db - lo) / (hi - lo);
+          } else {
+            target = 0;
+          }
         }
       }
       if (target < 0) target = 0;
@@ -1498,12 +1639,15 @@
         var poseType = Avatar._poseType || 'posetype_01_freehand';
         var idle = Avatar._idlesForType(data, poseType);
         if (idle.length) {
-          var idleName = idle[Math.floor(Math.random() * idle.length)];
-          var tr0 = st.setAnimation(0, idleName, true);
-          tr0.mixDuration = 0;
-          tr0.timeScale = timeScale;
-          Avatar._poseType = Avatar._poseTypesOf(idleName)[0] || poseType;
-          Avatar._syncAdditives(idleName, Avatar._poseType, true, true, false);
+          var pi = Util.weighted(idle, function (x) { return x.w; });
+          var idleName = pi && pi.name;
+          if (idleName) {
+            var tr0 = st.setAnimation(0, idleName, true);
+            tr0.mixDuration = 0;
+            tr0.timeScale = timeScale;
+            Avatar._poseType = Avatar._poseTypesOf(idleName)[0] || poseType;
+            Avatar._syncAdditives(idleName, Avatar._poseType, true, true, false);
+          }
         }
       } else {
         cur0.timeScale = timeScale;
@@ -1525,6 +1669,7 @@
 
       Avatar._applyFace(!!immediate);
       Avatar._syncFx(!!immediate);
+      Avatar._lookCyc = null;   /* new emotion → fresh gaze pattern */
       Avatar._pickLook();
       Avatar._blinkTimer = Avatar._nextBlinkGap();
     },
@@ -1552,6 +1697,7 @@
     setTalking: function (on) {
       var L = Avatar.avatar;
       Avatar._talking = !!on;
+      if (Avatar._talking) Avatar._tension = 1;
       if (!on) Avatar._env = null;
       if (!L || !L.ready || !L.state) return;
       var data = L.data, st = L.state;
@@ -1563,6 +1709,7 @@
       }
       var tr0 = st.getCurrent(0);
       if (tr0) tr0.timeScale = Avatar._animTimeScale();
+      Avatar._applyFace(false);
       Avatar._syncFx(false);
       Avatar._pickLook();
       if (!Avatar._addMuted) {
@@ -1586,6 +1733,20 @@
       Avatar._hideChara = !!on;
       var hit = document.getElementById('avatar-hit');
       if (hit) hit.style.pointerEvents = on ? 'none' : '';
+    },
+
+    /* ASMR ⇄ other modes flips the intensity band (weak). Re-apply the
+       face/FFX/speed without interrupting the current pose. */
+    onModeChange: function () {
+      if (!Avatar.avatar || !Avatar.avatar.ready || !Avatar.avatar.state) return;
+      var tr0 = Avatar.avatar.state.getCurrent(0);
+      if (tr0) tr0.timeScale = Avatar._animTimeScale();
+      Avatar._fxPick = null;
+      Avatar._applyFace(false);
+      Avatar._syncFx(false);
+      if (!Avatar._addMuted) {
+        Avatar._syncAdditives(Avatar._idleName(), Avatar._poseType, false, false, true);
+      }
     },
 
     poke: function (partName) {
@@ -1647,6 +1808,16 @@
         Avatar.avatar.skeleton.updateWorldTransform(spine.Physics.update);
       }
 
+      Avatar._dt = dt;
+
+      /* tension: toward 1 while talking (fast), decays high→mid→low via
+         projectConfig.tensionConfig.decayRates (per-frame @60fps units). */
+      var tgtT = Avatar._talking ? 1 : 0;
+      var tBand = tgtT > Avatar._tension ? 'high' : Avatar._tensionBand();
+      var tRate = Avatar._tensionRate(tBand);
+      var nk = 1 - Math.exp(-tRate * 60 * dt);
+      Avatar._tension += (tgtT - Avatar._tension) * nk;
+
       Avatar._idleTimer += dt;
       if (Avatar._idleTimer > Avatar._idleGap && Avatar.avatar && Avatar.avatar.ready) {
         Avatar._rerollIdle();
@@ -1656,15 +1827,23 @@
         Avatar._muteAdditives(false);
       }
 
+      if (Avatar._closedHold > 0) Avatar._closedHold -= dt;
       Avatar._blinkTimer -= dt;
       if (Avatar._blinkTimer <= 0 && Avatar.avatar && Avatar.avatar.ready &&
-          Avatar._eyeOpen && Avatar._eyeClosed && !Avatar._oneShotBusy()) {
+          Avatar._eyeOpen && Avatar._eyeClosed && !Avatar._oneShotBusy() &&
+          !(Avatar._closedHold > 0)) {
         Avatar._blinkTimer = Avatar._nextBlinkGap();
         var st = Avatar.avatar.state;
+        var fast = Avatar._blinkMode === 'blinkFast';
         var blink = st.setAnimation(2, Avatar._eyeClosed, false);
-        blink.mixDuration = 0.04;
-        var back = st.addAnimation(2, Avatar._eyeOpen, true, 0);
-        back.mixDuration = 0.08;
+        blink.mixDuration = fast ? 0.03 : 0.04;
+        /* 'closed' mode: hold the shut pose for durationSeconds before the
+           open clip is queued back in (delay counts from the closed clip,
+           which is a 0-length pose key). */
+        var shut = Avatar._blinkMode === 'closed' ? (Avatar._closedDur || 1.5) : 0;
+        var back = st.addAnimation(2, Avatar._eyeOpen, true, shut);
+        back.mixDuration = fast ? 0.06 : 0.08;
+        if (shut > 0) Avatar._closedHold = shut + back.mixDuration;
       }
 
       if (Avatar._env && Avatar.avatar && Avatar.avatar.state && !Avatar._talking) {
@@ -1685,14 +1864,20 @@
     _nextBlinkGap: function () {
       var bag = Avatar._tensionBag();
       var entries = bag && bag.gaze && bag.gaze.eyeModeEntries;
+      /* blink / blinkFast / closed all drive eye modes in the source table
+         ('closed' = a long 1.5 s eyes-shut beat, weighted ~10%). */
       var cand = (entries || []).filter(function (e) {
         var w = Number(e.weight) || 0;
-        return w > 0 && (e.mode === 'blink' || e.mode === 'blinkFast');
+        return w > 0 && (e.mode === 'blink' || e.mode === 'blinkFast' || e.mode === 'closed');
       });
       var pick = Avatar._weighted(cand, function (e) { return Number(e.weight) || 0; });
+      Avatar._blinkMode = pick ? pick.mode : 'blink';
+      Avatar._closedDur = (pick && pick.mode === 'closed') ?
+        (Number(pick.durationSeconds) || 1.5) : 0;
       if (!pick) return 2.4 + Math.random() * 3.2;
-      var iv = Number(pick.intervalSeconds) || (pick.mode === 'blinkFast' ? 1.4 : 3);
-      var j = Number(pick.jitterSeconds) || 0;
+      var iv = Number(pick.intervalSeconds);
+      if (!(iv > 0)) iv = pick.mode === 'blinkFast' ? 1.4 : (pick.mode === 'closed' ? 5.5 : 3);
+      var j = Number(pick.jitterSeconds); if (!(j > 0)) j = pick.mode === 'closed' ? 1.5 : 0;
       var gap = iv + (Math.random() * 2 - 1) * j;
       if (pick.mode === 'blinkFast') gap *= 0.55;
       return Math.max(0.45, gap);
