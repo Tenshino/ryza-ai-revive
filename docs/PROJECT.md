@@ -27,6 +27,7 @@ projects/ryza-ai-revive/
 ├── src/                    # 早期 Python 原型（LLM/TTS 验证）
 ├── scripts/serve.py        # 静态站 + LLM/TTS CORS 代理（日常用这个）
 ├── scripts/build_indexes.py
+├── scripts/motion_regression.js  # 立绘动作离线回归（node 直接跑，见 AUDIT §3.7）
 ├── config/providers.json
 └── docs/                   # 本文件、接力提示词 HANDOFF.md、AUDIT.md、reference/
 ```
