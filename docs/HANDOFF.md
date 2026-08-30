@@ -9,7 +9,8 @@
 行为以 `web/assets/` 里的原始 JSON / 音频目录 / 骨骼 / UI 图为准（已与 APK 3609 个 flutter 资源对过，无缺无多）。
 没有 Dart 源码可抄。官方登录/付费/分析等见下面「明确不要做」。
 
-已核对记录：`docs/AUDIT.md`（2026-08-31）。结论：**素材对；玩家主路径已按源数据接上；抽屉/`talk_drawer`、多语、rim、画布演出、Occupancy 动作层已补。** `MixDurationPoses.sourceHash` 仍对不上骨骼 hash。
+已核对记录：`docs/AUDIT.md`（2026-08-31）。结论：**素材对；主路径已接上。**
+音景与源包一致：**对话页没有 BGM**（包里只有 `bgm_opening` / `bgm_world_map` 两首），对话页播地点 ambient；进地图才切 `bgm_world_map`。不要把「地图才出 BGM」当成漏做。腮红 overlay 按 Normal。角色 `Physics.update` **只一次**。
 `config/providers.json` 含水合用的 API Key，**不要进 git**；复制 `config/providers.example.json` 再填。
 不要把 AUDIT 旧段落里的「NPC 调度错、FX_BY_EMOTION、循环 fade_in」当成还没修——那些已经改过。先读 AUDIT 全文再动手。
 
@@ -54,7 +55,10 @@ PROJECT.md 第 7 节列出了所有解包产物的路径。其中这些是**原�
   web/assets/audio/alarm/<语种>/<语气>/<类型>/<时段>/
       1120 条预录语音，旁挂同名 .env.json（口型）
   web/assets/audio/bgm/  ambient/  se/  tap_voice/  prologue/
-      音景与点击语音、序章原声 —— `audio.js` / `onboarding.js` 已接线
+      BGM 只有两首：`bgm_opening.m4a`（标题，`BackgroundTrackId.bgmOpening`）、
+      `bgm_world_map.m4a`（地图，`bgmWorldMap`）。对话页没有第三首 BGM，
+      背景是 `ambient/amb_NNN_{day,night}.m4a`（`amb001Day`…）。
+      路由见 `docs/AUDIT.md` §3.6。`audio.js` / `onboarding.js` 已接线。
   web/assets/welcome_mission/
       欢迎任务 UI 图
   web/assets/voice/ryza_wav/*.wav
@@ -86,8 +90,8 @@ PROJECT.md 第 7 节列出了所有解包产物的路径。其中这些是**原�
 标题页、onboarding 问卷/序章/教程、
 单 WebGL 画布立绘+场景（fade 一次、不闪）、坐/站随 `midgroundPostures`、
 gesture：待机不跟情绪换、一次性覆盖、effectSets 特效、注视/指尖、手臂组、lipSync、
-分部位点击、Multiply 过曝已关（腮红仍可从 effectSets ON）、
-世界钉子图 + NPC 全字段、音景四路、闹钟响铃/贪睡/env、
+分部位点击、腮红 overlay 按 Normal（颊线/鼻高光仍摘）、
+世界钉子图 + NPC 全字段、音景（标题 opening BGM / 对话 ambient / 地图 world BGM）、闹钟响铃/贪睡/env、
 5 槽换装+veil、欢迎任务、存档槽、道具栏、
 LLM 经代理 + providers.json 水合、TTS 克隆、
 desktop/ 有 pywebview 壳，android/ 有 WebView 薄壳（本机尚未打出 exe/apk）。
@@ -95,12 +99,14 @@ desktop/ 有 pywebview 壳，android/ 有 WebView 薄壳（本机尚未打出 ex
 【立绘坑（已经踩过，不要退回去）】
 1. 两块 WebGL 或给 avatar-canvas 再 getContext，Windows 会闪。点击层是 div。
 2. 场景 `anm_fade_in` 必须 loop:false。loop 会每秒从透明重来。
-3. 图集没有 pma:true。全局 PMA 会让网格接缝发黑。Multiply 槽（颊线/鼻高光）直通 Alpha 会过曝：idle 摘掉这两槽，ON 腮红走 `038_face_cheek` + Multiply 第二遍 PMA。
+3. 图集没有 pma:true。全局 PMA 会让网格接缝发黑。Multiply 的颊线/鼻高光直通 Alpha 会过曝：idle 摘掉这两槽。ON 腮红走 `038_face_cheek`，**按 Normal 画**（不要 Multiply 第二遍 PMA，腮红会过曝）。头发阴影才 PMA。
 4. 换情绪不要 `setAnimation(0, 新idle)`。`fixedBasePoseMode` 下一次性动作在 track 1，empty 的 delay 必须 ≤0（从片段结束淡出）。delay 0.2 会在开拍 0.2 秒把动作掐掉。一次性 `motion_oneshot_D_*` **不要** mute 手臂/躯干/腿。
 5. 不要用角色 AABB 当镜头，换装会连带缩放背景。
 6. Occupancy 的 `motion_add_F/G/B/E/C` 是完整肢体 pose，track 上必须 `MixBlend.replace`。`MixBlend.add` 只给 `effect_wind*`。用 add 会把手臂叠成立柱。
 7. 场景 rim：角色先画到屏幕，FBO 只加算轮廓。不要把角色主画面改成 FBO blit（会变成黑剪影）。
 8. idle 重掷不要重抽仍适用的 MotionGroup；同 AnimName 不要 out→in。未标 `poseTypeIds` 的 A_* 不要当所有姿势类型的候选。
+9. 角色 `Physics.update` **只一次**。不要再 `Physics.none`，那会丢掉物理、动作抖。肢体换组时不要 `setEmptyAnimation(mix=0)` 再 delay，也不要 `addAnimation` 接到 looping 当前片段后面（永远不会开始）。
+10. 音景是源设计，不是漏做：对话页 **不要** 播 BGM；进 `world_map_screen` 才播 `bgm_world_map`。对话页 `setRoute('talk')` 必须播地点 ambient。`Sound.unlock` 用独立 Audio；循环 src 记在 `_loopSrc`，禁止写 `_ambientSrc`（会把解析函数覆盖掉，环境音永久没声）。
 
 【三条必须知道的技术约束】
 1. Spine 4.2 的 skeleton.updateWorldTransform() 必须传参，
@@ -123,8 +129,8 @@ desktop/ 有 pywebview 壳，android/ 有 WebView 薄壳（本机尚未打出 ex
 但玩家看见的流程要跟源模块一致。
 
 【还剩的、能做的】
-  - 若 MixDurationPoses.sourceHash 对上 skeleton.hash，再接线距离 mix
   - 标题/语音钮是按 Lottie JSON 帧率画的画布，不是 Lottie 运行时（源包未带运行时，CDN 也不引入）
+  - `spine/objects/` 仍只有图集、没有完整 skel
 
 【明确不要做】（源项目有、本重建去掉）
 登录 / Firebase、订阅付费墙、代币与回合票、体力苹果、皮肤内购、

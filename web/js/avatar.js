@@ -153,6 +153,8 @@
     _rimShader: null,
     _quadBuf: null,
     _typeMap: null,
+    _lookMul: 1,
+    _fxNames: null,
 
     /* ------------------------------------------------------------- setup */
     init: function (onReady) {
@@ -515,7 +517,9 @@
 
     _intensity: function (prof) {
       var ip = prof && prof.intensityProfiles;
-      return (ip && (ip.normal || ip.strong)) || null;
+      if (!ip) return null;
+      if (Avatar._talking && ip.strong) return ip.strong;
+      return ip.normal || ip.strong || ip.weak || null;
     },
 
     _oneShots: function (emotion, attitude) {
@@ -523,15 +527,8 @@
       if (!prof) return [];
       var list = (prof.fixedGestureBindingsByAttitude || {})[attitude] || [];
       var picked = list.filter(function (x) { return (x.weight || 0) > 0 && x.oneShotAnimation; });
-      if (!picked.length) return [];
-      var sum = 0, i, r;
-      for (i = 0; i < picked.length; i++) sum += picked[i].weight;
-      r = Math.random() * sum;
-      for (i = 0; i < picked.length; i++) {
-        r -= picked[i].weight;
-        if (r <= 0) return [picked[i].oneShotAnimation];
-      }
-      return [picked[picked.length - 1].oneShotAnimation];
+      var hit = Util.weighted(picked, function (x) { return x.weight; });
+      return hit ? [hit.oneShotAnimation] : [];
     },
 
     _mixRange: function (emotion) {
@@ -549,17 +546,33 @@
 
     /* Idle↔idle. Distance mix only when MixDurationPoses.sourceHash matches
        the live skeleton hash; otherwise same-type short mix / cross-type random. */
+    _mixBag: function () {
+      return Avatar.gesture && Avatar.gesture.emotionalGesture &&
+             Avatar.gesture.emotionalGesture.MixDurationPoses;
+    },
+
     _mixHashOk: function () {
-      var bag = Avatar.gesture && Avatar.gesture.emotionalGesture &&
-                Avatar.gesture.emotionalGesture.MixDurationPoses;
-      var src = bag && bag.sourceHash && String(bag.sourceHash).toLowerCase();
-      return !!(src && Avatar._skelHash && src === Avatar._skelHash);
+      var bag = Avatar._mixBag();
+      var src = Util.hashHex(bag && bag.sourceHash);
+      var live = Util.hashHex(Avatar._skelHash);
+      if (!src || !live) return false;
+      if (src === live) return true;
+      if (Util.swapHashHalves(src) === live) return true;
+      if (src.slice(-live.length) === live || live.slice(-src.length) === src) return true;
+      return false;
+    },
+
+    _hasPoseBones: function (name) {
+      var poses = Avatar._mixBag() && Avatar._mixBag().animPoses;
+      var p = poses && poses[name];
+      if (!p) return false;
+      var k;
+      for (k in p) if (Object.prototype.hasOwnProperty.call(p, k) && p[k] && p[k].length >= 2) return true;
+      return false;
     },
 
     _poseDist: function (fromName, toName) {
-      var bag = Avatar.gesture && Avatar.gesture.emotionalGesture &&
-                Avatar.gesture.emotionalGesture.MixDurationPoses;
-      var poses = bag && bag.animPoses;
+      var poses = Avatar._mixBag() && Avatar._mixBag().animPoses;
       var pa = poses && poses[fromName], pb = poses && poses[toName];
       if (!pa || !pb) return 0;
       var sum = 0, n = 0, bone, a, b, dx, dy;
@@ -581,7 +594,10 @@
       if (!(sat > 0)) sat = 0.1;
       var close = r.min * sat;
       if (!fromName || !toName || fromName === toName) return close;
-      if (Avatar._mixHashOk()) {
+      /* Gesture MixDurationPoses is shipped with this skel. Use bone distance
+         when the table has both clips; hash match is preferred but not required. */
+      if (Avatar._mixHashOk() ||
+          (Avatar._hasPoseBones(fromName) && Avatar._hasPoseBones(toName))) {
         var dist = Avatar._poseDist(fromName, toName);
         var t = 1 - Math.exp(-(dist || 0) / 180);
         return close + t * (r.max - close);
@@ -640,19 +656,7 @@
     },
 
     _weighted: function (items, weightOf) {
-      var sum = 0, i, r, w;
-      if (!items || !items.length) return null;
-      for (i = 0; i < items.length; i++) {
-        w = weightOf(items[i]);
-        sum += w > 0 ? w : 0;
-      }
-      if (!(sum > 0)) return items[Math.floor(Math.random() * items.length)];
-      r = Math.random() * sum;
-      for (i = 0; i < items.length; i++) {
-        r -= weightOf(items[i]) || 0;
-        if (r <= 0) return items[i];
-      }
-      return items[items.length - 1];
+      return Util.weighted(items, weightOf);
     },
 
     _basePoses: function () {
@@ -723,10 +727,9 @@
         return ids.length > 0 && ids.indexOf(poseType) >= 0;
       }).map(function (p) { return pickAnim(data, p.id); }).filter(Boolean);
       if (typed.length) return typed;
-      var loose = poses.filter(function (p) {
-        return p && p.id && pickAnim(data, p.id) && sitOk(p);
-      }).map(function (p) { return pickAnim(data, p.id); }).filter(Boolean);
-      if (loose.length) return loose;
+      if (poseType && poseType !== 'posetype_01_freehand') {
+        return Avatar._idlesForType(data, 'posetype_01_freehand');
+      }
       return FALLBACK_IDLE.map(function (n) { return pickAnim(data, n); }).filter(Boolean);
     },
 
@@ -915,26 +918,46 @@
       var a = parseFloat(alpha); if (!(a > 0)) a = 1;
       var ts = parseFloat(speed); if (!(ts > 0)) ts = 1;
       var delay = Number(startDelay) > 0 ? Number(startDelay) : 0;
-      var tr;
-      if (delay > 0) st.setEmptyAnimation(track, 0);
-      if (out) {
-        tr = delay > 0 ? st.addAnimation(track, out, false, delay) : st.setAnimation(track, out, false);
+      var cur = st.getCurrent(track);
+      /* Pair delay must keep the previous limb clip applying. Empty mix=0
+         snaps to setup; addAnimation() on a looping current never starts. */
+      var hold = delay > 0 && Avatar._entryLive(cur);
+
+      function enqueue(name, loop, first) {
+        var tr;
+        if (first && hold) {
+          cur.loop = false;
+          cur.trackEnd = cur.trackTime + delay;
+          tr = st.addAnimation(track, name, loop, 0);
+        } else if (first) {
+          tr = st.setAnimation(track, name, loop);
+        } else {
+          tr = st.addAnimation(track, name, loop, 0);
+        }
         Avatar._stampAdd(tr, mix, a, ts);
-        delay = 0;
-        if (inn) Avatar._stampAdd(st.addAnimation(track, inn, false, 0), mix, a, ts);
-        if (act) Avatar._stampAdd(st.addAnimation(track, act, true, 0), mix, a, ts);
+        return tr;
+      }
+
+      if (out) {
+        enqueue(out, false, true);
+        if (inn) enqueue(inn, false, false);
+        if (act) enqueue(act, true, false);
         else st.addEmptyAnimation(track, mix, 0);
         return;
       }
       if (inn) {
-        tr = delay > 0 ? st.addAnimation(track, inn, false, delay) : st.setAnimation(track, inn, false);
-        Avatar._stampAdd(tr, mix, a, ts);
-        if (act) Avatar._stampAdd(st.addAnimation(track, act, true, 0), mix, a, ts);
+        enqueue(inn, false, true);
+        if (act) enqueue(act, true, false);
         return;
       }
       if (act) {
-        tr = delay > 0 ? st.addAnimation(track, act, true, delay) : st.setAnimation(track, act, true);
-        Avatar._stampAdd(tr, mix, a, ts);
+        enqueue(act, true, true);
+        return;
+      }
+      if (hold) {
+        cur.loop = false;
+        cur.trackEnd = cur.trackTime + delay;
+        st.addEmptyAnimation(track, mix, 0);
       } else {
         st.setEmptyAnimation(track, mix);
       }
@@ -1065,7 +1088,12 @@
         eyeOpen: inten && inten.eyeBase, eyeClosed: null,
         eyebrow: inten && inten.eyebrowBase, mouth: inten && inten.mouthBase
       };
-      return sets[Math.floor(Math.random() * sets.length)];
+      var live = sets.filter(function (s) {
+        return s.weight == null || Number(s.weight) > 0;
+      });
+      return Avatar._weighted(live.length ? live : sets, function (s) {
+        return Number(s.weight) > 0 ? Number(s.weight) : 1;
+      }) || sets[0];
     },
 
     _pc: function () {
@@ -1075,12 +1103,15 @@
     _effectNames: function () {
       var inten = Avatar._intensity(Avatar._profile(Avatar._emotion));
       var sets = (inten && inten.effectSets) || [];
-      var out = [], i, j, n;
-      for (i = 0; i < sets.length; i++) {
-        n = (sets[i] && sets[i].names) || [];
-        for (j = 0; j < n.length; j++) if (n[j] && out.indexOf(n[j]) < 0) out.push(n[j]);
-      }
-      return out;
+      var live = sets.filter(function (s) {
+        var n = (s && s.names) || [];
+        if (!n.length) return false;
+        return s.weight == null || Number(s.weight) > 0;
+      });
+      var pick = Avatar._weighted(live, function (s) {
+        return Number(s.weight) > 0 ? Number(s.weight) : 1;
+      });
+      return pick ? ((pick.names || []).slice()) : [];
     },
 
     _hideFxSlots: function (keepOn) {
@@ -1090,6 +1121,8 @@
       for (i = 0; i < sk.slots.length; i++) {
         slot = sk.slots[i];
         n = slot.data && slot.data.name || '';
+        /* Setup Multiply highlights (cheek_line / nose_hi) blow out under
+           straight-alpha. Overlay blush/pale/tear stay visible when FX is on. */
         if (/nose_hi|cheek_line/.test(n)) {
           slot.setAttachment(null);
           continue;
@@ -1106,9 +1139,10 @@
       var L = Avatar.avatar;
       if (!L || !L.ready || !L.state) return;
       var names = Avatar._effectNames();
-      var key = names.slice().sort().join(',');
+      var key = names.slice().sort().join(',') + '|' + (Avatar._talking ? 't' : 'i');
       if (key === Avatar._fxKey && !immediate) return;
       Avatar._fxKey = key;
+      Avatar._fxNames = names;
       var pc = Avatar._pc();
       var onMap = pc.fxOnAnimNames || {};
       var offMap = pc.fxOffAnimNames || {};
@@ -1123,6 +1157,9 @@
         } else {
           st.setEmptyAnimation(5, mix);
         }
+        st.setEmptyAnimation(7, mix);
+        st.setEmptyAnimation(15, mix);
+        st.setEmptyAnimation(16, mix);
         Avatar._hideFxSlots();
         return;
       }
@@ -1132,11 +1169,17 @@
       if (clip) {
         tr = st.setAnimation(5, clip, true);
         tr.mixDuration = mix;
+      } else {
+        st.setEmptyAnimation(5, mix);
       }
-      for (i = 1; i < names.length; i++) {
+      /* Extra names in the same set (blush + tear) go on 7, 15, 16. */
+      var extra = [7, 15, 16];
+      for (i = 1; i < names.length && i - 1 < extra.length; i++) {
         clip = pickAnim(data, onMap[names[i]] || names[i]);
-        if (clip) st.setAnimation(7, clip, true).mixDuration = mix;
+        if (clip) st.setAnimation(extra[i - 1], clip, true).mixDuration = mix;
+        else st.setEmptyAnimation(extra[i - 1], mix);
       }
+      for (; i - 1 < extra.length; i++) st.setEmptyAnimation(extra[i - 1], mix);
     },
 
     _animTimeScale: function () {
@@ -1155,6 +1198,11 @@
       var cur = L.state.getCurrent(0);
       if (cur && cur.mixingFrom) return;
       if (Avatar._oneShotBusy()) return;
+      var mixingLayer = Avatar._ADD_TRACKS.some(function (t) {
+        var tr = L.state.getCurrent(t);
+        return tr && tr.mixingFrom;
+      });
+      if (mixingLayer) return;
       var fromName = cur && cur.animation && cur.animation.name;
       var prevType = Avatar._poseType || (fromName && Avatar._poseTypesOf(fromName)[0]) || 'posetype_01_freehand';
       var nextType = Avatar._pickPoseType(prevType);
@@ -1259,6 +1307,8 @@
       while (Avatar._lookHist.length > 1 && Avatar._lookHist[0].t < Avatar._lookClock - 2.8) {
         Avatar._lookHist.shift();
       }
+      var wantMul = Avatar._oneShotBusy() ? 0.15 : 1;
+      Avatar._lookMul += (wantMul - Avatar._lookMul) * (1 - Math.exp(-dt / 0.18));
 
       var pc = Avatar._pc();
       var w = Avatar.screenToWorld(Avatar._pointer.x, Avatar._pointer.y);
@@ -1302,9 +1352,8 @@
       var pc = Avatar._pc();
       var look = Avatar._look;
       var yaw = look.yaw, pitch = look.pitch, roll = look.roll;
-      if (Avatar._oneShotBusy()) {
-        yaw *= 0.15; pitch *= 0.15; roll *= 0.15;
-      }
+      var mul = Avatar._lookMul;
+      yaw *= mul; pitch *= mul; roll *= mul;
       var fEyeX = 0, fEyeY = 0, fHeadX = 0, fHeadY = 0, fBodyX = 0, fBodyY = 0;
       if (Avatar._pointer.on) {
         var face = L.skeleton.findBone(pc.fingerTrackCenterBone || 'rig_face') ||
@@ -1338,10 +1387,10 @@
       var headL = Avatar._lookAt(headDelay);
       var bodyL = Avatar._lookAt(bodyDelay);
       var neckL = Avatar._lookAt(neckDelay);
-      if (Avatar._oneShotBusy()) {
-        function damp(s) { return { y: s.y * 0.15, p: s.p * 0.15, r: s.r * 0.15 }; }
-        headL = damp(headL); bodyL = damp(bodyL); neckL = damp(neckL);
-      }
+      function scaleLook(s, m) { return { y: s.y * m, p: s.p * m, r: s.r * m }; }
+      headL = scaleLook(headL, mul);
+      bodyL = scaleLook(bodyL, mul);
+      neckL = scaleLook(neckL, mul);
       function nudgeAim(part, y, p, fx, fy) {
         var b = Avatar._boneOf('aimSlots', part);
         if (!b) return;
@@ -1432,8 +1481,6 @@
       var st = L.state, data = L.data;
       var prof = Avatar._profile(Avatar._emotion);
       var inten = Avatar._intensity(prof);
-      var mixEye = immediate ? 0 : ((inten && inten.mixDurationEye) || 0.25);
-      var mixBrow = immediate ? 0 : ((inten && inten.mixDurationEyebrow) || 0.25);
       var timeScale = Avatar._animTimeScale();
       var sat = Number(Avatar._pc().mixDurationSaturationRatio);
       if (!(sat > 0)) sat = 0.1;
@@ -1476,22 +1523,30 @@
         Avatar._syncAdditives(hasIdle, Avatar._poseType || Avatar._poseTypesOf(hasIdle)[0], !!immediate, false, !immediate);
       }
 
+      Avatar._applyFace(!!immediate);
+      Avatar._syncFx(!!immediate);
+      Avatar._pickLook();
+      Avatar._blinkTimer = Avatar._nextBlinkGap();
+    },
+
+    _applyFace: function (immediate) {
+      var L = Avatar.avatar;
+      if (!L || !L.ready || !L.state) return;
+      var st = L.state, data = L.data;
+      var inten = Avatar._intensity(Avatar._profile(Avatar._emotion));
+      var mixEye = immediate ? 0 : ((inten && inten.mixDurationEye) || 0.25);
+      var mixBrow = immediate ? 0 : ((inten && inten.mixDurationEyebrow) || 0.25);
       var expr = Avatar._pickExpr();
       var closedCfg = Avatar._pc().closedEyeAnimation;
       Avatar._eyeOpen = pickAnim(data, expr && expr.eyeOpen) || pickAnim(data, inten && inten.eyeBase);
       Avatar._eyeClosed = pickAnim(data, expr && expr.eyeClosed) || pickAnim(data, closedCfg);
       var brow = pickAnim(data, expr && expr.eyebrow) || pickAnim(data, inten && inten.eyebrowBase);
       Avatar._mouthIdle = pickAnim(data, expr && expr.mouth) || pickAnim(data, inten && inten.mouthBase);
-
       if (Avatar._eyeOpen) st.setAnimation(2, Avatar._eyeOpen, true).mixDuration = mixEye;
       if (brow) st.setAnimation(3, brow, true).mixDuration = mixBrow;
       if (!Avatar._talking && Avatar._mouthIdle) {
         st.setAnimation(4, Avatar._mouthIdle, true).mixDuration = immediate ? 0 : 0.25;
       }
-
-      Avatar._syncFx(!!immediate);
-      Avatar._pickLook();
-      Avatar._blinkTimer = 2 + Math.random() * 3;
     },
 
     setTalking: function (on) {
@@ -1508,6 +1563,7 @@
       }
       var tr0 = st.getCurrent(0);
       if (tr0) tr0.timeScale = Avatar._animTimeScale();
+      Avatar._syncFx(false);
       Avatar._pickLook();
       if (!Avatar._addMuted) {
         Avatar._syncAdditives(Avatar._idleName(), Avatar._poseType, false, false, true);
@@ -1576,16 +1632,19 @@
         Avatar.scene.skeleton.updateWorldTransform(spine.Physics.none);
       }
       if (Avatar.avatar && Avatar.avatar.ready && Avatar.avatar.skeleton) {
+        /* Place first, then one Physics.update. A second Physics.none pass
+           discarded the simulated pose every frame and made actions jitter. */
+        Avatar._placeCharacter();
         Avatar._updateLook(dt);
         Avatar.avatar.state.update(dt);
+        /* Scrub the mouth track *after* state.update so dt does not overwrite
+           openness, and *before* apply so this frame's draw sees it. */
+        Avatar._applyLip(dt);
         Avatar.avatar.state.apply(Avatar.avatar.skeleton);
         Avatar.avatar.skeleton.update(dt);
         Avatar._hideFxSlots(Avatar._fxOn);
         Avatar._applyLook();
         Avatar.avatar.skeleton.updateWorldTransform(spine.Physics.update);
-        Avatar._placeCharacter();
-        Avatar.avatar.skeleton.updateWorldTransform(spine.Physics.none);
-        Avatar._applyLip(dt);
       }
 
       Avatar._idleTimer += dt;
@@ -1599,8 +1658,8 @@
 
       Avatar._blinkTimer -= dt;
       if (Avatar._blinkTimer <= 0 && Avatar.avatar && Avatar.avatar.ready &&
-          Avatar._eyeOpen && Avatar._eyeClosed) {
-        Avatar._blinkTimer = 2.4 + Math.random() * 3.2;
+          Avatar._eyeOpen && Avatar._eyeClosed && !Avatar._oneShotBusy()) {
+        Avatar._blinkTimer = Avatar._nextBlinkGap();
         var st = Avatar.avatar.state;
         var blink = st.setAnimation(2, Avatar._eyeClosed, false);
         blink.mixDuration = 0.04;
@@ -1623,31 +1682,77 @@
       host.batcher.end();
     },
 
-    /* Multiply slots (cheek, nose_hi, hair shadow) are authored as PMA.
-       Straight-alpha multiply becomes dst*(rgb+1-a) and blows out to white. */
+    _nextBlinkGap: function () {
+      var bag = Avatar._tensionBag();
+      var entries = bag && bag.gaze && bag.gaze.eyeModeEntries;
+      var cand = (entries || []).filter(function (e) {
+        var w = Number(e.weight) || 0;
+        return w > 0 && (e.mode === 'blink' || e.mode === 'blinkFast');
+      });
+      var pick = Avatar._weighted(cand, function (e) { return Number(e.weight) || 0; });
+      if (!pick) return 2.4 + Math.random() * 3.2;
+      var iv = Number(pick.intervalSeconds) || (pick.mode === 'blinkFast' ? 1.4 : 3);
+      var j = Number(pick.jitterSeconds) || 0;
+      var gap = iv + (Math.random() * 2 - 1) * j;
+      if (pick.mode === 'blinkFast') gap *= 0.55;
+      return Math.max(0.45, gap);
+    },
+
+    /* Multiply maps (hair shadow) need a PMA second pass. Overlay FX
+       (blush / pale / tear) is straight-alpha pink: drawing it as Multiply
+       does dst*(rgb+1-a) and the blush itself blows out. Draw those as Normal. */
+    _isSetupMul: function (n) {
+      return /nose_hi|cheek_line/.test(n);
+    },
+    _isOverlayMul: function (n) {
+      return /face_cheek|face_pale|face_tear|face_sweat|mouth_drool/.test(n);
+    },
+
     _drawLayer: function (L) {
       if (!L || !L.ready || !L.skeleton) return;
-      var sk = L.skeleton, i, slot, savedAtt = [], savedA = [], att;
+      var sk = L.skeleton, i, slot, n, att;
+      var savedBlend = [], savedMul = [], savedA = [], savedSetup = [];
       for (i = 0; i < sk.slots.length; i++) {
         slot = sk.slots[i];
-        if (slot.data.blendMode !== 2) continue;
-        att = slot.getAttachment();
-        savedAtt.push({ slot: slot, att: att });
-        if (att) slot.setAttachment(null);
+        n = (slot.data && slot.data.name) || '';
+        if (Avatar._isSetupMul(n)) {
+          att = slot.getAttachment();
+          savedSetup.push({ slot: slot, att: att });
+          if (att) slot.setAttachment(null);
+          continue;
+        }
+        if (slot.data.blendMode === 2 && Avatar._isOverlayMul(n)) {
+          savedBlend.push({ slot: slot, blend: slot.data.blendMode });
+          slot.data.blendMode = 0;
+          continue;
+        }
+        if (slot.data.blendMode === 2) {
+          att = slot.getAttachment();
+          savedMul.push({ slot: slot, att: att });
+          if (att) slot.setAttachment(null);
+        }
       }
-      Avatar._drawSkeleton(L, false);
-      for (i = 0; i < savedAtt.length; i++) {
-        if (savedAtt[i].att) savedAtt[i].slot.setAttachment(savedAtt[i].att);
+      try {
+        Avatar._drawSkeleton(L, false);
+        for (i = 0; i < savedMul.length; i++) {
+          if (savedMul[i].att) savedMul[i].slot.setAttachment(savedMul[i].att);
+        }
+        if (savedMul.length) {
+          for (i = 0; i < sk.slots.length; i++) {
+            slot = sk.slots[i];
+            n = (slot.data && slot.data.name) || '';
+            if (slot.data.blendMode === 2 && !Avatar._isSetupMul(n) && !Avatar._isOverlayMul(n)) continue;
+            savedA.push({ slot: slot, a: slot.color.a });
+            slot.color.a = 0;
+          }
+          Avatar._drawSkeleton(L, true);
+        }
+      } finally {
+        for (i = 0; i < savedA.length; i++) savedA[i].slot.color.a = savedA[i].a;
+        for (i = 0; i < savedBlend.length; i++) {
+          savedBlend[i].slot.data.blendMode = savedBlend[i].blend;
+        }
       }
-      if (!savedAtt.length) return;
-      for (i = 0; i < sk.slots.length; i++) {
-        slot = sk.slots[i];
-        if (slot.data.blendMode === 2) continue;
-        savedA.push({ slot: slot, a: slot.color.a });
-        slot.color.a = 0;
-      }
-      Avatar._drawSkeleton(L, true);
-      for (i = 0; i < savedA.length; i++) savedA[i].slot.color.a = savedA[i].a;
     },
 
     _lightCfg: function () {
@@ -1737,7 +1842,11 @@
       if (!host || !host.gl) return;
       var gl = host.gl;
       var hide = Avatar._hideChara;
-      var rimOn = !hide && Avatar._lightCfg() && Avatar._lightCfg().rimEnabled !== false;
+      var light = Avatar._lightCfg();
+      var rimOn = !hide && light && light.rimEnabled !== false;
+      try {
+        if (Config && Config.section('app').rim === false) rimOn = false;
+      } catch (e) {}
       gl.clearColor(0.043, 0.031, 0.063, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       host.shader.bind();

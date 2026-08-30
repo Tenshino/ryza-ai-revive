@@ -70,14 +70,18 @@
       el.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = I18n.t('title.start');
-      if (window.Sound) Sound.playBgm('opening');
       btn.onclick = function () {
+        if (window.Sound) Sound.unlock();
         el.classList.add('hidden');
         onStart && onStart();
       };
     },
 
     start: function (onDone) {
+      if (window.Sound) {
+        Sound.unlock();
+        Sound.setRoute('title');
+      }
       Onboarding._onDone = onDone;
       Onboarding.step = 0;
       Onboarding.answers = {};
@@ -207,6 +211,7 @@
       document.getElementById('overlay-onboard').classList.add('hidden');
       var ov = document.getElementById('overlay-prologue');
       ov.classList.remove('hidden');
+      if (window.Sound) Sound.setRoute('prologue');
       Onboarding._proIdx = 1;
       Onboarding._playPrologue();
     },
@@ -242,6 +247,13 @@
 
     _tutorial: function () {
       document.getElementById('overlay-prologue').classList.add('hidden');
+      if (window.Sound) {
+        var st = Config.section('state');
+        Sound.setPlace(st.stage, st.tod, World.backgroundFor(st.stage));
+        Sound.setRoute('talk');
+      }
+      var bar = document.getElementById('input-bar');
+      if (bar) bar.classList.add('spot');
       Onboarding._tutIdx = 0;
       Onboarding._showTut();
     },

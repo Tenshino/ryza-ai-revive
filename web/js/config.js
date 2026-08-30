@@ -60,7 +60,7 @@
       autoAdvance: false,
       vibration: true,
       fullscreen: false,
-      showBubble: true
+      rim: true,
     },
 
     /* ---- session state ---- */
@@ -71,6 +71,7 @@
       stage: 'stage_01_001_04',      // ライザの家
       tod: 'aft',                    // mor | aft | eve | ngt
       day: 1,
+      lastDayDate: '',
       onboardingDone: false,
       welcome: { talk: false, map: false, alarm: false, skin: false, quest: false }
     }

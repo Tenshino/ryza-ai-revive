@@ -4,7 +4,7 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-08-31）：**玩家主路径已按源数据接上**。抽屉已对齐 `talk_drawer`；UI 多语补了 zh-TW / hi / id / pt-BR；rim 用 FBO 加算轮廓；演出层用画布按 Lottie JSON 帧率播；Occupancy 肢体层用 `MixBlend.replace`。`MixDurationPoses.sourceHash` 仍对不上骨骼 hash。细目见 `docs/AUDIT.md`。
+状态（2026-08-31）：**玩家主路径已按源数据接上**。音景与源包两首 BGM 对齐：标题 `bgm_opening`、对话只有地点 ambient、地图 `bgm_world_map`。腮红 overlay 走普通 Alpha。动作 Physics 每帧只 `update` 一次。细目见 `docs/AUDIT.md`。
 
 本目录已 `git init`，作为防错改快照。`config/providers.json` **不要提交**（含 API Key）；模板是 `config/providers.example.json`。
 
@@ -19,7 +19,7 @@ projects/ryza-ai-revive/
 ├── web/                    # 应用本体（纯静态，无构建步骤）
 │   ├── index.html
 │   ├── css/app.css
-│   ├── js/                 # avatar / app / i18n / fx / world / audio / …
+│   ├── js/                 # util / avatar / app / i18n / fx / world / audio / …
 │   ├── vendor/spine-webgl.js  # Spine 4.2 官方运行时
 │   └── assets/             # 素材（约 572 MB）
 ├── desktop/                # pywebview 桌面壳（本地 HTTP + 竖屏窗）
@@ -74,7 +74,7 @@ python scripts/serve.py
 `SkeletonRenderer`。不要用 `SceneRenderer` 的 `OrthoCamera`（zoom 语义是乘不是除）。
 
 - **一块** WebGL（`#scene-canvas`）。点击用 `#avatar-hit`，不要再给立绘开第二块 canvas。
-- 上下文 `{ alpha: false, premultipliedAlpha: false }`。Multiply 槽（腮红/鼻高光/部分阴影）单独第二遍 `premultipliedAlpha: true` 画。
+- 上下文 `{ alpha: false, premultipliedAlpha: false }`。头发阴影等 Multiply 槽第二遍 PMA；腮红/pale/tear 在第一遍改成 Normal（不要当 Multiply，会过曝）。setup 的 `cheek_line` / `nose_hi` 每帧摘掉。
 - 画布 backing store = CSS 尺寸 × `devicePixelRatio`
 - 角色与场景**共用同一套正交镜头**。视野高度 `1720 / (cameraZoom / 1.93)`（sitting 1.93 为基准）。ASMR zoom 3.5 是表里的特写，不是比例算错。
 - 角色放在场景骨骼 `chara_root` + `posture_camera.json` 的 offset/scale 上
@@ -83,7 +83,7 @@ python scripts/serve.py
 - 待机重掷、`PoseTypeSets`、`MotionGroups` Occupancy 分层见 AUDIT §3
 - 特效只来自 `effectSets` → `fxOnAnimNames` / `fxOffAnimNames`
 - 注视 `DriverDefs` + aim/roll（`followers[].delay` 用注视历史队列）；指尖 `fingerTrack*`；口型 `lipSyncClosure` 或 `.env.json`
-- 轨道：0 待机 / 1 一次性 / 2 眼 / 3 眉 / 4 嘴 / 5 特效 / 6 触摸 / 7 额外特效 / 8–9 手臂（B 或 FG，`MixBlend.replace`）/ 10 风（`MixBlend.add`）/ 11–12 躯干 / 13–14 腿
+- 轨道：0 待机 / 1 一次性 / 2 眼 / 3 眉 / 4 嘴 / 5 特效 / 6 触摸 / 7+15+16 额外特效 / 8–9 手臂（B 或 FG，`MixBlend.replace`）/ 10 风（`MixBlend.add`）/ 11–12 躯干 / 13–14 腿
 - 场景 rim：角色先画到默认 framebuffer，FBO 只加算轮廓。不要把角色 blit 进 FBO 再当主画面（会变成黑剪影）
 - `setHidden`：抽屉「显示/隐藏立绘」
 - 页面收在竖屏 `#phone` 列（`min(100vw, 100vh * 9/19.5)`）
@@ -99,12 +99,17 @@ python scripts/serve.py
 - `backgroundFor(stageId)`：120 → 50 套场景骨骼
 - UI：`world_map/ui/*.svg` 钉子，区域 → 场景块 → 舞台
 
+### `web/js/util.js`
+
+- `clamp` / `lerp` / `pad3` / `hashHex` / `swapHashHalves` / `weighted`
+- 不引用 App / Avatar / World，给 audio / avatar 共用
+
 ### `web/js/alarm.js` / `web/js/quest.js` / `web/js/onboarding.js` / `web/js/audio.js` / `web/js/fx.js`
 
 - 闹钟：列表/编辑、类型/语气/星期、贪睡、全屏响铃、`pick()` + `.env.json`
 - 委托：本地日文池或 LLM；完成 overlay + 画布彩纸；欢迎任务瓦片
 - 问卷 / 序章 / 教程：`onboarding.js`
-- 音景：BGM、地点 ambient、SE、tap_voice、分路音量；locale 随 UI（`zh`/`zh-tw`→`zh-tw`，`hi`→`hi-in` 等）
+- 音景：与源 `current_audio_route` / `BackgroundTrackId` 对齐。包里 BGM 只有 `bgm_opening`（标题）和 `bgm_world_map`（地图）；对话页 **没有** BGM，播 `amb_NNN_day/night`。地图上 ambient 压到 0.35。`Sound` 不读 `World`（App 传入 scene keys / background id）。浏览器要手势才 `play()`，`Sound.unlock` 用独立 Audio。
 - `fx.js`：按 `assets/animations/*.json` 的 `fr`/`op` 用 canvas 播语音钮、标题火、委托彩纸（没有 Lottie 运行时）
 
 ### `web/js/i18n.js` / `web/js/app.js`
@@ -132,7 +137,7 @@ python scripts/serve.py
 | `onboarding` | 问卷、序章语音、教程对话 | 有；对白本地/LLM |
 | `talk` | 五种模式、气泡、日志、重置 | 有；模式是 HUD 药丸不是 bottom sheet |
 | `spine_avatar` | 情绪叠层、表情、眨眼、分部位点击、注视、指尖、物理、站/坐、ASMR、视差、rim | 已接；见 AUDIT §3 |
-| `audio` | BGM、ambient、SE、分路、tap_voice | `audio.js` |
+| `audio` | 标题 opening BGM；对话 ambient；地图 world BGM；SE；分路；tap_voice | `audio.js`（对话无 BGM 是源设计） |
 | `world_map` | 钉子图、选舞台、NPC 头像、时段 | 钉子三级；调度按 placement 全字段 |
 | `alarm` | 列表+编辑、贪睡、响铃全屏、env 口型 | 有；仅前台 |
 | `mission` + `welcome_mission` | 委托板、完成演出、欢迎任务 | 本地池 + overlay + 瓦片（无官方 master） |
@@ -147,7 +152,7 @@ python scripts/serve.py
 
 - `web/assets/animations/`：标题火 / 语音钮 / 委托彩纸用画布按 JSON 帧率播
 - `web/assets/spine/objects/`（场景 JSON 未引用）
-- `MixDurationPoses` 距离 mix（sourceHash 对不上）
+- `MixDurationPoses.sourceHash` 可能对不上 `skeleton.hash`（`animPoses` 有骨头时仍用距离 mix）
 
 ---
 
@@ -159,17 +164,18 @@ python scripts/serve.py
 - 世界钉子图 + NPC 全字段调度；语音库 6 语目录；UI 7 语
 - 抽屉 `talk_drawer` 键；地图/委托从对话底栏进
 - LLM 经 `/_proxy`；TTS 用 `web/assets/voice/ryza_wav/` 克隆（须 wav/mp3）
-- 闹钟响铃+贪睡+env；音景四路；5 槽换装+veil；欢迎任务；存档槽；道具栏
+- 闹钟响铃+贪睡+env；音景（标题 BGM / 对话 ambient / 地图 BGM）；5 槽换装+veil；欢迎任务；存档槽；道具栏
 
 ---
 
 ## 5. 已知问题 / 剩余
 
-1. `MixDurationPoses` 的精确距离公式未接线（`sourceHash` 对不上骨骼 hash；同类短混合 / 跨类型 random min–max）。
+1. `MixDurationPoses.sourceHash` 仍可能对不上 `skeleton.hash`；两边动画在 `animPoses` 里有骨头数据时仍用距离 mix。
 2. 闹钟只在应用前台触发。
 3. 参考音频只接受 wav/mp3；克隆用 wav 在 `web/assets/voice/ryza_wav/`。
 4. 桌面/安卓壳未在本机打出安装包。
 5. 标题/语音钮/彩纸是画布按 Lottie JSON 帧率播，不是 Lottie 运行时。
+6. `spine/objects/` 仍只有图集、没有完整 skel，无法加载。
 
 ---
 
@@ -213,7 +219,7 @@ python scripts/build_indexes.py
 | `web/assets/audio/alarm/<语种>/<语气>/<类型>/<时段>/` | 预录语音 + 同名 `.env.json` |
 | `web/assets/audio/prologue/jp/` | 9 条开场白原声 |
 | `web/assets/audio/tap_voice/` | 点击反应语音 |
-| `web/assets/audio/ambient/` `bgm/` `se/` | 环境音、BGM、音效 |
+| `web/assets/audio/ambient/` `bgm/` `se/` | 地点环境音（对话页背景）；BGM 仅 `bgm_opening.m4a` + `bgm_world_map.m4a`；SE |
 | `web/assets/images/chara_icons/` `skins/` | 头像、服装预览 |
 | `web/assets/world_map/ui/` | 地图钉子 SVG |
 | `web/assets/welcome_mission/` | 欢迎任务 UI 图 |

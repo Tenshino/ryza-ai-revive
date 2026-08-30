@@ -1,13 +1,13 @@
 # 实现核对（相对源 APK v1.0.2）
 
-日期：2026-08-31（动作层 + 抽屉/多语/演出补完）  
+日期：2026-08-31（音景与源包两首 BGM 对齐；腮红 Normal；Physics 单次 update）  
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
 
 验收口径：**源 APK 里玩家侧能落地的功能，按源模块 + 原始数据实现**。官方登录/付费/分析/websocket 仍按 HANDOFF「明确不要做」剔除。没有 Dart 源码时，行为以 APK 内 JSON / 音频目录 / 骨骼 / UI 图为准。
 
-**结论：** 素材拷贝仍是 3609 对 3609。玩家主路径已按源数据接上。抽屉已改成 `talk_drawer` 键（地图/委托从对话底栏进）。UI 语种补了 zh-TW / hi / id / pt-BR。场景 rim 用 FBO **加算轮廓**（角色仍画在默认 FB）。标题火/语音钮/委托彩纸按 Lottie JSON 的帧率用画布播（未引入 Lottie 运行时）。动作层 Occupancy + `MixBlend.replace` 已按源表接上。`MixDurationPoses.sourceHash` 仍对不上骨骼 hash，距离 mix 不接线。
+**结论：** 素材拷贝仍是 3609 对 3609。玩家主路径已按源数据接上。音景与源 `BackgroundTrackId` 一致：标题 `bgmOpening`、对话只有 `amb*`、地图 `bgmWorldMap`（对话无 BGM 是源设计）。腮红/pale/tear 按 Normal overlay；`cheek_line`/`nose_hi` 仍摘掉。动作 `Physics.update` 每帧一次。`animPoses` 有骨头时走距离 mix。
 
 本状态已在 `projects/ryza-ai-revive` 做 git 快照（不含 `config/providers.json` 密钥）。
 
@@ -44,7 +44,7 @@
 | `talk_drawer` | welcome / alarm / language / profile / memory / newTalk / toggle / fullscreen / settings | 抽屉已是这些键；地图/委托/服装从底栏或角色页进 | **对** |
 | `inventory_sheet` | 对话道具栏 | `#sheet-inv` + localStorage | **对** |
 | `spine_avatar` | 见 §3 | 坐/站随场景、情绪叠层、点击部位、注视/指尖、口型、rim FBO | **对** |
-| `audio` | BGM / ambient / se / 分路音量 / tap_voice | `audio.js` 四路 + 设置滑条 | **对** |
+| `audio` | 标题 opening BGM；对话 ambient；地图 world BGM；SE；分路；tap_voice | 两首 BGM + 地点 ambient；对话无 BGM | **对** |
 | `world_map_screen` | 区域钉 → 场景块钉 → 舞台；NPC 头像 | `world_map/ui/*.svg` 钉子图；可选到具体舞台 | **对** |
 | `npc_scheduler` | bases + move + companions + resolveOrder | `npcsAt()` 已按这些字段、按天哈希 | **对** |
 | `alarm_*` | 列表/编辑、贪睡、全屏响铃、`.env.json` | 三要素都有；locale 随 UI（zh→zh-tw） | **对**（仅前台轮询，无系统闹钟） |
@@ -63,29 +63,29 @@
 
 - **单 WebGL 画布**（`#scene-canvas`）+ `#avatar-hit` 点击层。两块叠 WebGL 在 Windows 上会闪。
 - 场景只播一次 `anm_fade_in` / `anm_fade_in_all`（`loop: false`）。循环 fade_in 会每秒透明闪一次。
-- 场景 `updateWorldTransform(Physics.none)`；角色 `Physics.update` 后再 `none` 贴 `chara_root`。
+- 场景 `updateWorldTransform(Physics.none)`；角色只 `Physics.update` **一次**。后面再 `Physics.none` 会丢掉物理、动作抖。
 - 服装 id 是 outfit（如 `crf_skn_002_0001`）；坐/站后缀由场景 `midgroundPostures` 决定（`_01` / `_99`）。
 - `fixedBasePoseMode`：换情绪**不换** track 0 的 `motion_A_*_idle`。一次性动作在 track 1 覆盖，播完 `addEmptyAnimation(..., fade, 0)` 从**片段结束**淡出（delay≤0）。切入时长 `mixDurationMin × mixDurationSaturationRatio`（约 0.1s），不是 1–2s 全身距离混合。
 - 待机重掷：`poseRerollIntervalMin/Max`；`PoseTypeSets` 加权换姿势类型；同类短混合，跨类型才用 `mixDurationMin`–`Max`。一次性动作播放中不重掷。
 - 手臂：`armInOutPartConfig.idleGroupIds.byPosture` 休息组 + `MotionGroups` / `armGroupWeightsByPoseType` 加权叠加；`enableArmInOutRouting` 时走 in/out clip。Occupancy：B 或 FG 互斥（轨 8–9，`MixBlend.replace`），E/EH 躯干（11–12），C 双腿否则 I 左 + J 右（13–14）。风仍是 `MixBlend.add`。`motion_add_*` 是完整肢体 pose，用 add 会叠出「手臂立柱」。
 - 表情：`intensityProfiles.normal.expressionSets` + `mixDurationEye/Eyebrow`；眨眼 `closedEyeAnimation`。
-- 特效：只认 intensity 的 `effectSets[].names` → `fxOnAnimNames` / `fxOffAnimNames`。没有自造 `FX_BY_EMOTION`。setup 里 `037_face_cheek_line` / `032_face_nose_hi` 每帧摘掉（Multiply 直通 Alpha 会过曝）；害羞等 ON 仍挂 `038_face_cheek`（如 `face_cheek_01`）。
-- Multiply 槽第二遍用 PMA 画（图集无 `pma:true`，但这些槽按预乘作者）。全局 PMA 会让普通网格接缝发黑。
-- 注视：`emotionalGesture.DriverDefs` + `tensionProfiles`；`rigConfig.aimSlots/rollSlots`；`lockSittingAxis` 不滚 `body2`。
+- 特效：只认 intensity 的 `effectSets[].names`（加权抽 **一组**，组内 names 可叠）→ `fxOnAnimNames` / `fxOffAnimNames`。没有自造 `FX_BY_EMOTION`。setup 里 `037_face_cheek_line` / `032_face_nose_hi` 每帧摘掉。害羞等 ON 挂 `038_face_cheek`，**按 Normal 画**（槽虽然标了 Multiply）。
+- 头发阴影等其余 Multiply 槽第二遍 PMA。腮红当 Multiply 会 `dst*(rgb+1−a)` 过曝。全局 PMA 会让普通网格接缝发黑。
+- 注视：`emotionalGesture.DriverDefs` + `tensionProfiles`；`rigConfig.aimSlots/rollSlots`；`lockSittingAxis` 不滚 `body2`。眨眼间隔来自 `gaze.eyeModeEntries`。
 - 指尖：`fingerTrackCenterBone` / `MaxRange` / Head·Body 阈值与 scale。
 - 口型：`lipSyncClosure`（Analyser RMS → openness dB）+ 闹钟 `.env.json` envelope。
 - 点击：`hitPartNames` 多边形/骨半径 → `TapReactions` 按 `PartName`。
 - 风：`windAnimationPrefix`（`effect_wind*`）加在 track 10，`MixBlend.add`。
-- 说话时 `performanceConfig.intensitySpeedMultipliers.strong` 乘在待机 timeScale 上。
+- 说话时用 `intensityProfiles.strong` 的表情/特效档，并把 `performanceConfig.intensitySpeedMultipliers.strong` 乘在待机 timeScale 上。
 
-**轨道：** 0 待机 / 1 一次性 / 2 眼 / 3 眉 / 4 嘴 / 5 特效 / 6 触摸 / 7 额外特效 / 8–9 手臂（B 或 FG，`MixBlend.replace`）/ 10 风（`MixBlend.add`）/ 11–12 躯干腰（E/EH）/ 13–14 腿（C 双腿，否则 I 左 + J 右）。
+**轨道：** 0 待机 / 1 一次性 / 2 眼 / 3 眉 / 4 嘴 / 5 特效 / 6 触摸 / 7+15+16 额外特效 / 8–9 手臂（B 或 FG，`MixBlend.replace`）/ 10 风（`MixBlend.add`）/ 11–12 躯干腰（E/EH）/ 13–14 腿（C 双腿，否则 I 左 + J 右）。
 
 ### 3.2 仍不是源公式、或做不到的
 
 | 点 | 源 | 现在 |
 |---|---|---|
-| `MixDurationPoses` | APK 用骨骼距离算 mix；`sourceHash` 对不上就 **random min–max** | 同类姿势用 saturation 短混合，跨类型 random min–max。没有复刻 `calculateMixDurationFromDistance` 的骨子集 |
-| 强度档 | `normal` / `strong` / `weak` 整套 profile | 表情/姿势只用 `normal`；strong 只作语速倍率 |
+| `MixDurationPoses` | APK 用骨骼距离算 mix | `animPoses` 两边有骨头就走距离 mix；`sourceHash` 对不上也用表。同类型短混合作下限 |
+| 强度档 | `normal` / `strong` / `weak` 整套 profile | 说话时用 `strong`，否则 `normal` |
 | Driver 跟随 delay | `followers[].delay` | 注视历史队列按 delay 取样 |
 | 镜头高度 | JSON 的 zoom/pan | 视野高度仍是 `1720 / (zoom/1.93)`；ASMR panY 会略抬以对着脸（zoom 3.5 特写是表里的） |
 | `light.rim*` | rimEnabled / opacity / glow | 角色画到默认 FB；FBO 只加算轮廓（不是源 shader 像素级拷贝） |
@@ -99,10 +99,39 @@
 3. **一次性 `motion_oneshot_D_*` 不要 mute 8–14 轨。** mute 再重抽会让手臂每句对话跳一次。点击 `TapReactions` 仍可短暂 mute，结束要**还原同一组**，不要随机新组。
 4. **姿势类型：** `_idlesForType` 必须用全局 `poseTypeIds` 映射过滤。未标类型的 A_* 不能当所有 `posetype_*` 的候选，否则会在 clasping / freehand 之间硬切。
 5. **Occupancy 字母：** B 与 FG 互斥（都占手臂）；C 与 I/J 互斥（双腿 vs 左/右腿）；E/EH 是躯干，可与手臂同时播。
+6. **成对手臂 delay：** 第二轨要等 `pairStartDelay` 时，把当前 looping clip 的 `trackEnd` 设成「现在 + delay」再 `addAnimation`。不要 empty mix=0（setup 闪一下），也不要往 looping 当前片段后面 `addAnimation`（下一段永远不开始）。
+7. **物理：** 角色每帧只 `updateWorldTransform(Physics.update)`。先 place，后物理。不要再 `Physics.none`。
 
 ### 3.5 过曝说明（给下一个人）
 
-白斑不是「永远关掉腮红」。setup 姿态里 Multiply 的颊线/鼻高光一直挂着，直通 Alpha 下 `dst*(rgb+1−a)` 会乘亮。idle 必须播 `facial_add_blush_000_off` 并摘掉这两槽。`effectSets` 里的 blush001 等仍会 ON，挂的是 `038_face_cheek`，用 PMA 第二遍画。
+白斑不是「永远关掉腮红」。setup 姿态里 Multiply 的颊线/鼻高光一直挂着，直通 Alpha 下 `dst*(rgb+1−a)` 会乘亮。idle 必须播 `facial_add_blush_000_off` 并摘掉这两槽。`effectSets` 里的 blush001 等仍会 ON，挂的是 `038_face_cheek`：**按 Normal 画**，不要走 Multiply / PMA 第二遍，否则腮红本身过曝。
+
+### 3.6 音景（与源包对齐，不要「补」对话 BGM）
+
+源 APK 的 `BackgroundTrackId` 只有：
+
+- `bgmOpening` → `assets/audio/bgm/bgm_opening.m4a`（`title_screen`）
+- `bgmWorldMap` → `assets/audio/bgm/bgm_world_map.m4a`（`world_map_screen`）
+- `amb001Day` … `amb047Night` → `assets/audio/ambient/amb_NNN_{day,night}.m4a`（地点环境音）
+
+没有第三首 talk BGM。路由文件是 `current_audio_route` / `resolve_background_track` / `ambient_band_tracks`；go_router 有 `/world_map?from=title` 和 `/world_map?from=talk`，地图是独立屏。
+
+因此玩家听到的应该是：
+
+| 屏幕 | BGM | ambient |
+|---|---|---|
+| 标题 | `bgm_opening` | 无 |
+| 对话 | **无** | 当前舞台对应的 `amb_*` |
+| 世界地图 | `bgm_world_map` | 同一条 ambient，压到约 0.35 以免抢音量 |
+| 序章语音 | 无 | 无（只播 `prologue_*.m4a`） |
+
+「进地图才听到那首曲子」是源设计。先前对话页没声，是 ambient 没起来，不是 BGM 出场时机错了。
+
+实现约束（已修，不要退回去）：
+
+1. 浏览器要用户手势才让 `audio.play()` 成功。`Sound.unlock` 用独立 `Audio` ping，不要动 BGM/ambient 两个循环元素。
+2. 循环音源记在 `Sound._loopSrc.bgm/ambient`。**禁止** `Sound['_ambientSrc'] = url`：那会把 `_ambientSrc` 函数覆盖成字符串，之后地点音效永久消失。
+3. 对话页 `setRoute('talk')` 必须开始 ambient。不要为了「对话也有 BGM」去播 `bgm_world_map` 或 opening。
 
 ---
 
@@ -120,8 +149,8 @@
 
 **可做但还没做完：**
 
-1. `MixDurationPoses` 若以后对上 skeleton hash，再接线距离公式
-2. 标题/语音钮是画布演出，不是官方 Lottie 运行时（包内没有运行时）
+1. 标题/语音钮是画布演出，不是官方 Lottie 运行时（包内没有运行时）
+2. `spine/objects/` 仍只有图集、没有完整 skel
 
 **明确不做：** 登录/Firebase、付费墙、代币、体力、皮肤内购、每日登录、远程资源门、公告、强制更新、分析、官方 marionette websocket。
 

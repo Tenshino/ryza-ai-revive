@@ -78,7 +78,10 @@
       App._bindOverlays();
 
       Promise.all([Config.hydrate(), World.init(), VoiceBank.load(), Sound.init()]).then(function () {
+        Sound.setCatalog(Object.keys(World.scenes || {}));
         var st = Config.section('state');
+        Sound.setPlace(st.stage, st.tod, World.backgroundFor(st.stage));
+        App._tickDay();
         Avatar.init(function () {
           App._loadSceneFor(st.stage, st.tod);
         });
@@ -109,17 +112,40 @@
     },
 
     enterGame: function (fromOnboard) {
-      Sound.playBgm('off');
+      var bar = document.getElementById('input-bar');
+      if (bar) bar.classList.remove('spot');
       var st = Config.section('state');
-      Sound.playAmbient(st.stage, st.tod);
+      Sound.setPlace(st.stage, st.tod, World.backgroundFor(st.stage));
+      Sound.setRoute('talk');
+      App._showDisclosure();
       if (fromOnboard) return;
       App.greet();
     },
 
+    _tickDay: function () {
+      var st = Config.section('state');
+      var today = new Date().toDateString();
+      if (st.lastDayDate && st.lastDayDate !== today) {
+        Config.set('state.day', (st.day || 1) + 1);
+      }
+      if (st.lastDayDate !== today) Config.set('state.lastDayDate', today);
+    },
+
+    _showDisclosure: function () {
+      if (App._disclosed) return;
+      App._disclosed = true;
+      App.toast(I18n.t('toast.ai'));
+    },
+
     _loadSceneFor: function (stageId, tod) {
+      var curtain = document.getElementById('scene-curtain');
+      if (curtain) curtain.classList.add('on');
       var bg = World.backgroundFor(stageId);
       Avatar.loadScene(bg, tod, function (err) {
         if (err) { /* stage without a built scene is fine — bg stays dark */ }
+        setTimeout(function () {
+          if (curtain) curtain.classList.remove('on');
+        }, 280);
       });
     },
 
@@ -203,7 +229,7 @@
         var next = World.nextTod(s.tod);
         Config.set('state.tod', next);
         App._loadSceneFor(s.stage, next);
-        Sound.playAmbient(s.stage, next);
+        Sound.setPlace(s.stage, next, World.backgroundFor(s.stage));
         App.updateHud();
       };
       document.getElementById('world-area').onchange = function (e) {
@@ -232,12 +258,10 @@
       if (langSheet) langSheet.classList.add('hidden');
       if (name === 'world') {
         Welcome.mark('map');
-        Sound.playBgm('world');
+        Sound.setRoute('world');
         App.renderWorld();
       } else {
-        Sound.playBgm('off');
-        var st = Config.section('state');
-        if (name === 'talk') Sound.playAmbient(st.stage, st.tod);
+        Sound.setRoute('talk');
       }
       if (name === 'memory') App.renderMemory();
       if (name === 'skin') { Welcome.mark('skin'); App.renderSkins(); }
@@ -261,7 +285,8 @@
       var st = Config.section('state');
       Config.set('state.stage', stageId);
       App._loadSceneFor(stageId, st.tod);
-      Sound.playAmbient(stageId, st.tod);
+      Sound.setPlace(stageId, st.tod, World.backgroundFor(stageId));
+      Sound.setRoute('talk');
       App.renderWorld();
       App.updateHud();
       var place = World.find(stageId);
@@ -427,7 +452,7 @@
       }
       App.speaking = true;
       document.getElementById('btn-send').disabled = true;
-      App.showBubble('…');
+      App.showTyping();
       App.toast(I18n.t('toast.thinking'));
       Welcome.mark('talk');
 
@@ -524,12 +549,25 @@
       App.buzz();
     },
 
+    showTyping: function () {
+      var b = document.getElementById('bubble');
+      var vig = document.getElementById('vignette');
+      b.classList.remove('hidden');
+      b.classList.add('typing', 'speaking');
+      document.getElementById('bubble-text').innerHTML =
+        '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>';
+      if (vig) vig.classList.add('talk-glow');
+    },
+
     showBubble: function (text) {
+      var vig = document.getElementById('vignette');
+      if (vig) vig.classList.remove('talk-glow');
+      var b = document.getElementById('bubble');
+      b.classList.remove('typing', 'speaking');
       if (!Config.section('app').showBubble) {
-        document.getElementById('bubble').classList.add('hidden');
+        b.classList.add('hidden');
         return;
       }
-      var b = document.getElementById('bubble');
       b.classList.remove('hidden');
       document.getElementById('bubble-text').textContent = text;
     },
@@ -538,13 +576,16 @@
       if (App._typeTimer) clearTimeout(App._typeTimer);
       var b = document.getElementById('bubble');
       var span = document.getElementById('bubble-text');
-      b.classList.remove('hidden');
+      var vig = document.getElementById('vignette');
+      b.classList.remove('hidden', 'typing');
       b.classList.add('speaking');
+      if (vig) vig.classList.add('talk-glow');
       var speed = Number(Config.section('app').textSpeed) || 28;
       var i = 0;
       (function step() {
         if (i >= text.length) {
           b.classList.remove('speaking');
+          if (vig) vig.classList.remove('talk-glow');
           done && done();
           return;
         }
@@ -998,6 +1039,8 @@
         function (v) { Config.set('app.autoAdvance', v); });
       App._switch(w, T('settings.vibration'), Config.section('app').vibration,
         function (v) { Config.set('app.vibration', v); });
+      App._switch(w, T('settings.rim'), Config.section('app').rim !== false,
+        function (v) { Config.set('app.rim', v); });
 
       App._title(w, T('settings.data'));
       var row = document.createElement('div');
@@ -1158,7 +1201,10 @@
       var st = Config.section('state');
       Avatar.loadSkin(st.skin);
       App._loadSceneFor(st.stage, st.tod);
-      if (window.Sound) Sound.playAmbient(st.stage, st.tod);
+      if (window.Sound) {
+        Sound.setPlace(st.stage, st.tod, World.backgroundFor(st.stage));
+        Sound.setRoute('talk');
+      }
       App.updateHud();
       App.renderWorld();
       Alarm.render(document.getElementById('alarm-list'), App.playFile);

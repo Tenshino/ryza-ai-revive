@@ -264,6 +264,11 @@
         cap.textContent = it.name;
         el.appendChild(img);
         if (it.here) {
+          var ring = document.createElement('img');
+          ring.className = 'pin-ring';
+          ring.src = PIN.ring;
+          ring.alt = '';
+          el.appendChild(ring);
           var here = document.createElement('img');
           here.className = 'pin-here';
           here.src = PIN.here;
@@ -392,11 +397,17 @@
         var img = document.createElement('img');
         img.src = World.iconFor(n.id);
         img.onerror = function () { img.style.visibility = 'hidden'; };
+        var pin = document.createElement('img');
+        pin.className = 'npc-pin';
+        pin.src = PIN.char;
+        pin.alt = '';
         var box = document.createElement('div');
         box.innerHTML = '<div class="npc-name"></div><div class="npc-note"></div>';
         box.querySelector('.npc-name').textContent = n.name;
         box.querySelector('.npc-note').textContent = n.note;
-        row.appendChild(img); row.appendChild(box);
+        row.appendChild(img);
+        row.appendChild(pin);
+        row.appendChild(box);
         sideRoot.appendChild(row);
       });
     },
