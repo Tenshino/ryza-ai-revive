@@ -1,0 +1,27 @@
+# Secrets — keep the local file, never commit keys
+config/providers.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+*.egg-info/
+
+# Desktop / Android build junk
+desktop/dist/
+desktop/build/
+desktop/*.spec.bak
+android/.gradle/
+android/**/build/
+android/local.properties
+android/.idea/
+*.iml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/

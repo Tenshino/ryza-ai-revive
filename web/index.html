@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>ライザと話す — Ryza Chat</title>
+<link rel="stylesheet" href="css/app.css?v=fx-1">
+</head>
+<body>
+<div id="phone">
+
+<div id="stage">
+  <canvas id="scene-canvas"></canvas>
+  <div id="avatar-hit"></div>
+  <div id="vignette"></div>
+  <div id="skin-veil"></div>
+</div>
+
+<header id="topbar">
+  <button class="icon-btn" id="btn-menu" title="菜单"><img src="assets/icons/drawer.svg" alt=""></button>
+  <div id="hud">
+    <button type="button" class="hud-chip" id="hud-mode" title="对话模式">雑談</button>
+    <button type="button" class="hud-chip" id="hud-place" title="所在地">ライザの家</button>
+    <span class="hud-chip" id="hud-tod" title="时段">昼</span>
+  </div>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="btn-voice" title="语音开关"><canvas id="lottie-voice" width="36" height="36"></canvas></button>
+  <button class="icon-btn" id="btn-settings" title="设置">⚙</button>
+</header>
+
+<nav id="drawer">
+  <div class="drawer-head">
+    <img id="drawer-avatar" src="assets/images/chara_icons/ryza.png" alt="">
+    <div>
+      <div class="drawer-name">ライザ</div>
+      <div class="drawer-sub" id="drawer-day">同伴 1 天</div>
+    </div>
+  </div>
+  <ul class="drawer-list">
+    <li data-view="talk" class="active"><img src="assets/icons/chara.svg" alt=""> <span data-i18n="nav.talk">对话</span></li>
+    <li data-view="welcome"><img src="assets/icons/welcome_mission.svg" alt=""> <span data-i18n="nav.welcome">欢迎任务</span></li>
+    <li data-view="alarm"><img src="assets/icons/alarm.svg" alt=""> <span data-i18n="nav.alarm">闹钟</span></li>
+    <li data-action="lang"><img src="assets/icons/language.svg" alt=""> <span data-i18n="nav.lang">语言</span></li>
+    <li data-view="chara"><img src="assets/icons/profile.svg" alt=""> <span data-i18n="nav.profile">玩家档案</span></li>
+    <li data-view="memory"><img src="assets/icons/save_data.svg" alt=""> <span data-i18n="nav.memory">回忆</span></li>
+    <li data-action="newTalk"><img src="assets/icons/asterisk.svg" alt=""> <span data-i18n="nav.newTalk">新的对话</span></li>
+    <li data-action="toggleChara"><img src="assets/icons/chara_hide.svg" alt="" id="ico-toggle-chara"> <span data-i18n="nav.toggleChara">显示/隐藏立绘</span></li>
+    <li data-action="fullscreen"><img src="assets/icons/allscreen.svg" alt=""> <span data-i18n="nav.fullscreen">全屏</span></li>
+    <li data-view="settings"><img src="assets/icons/charaedit.svg" alt=""> <span data-i18n="nav.settings">设置</span></li>
+  </ul>
+  <div class="drawer-foot">离线重建版 · 不连接官方服务器</div>
+</nav>
+<div id="scrim"></div>
+
+<main id="view-talk" class="view active">
+  <div id="bubble-wrap">
+    <div id="bubble" class="hidden"><span id="bubble-text"></span></div>
+  </div>
+  <div id="talk-menu">
+    <button type="button" class="icon-btn" id="btn-bag" title="道具"><img src="assets/icons/bag.svg" alt=""></button>
+    <button type="button" class="icon-btn" id="btn-quest-sheet" title="委托"><img src="assets/icons/quest.svg" alt=""></button>
+    <button type="button" class="icon-btn" id="btn-map" title="地图"><img src="assets/icons/world_map.svg" alt=""></button>
+    <button type="button" class="icon-btn" id="btn-log" title="回忆"><img src="assets/icons/save_data.svg" alt=""></button>
+  </div>
+  <div id="input-bar">
+    <input id="input" type="text" placeholder="和莱莎说点什么…" autocomplete="off">
+    <button id="btn-send"><img src="assets/icons/send.svg" alt="send"></button>
+  </div>
+</main>
+
+<section id="view-welcome" class="view">
+  <div class="view-head"><h2 data-i18n="wm.title">欢迎任务</h2></div>
+  <div id="welcome-body" class="form-wrap"></div>
+</section>
+
+<section id="view-world" class="view">
+  <div class="view-head"><h2 data-i18n="world.title">世界地图</h2>
+    <div class="head-actions">
+      <select id="world-area"></select>
+      <button class="mini-btn" id="btn-tod">🌤 <span id="btn-tod-label">时段</span></button>
+    </div>
+  </div>
+  <div id="world-body">
+    <div id="world-fields"></div>
+    <div id="world-side">
+      <h3 data-i18n="world.here">在此地</h3>
+      <div id="world-npcs"></div>
+    </div>
+  </div>
+</section>
+
+<section id="view-quest" class="view">
+  <div class="view-head"><h2 data-i18n="quest.title">委托</h2>
+    <button class="mini-btn" id="btn-quest-new">+ 新委托</button></div>
+  <div id="quest-list"></div>
+</section>
+
+<section id="view-alarm" class="view">
+  <div class="view-head"><h2 data-i18n="alarm.title">闹钟</h2>
+    <button class="mini-btn" id="btn-alarm-new">+ 新闹钟</button></div>
+  <div id="alarm-list"></div>
+</section>
+
+<section id="view-chara" class="view">
+  <div class="view-head"><h2 data-i18n="chara.title">角色设定</h2>
+    <button class="mini-btn" id="btn-chara-skin" data-i18n="nav.skin">服装</button></div>
+  <div class="form-wrap" id="chara-form"></div>
+</section>
+
+<section id="view-skin" class="view">
+  <div class="view-head"><h2 data-i18n="skin.title">服装</h2></div>
+  <div id="skin-grid"></div>
+</section>
+
+<section id="view-memory" class="view">
+  <div class="view-head"><h2 data-i18n="memory.title">回忆</h2>
+    <button class="mini-btn" id="btn-memory-clear">清空</button></div>
+  <div id="memory-list"></div>
+</section>
+
+<section id="view-settings" class="view">
+  <div class="view-head"><h2 data-i18n="settings.title">设置</h2>
+    <button class="mini-btn" id="btn-settings-reset">恢复默认</button></div>
+  <div class="form-wrap" id="settings-form"></div>
+</section>
+
+<div id="toast-host"></div>
+
+<div id="modal-scrim" class="hidden">
+  <form id="modal" autocomplete="off">
+    <h3 id="modal-title"></h3>
+    <div id="modal-body"></div>
+    <div class="btn-row">
+      <button type="button" class="btn" id="modal-cancel" data-i18n="form.cancel">取消</button>
+      <button type="submit" class="btn primary" id="modal-ok" data-i18n="form.ok">确定</button>
+    </div>
+  </form>
+</div>
+
+<div id="sheet-mode" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <h3 data-i18n="mode.sheet">对话模式</h3>
+  <div id="mode-bar">
+    <button class="mode-pill" data-mode="chat"><img src="assets/icons/mode_chat.svg" alt="">雑談</button>
+    <button class="mode-pill" data-mode="story"><img src="assets/icons/mode_story.svg" alt="">物語</button>
+    <button class="mode-pill" data-mode="immersive"><img src="assets/icons/mode_immersive.svg" alt="">没入</button>
+    <button class="mode-pill" data-mode="asmr"><img src="assets/icons/mode_asmr.svg" alt="">ASMR</button>
+    <button class="mode-pill" data-mode="text"><img src="assets/icons/mode_text.svg" alt="">テキスト</button>
+    <span class="mode-sep"></span>
+    <button class="mode-pill style" data-style="voice">🔊 音声</button>
+    <button class="mode-pill style" data-style="text">📝 文字</button>
+  </div>
+</div>
+
+<div id="sheet-inv" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <h3 data-i18n="inv.title">道具</h3>
+  <div id="inv-list"></div>
+</div>
+
+<div id="sheet-lang" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <h3 data-i18n="nav.lang">语言</h3>
+  <div id="lang-list" class="lang-list"></div>
+</div>
+
+<div id="overlay-title" class="overlay">
+  <div class="title-sparkle"><canvas id="lottie-fire" width="96" height="96"></canvas></div>
+  <h1>ライザと話す</h1>
+  <p class="title-sub">Atelier Ryza</p>
+  <button type="button" class="btn primary" id="btn-title-start" data-i18n="title.start" disabled>…</button>
+</div>
+
+<div id="overlay-onboard" class="overlay hidden">
+  <div class="onb-card">
+    <div id="onb-progress" class="onb-progress"></div>
+    <h2 id="onb-prompt"></h2>
+    <p id="onb-sub" class="onb-sub"></p>
+    <div id="onb-body"></div>
+    <div class="btn-row">
+      <button type="button" class="btn" id="onb-skip">跳过</button>
+      <button type="button" class="btn primary" id="onb-next">下一步</button>
+    </div>
+  </div>
+</div>
+
+<div id="overlay-prologue" class="overlay hidden">
+  <div class="pro-sleep"></div>
+  <p id="pro-step"></p>
+  <p id="pro-hint" class="onb-sub"></p>
+</div>
+
+<div id="overlay-alarm" class="overlay hidden">
+  <div class="ring-card">
+    <div class="ring-time" id="ring-time">07:00</div>
+    <div class="ring-type" id="ring-type"></div>
+    <div class="btn-row">
+      <button type="button" class="btn" id="ring-snooze" data-i18n="alarm.snooze">贪睡</button>
+      <button type="button" class="btn primary" id="ring-dismiss" data-i18n="alarm.dismiss">关闭</button>
+    </div>
+  </div>
+</div>
+
+<div id="overlay-quest-clear" class="overlay hidden">
+  <canvas id="lottie-confetti" class="confetti-canvas"></canvas>
+  <div class="qc-card">
+    <img src="assets/icons/quest_clear_icon.svg" alt="">
+    <h3>Clear</h3>
+    <p class="qc-title"></p>
+    <button type="button" class="btn primary" id="qc-ok" data-i18n="form.ok">确定</button>
+  </div>
+</div>
+
+</div><!-- /phone -->
+
+<script src="vendor/spine-webgl.js"></script>
+<script src="js/config.js"></script>
+<script src="js/i18n.js?v=langs-1"></script>
+<script src="js/api.js"></script>
+<script src="js/avatar.js?v=pose-mix-6"></script>
+<script src="js/world.js"></script>
+<script src="js/audio.js?v=locale-2"></script>
+<script src="js/alarm.js"></script>
+<script src="js/quest.js?v=fx-1"></script>
+<script src="js/onboarding.js"></script>
+<script src="js/fx.js?v=1"></script>
+<script src="js/app.js?v=drawer-i18n-2"></script>
+</body>
+</html>
