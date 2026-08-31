@@ -45,7 +45,7 @@ exe/APK 统一重出 1.2.2）
 |---|---|---|---|
 | `title_screen` | 标题再进游戏 | `overlay-title`，素材加载完才可「はじめる」 | **对** |
 | `onboarding` + `prologue` + `tutorial_talk` | 问卷 + 序章语音 + 教程 | `onboarding.js` 问卷写入设定；`audio/prologue`；教程推进 | **对**（对白用本地/LLM，不是官方剧本接口） |
-| `talk_screen` | 模式、气泡打字、日志、重置、输入条 | 五种模式 + 音声/文字；回忆日志；`talk.newTalkConfirm`；输入条 | **对**（模式仍是 HUD 药丸，源是 bottom sheet） |
+| `talk_screen` | 模式、气泡打字、日志、重置、输入条 | 五种模式（`#sheet-mode` 底栏 sheet，HUD 药丸只是当前档显示）+ 气泡打字（typing 指示）+ 回忆日志 + `talk.newTalkConfirm` + 输入条 + 对话页 glow 背景 | **对** |
 | `talk_drawer` | welcome / alarm / language / profile / memory / newTalk / toggle / fullscreen / settings | 抽屉已是这些键；地图/委托/服装从底栏或角色页进 | **对** |
 | `inventory_sheet` | 对话道具栏 | `#sheet-inv` + localStorage | **对** |
 | `spine_avatar` | 见 §3 | 坐/站随场景、情绪叠层、点击部位、注视/指尖、口型、rim FBO | **对** |
@@ -334,12 +334,15 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
 
 - 桌面：Electron `frame:false` + `setAlwaysOnTop('screen-saver')` 开关 + 顶栏拖拽；
   NSIS 安装/卸载走系统「应用和功能」，存档在 `%AppData%\RyzaChat`（卸载默认保留）。
-  产物 `output/desktop/RyzaChat-Setup-1.0.0.exe`（612.5MB，含全部素材）。
+  产物 `output/desktop/RyzaChat-Setup-1.2.2.exe`（612MB，含全部素材；
+  win-unpacked 自检截图=标题页正常渲染）。
 - 安卓：`AssetServer` 补 `/_proxy`（缺它手机端对话必 CORS 挂）、`config/*` 一律 404；
   去 androidx；`scripts/build_apk.ps1` 无 Gradle 直出签名 APK；正常安装/卸载。
 - 隐私：包内**无** `providers.json`；`config.js` 默认端点中立化（不再内置个人地址）；
   `src/` 原型、`data/*.wav` 测试音频、`output/*.png` 截图已从仓库删除；
-  keystore 目录 gitignore。安装包扫描：无 `aliyuncs/xiaomimimo/bmh05/token-plan` 字样。
+  keystore 目录 gitignore。1.2.2 产物内嵌文件逐包扫描：**零** `bmh05/token-plan/
+  xiaomimimo/sk-*/D:\agent` 私人标识（`api.js` 内置的 `dashscope.aliyuncs.com` 是
+  百炼**公共**默认端点，等同 api.openai.com，属功能必需，不是私人信息）。
 
 ### 6.8 回归
 
