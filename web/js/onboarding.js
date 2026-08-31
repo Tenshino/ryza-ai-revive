@@ -79,12 +79,14 @@
     showTitle: function (onStart) {
       var el = document.getElementById('overlay-title');
       var btn = document.getElementById('btn-title-start');
+      document.body.classList.add('boot');       /* hide chrome behind title */
       el.classList.remove('hidden');
       btn.disabled = false;
       btn.textContent = I18n.t('title.start');
       btn.onclick = function () {
         if (window.Sound) Sound.unlock();
         el.classList.add('hidden');
+        document.body.classList.remove('boot');
         onStart && onStart();
       };
     },

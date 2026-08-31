@@ -235,6 +235,24 @@
       return out;
     },
 
+    /* area_bottom_sheet.dart needs "who is in this area right now". */
+    npcsInArea: function (areaId, day) {
+      var out = {};
+      World.fields(areaId).forEach(function (f) {
+        World.npcsInField(f.id, day).forEach(function (n) {
+          if (!out[n.id]) out[n.id] = { id: n.id, name: n.name, note: n.note || '', where: [] };
+          out[n.id].where.push(f.name + '（' + n.stage + '）');
+        });
+      });
+      return Object.keys(out).map(function (k) { return out[k]; })
+        .sort(function (a, b) { return a.name.localeCompare(b.name, 'ja'); });
+    },
+
+    npcName: function (npcId) {
+      var hit = ((World.npcs && World.npcs.npcs) || []).filter(function (n) { return n.id === npcId; })[0];
+      return hit ? hit.name : npcId;
+    },
+
     iconFor: function (npcId) {
       var key = npcId.replace(/^npc_/, '');
       var aliases = { empel: 'ampel', klaudia: 'claudia', patricia: 'patrizia' };

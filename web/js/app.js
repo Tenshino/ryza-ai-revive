@@ -147,7 +147,10 @@
     _dailyNudge: function () {
       Daily.load();
       if (Daily.available()) {
-        App.toast(I18n.t('dl.title') + ' · ' + I18n.t('dl.cta'));
+        /* stagger after the AI-disclosure toast so the two don't stack */
+        setTimeout(function () {
+          App.toast(I18n.t('dl.title') + ' · ' + I18n.t('dl.cta'));
+        }, 3200);
       }
     },
 
@@ -326,6 +329,9 @@
         });
       };
       document.getElementById('btn-alarm-new').onclick = function () { App._newAlarm(); };
+      /* area_bottom_sheet.dart: who is around at the level you're looking at. */
+      var peopleBtn = document.getElementById('btn-world-people');
+      if (peopleBtn) peopleBtn.onclick = function () { App._showPeople(); };
       document.getElementById('btn-memory-clear').onclick = function () {
         App.memory = []; App.saveMemory(); App.renderMemory();
       };
@@ -344,6 +350,8 @@
       document.getElementById('sheet-mode').classList.add('hidden');
       document.getElementById('sheet-inv').classList.add('hidden');
       document.getElementById('sheet-status').classList.add('hidden');
+      var npcSheet = document.getElementById('sheet-npc');
+      if (npcSheet) npcSheet.classList.add('hidden');
       var langSheet = document.getElementById('sheet-lang');
       if (langSheet) langSheet.classList.add('hidden');
       if (name === 'world') {
@@ -437,6 +445,61 @@
       World.render(document.getElementById('world-fields'),
                    document.getElementById('world-npcs'),
                    st.stage, App.gotoStage);
+    },
+
+    /* source: world_map/widgets/area_bottom_sheet.dart + character_avatar */
+    _showPeople: function () {
+      var st = Config.section('state');
+      var day = st.day || 1;
+      var list = [], title;
+      if (World.mapLevel === 'stages' && World.mapFieldId) {
+        list = World.npcsInField(World.mapFieldId, day);
+        var pack = World.findField(World.mapFieldId);
+        title = pack ? pack.field.name : I18n.t('world.here');
+        list.forEach(function (n) { if (!n.where) n.where = n.stage; });
+      } else if (World.mapLevel === 'fields' && World.mapAreaId) {
+        list = World.npcsInArea(World.mapAreaId, day);
+        var area = World.areas().filter(function (a) { return a.id === World.mapAreaId; })[0];
+        title = area ? area.name : I18n.t('world.areas');
+        list.forEach(function (n) { n.where = (n.where || []).join(' / '); });
+      } else {
+        list = World.npcsAt(st.stage, day);
+        var place = World.find(st.stage);
+        title = place ? place.stage : I18n.t('world.here');
+      }
+      var sheet = document.getElementById('sheet-npc');
+      var root = document.getElementById('npc-sheet-list');
+      var head = document.getElementById('npc-sheet-title');
+      if (!sheet || !root) return;
+      head.textContent = I18n.t('world.peopleOf') + '：' + title;
+      root.innerHTML = '';
+      if (!list.length) {
+        root.innerHTML = '<div class="empty">' + I18n.t('world.empty') + '</div>';
+      }
+      list.forEach(function (n) {
+        var row = document.createElement('div');
+        row.className = 'npc-sheet-row';
+        var img = document.createElement('img');
+        img.src = World.iconFor(n.id);
+        img.onerror = function () { img.style.visibility = 'hidden'; };
+        var box = document.createElement('div');
+        box.className = 'npc-sheet-box';
+        var nm = document.createElement('div');
+        nm.className = 'npc-name';
+        var seen = Game.s.met_charas.indexOf(n.id) !== -1;
+        nm.textContent = n.name + (seen ? '' : ' ？');
+        var nt = document.createElement('div');
+        nt.className = 'npc-note';
+        nt.textContent = [n.note, n.where].filter(Boolean).join(' · ');
+        box.appendChild(nm); box.appendChild(nt);
+        row.appendChild(img); row.appendChild(box);
+        row.onclick = function () {
+          /* 会ったことのない人には "?" を残す — meeting happens by going there */
+          App.toast(n.name + (n.note ? '：' + n.note : ''));
+        };
+        root.appendChild(row);
+      });
+      sheet.classList.remove('hidden');
     },
 
     /* -------------------------------------------------------------- talk */
@@ -573,6 +636,14 @@
       if (q) row(I18n.t('quest.goal'),
         '「' + App.esc(q.title) + '」 ' + (q.step | 0) + '/' + q.need);
       row(I18n.t('st.met'), String(Game.s.met_charas.length));
+      if (Game.s.met_charas.length && window.World && World.npcs) {
+        var names = Game.s.met_charas.slice(-12).reverse()
+          .map(function (id) { return World.npcName(id); }).join('、');
+        var nr = document.createElement('div');
+        nr.className = 'st-mem';
+        nr.textContent = names;
+        root.appendChild(nr);
+      }
       row(I18n.t('quest.ship'), Game.flag('ship_parts', 0) + ' / 4' + (Game.s.sailed ? ' ⛵' : ''));
 
       sect(I18n.t('st.memory'));
@@ -645,7 +716,28 @@
     _rpgContext: function () {
       var st = Config.section('state');
       if (!RPG_MODES[st.mode]) return '';
-      return Game.promptBlock() + '\n\n' + Quests.promptBlock();
+      return Game.promptBlock() + '\n\n' + App._peopleBlock(st) + '\n\n' + Quests.promptBlock();
+    },
+
+    /* met_charas / npcs here — the official game state fed these to the
+       model so Ryza can reference other islanders by name. */
+    _peopleBlock: function (st) {
+      if (!window.World || !World.npcs) return '';
+      var L = ['## この世界の人々（ライザ以外）'];
+      var here = World.npcsAt(st.stage, st.day || 1);
+      L.push('- いま同じ場所にいる人：' +
+        (here.length ? here.map(function (n) { return n.name; }).join('、') : 'いない'));
+      var known = {};
+      (World.npcs.npcs || []).forEach(function (n) { known[n.id] = n; });
+      var met = (Game.s.met_charas || [])
+        .map(function (id) { return known[id]; })
+        .filter(Boolean).slice(0, 16);
+      if (met.length) {
+        L.push('- これまでに会った人：' + met.map(function (n) {
+          return n.name + (n.note ? '（' + n.note + '）' : '');
+        }).join('、'));
+      }
+      return L.join('\n');
     },
 
     _openLangSheet: function () {

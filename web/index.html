@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>ライザと話す — Ryza Chat</title>
-<link rel="stylesheet" href="css/app.css?v=rpg-1">
+<link rel="stylesheet" href="css/app.css?v=ui-fix-1">
 </head>
 <body>
 <div id="phone">
@@ -21,20 +21,23 @@
 <header id="topbar">
   <button class="icon-btn" id="btn-menu" title="菜单"><img src="assets/icons/drawer.svg" alt=""></button>
   <div id="hud">
-    <button type="button" class="hud-chip" id="hud-mode" title="对话模式">雑談</button>
-    <button type="button" class="hud-chip" id="hud-place" title="所在地">ライザの家</button>
+    <button type="button" class="hud-chip shrink" id="hud-place" title="所在地">ライザの家</button>
     <span class="hud-chip" id="hud-tod" title="时段">昼</span>
-    <button type="button" class="hud-chip hidden" id="btn-posture" title="坐/站">坐</button>
   </div>
+  <div class="spacer"></div>
+  <button class="icon-btn" id="btn-voice" title="语音开关"><canvas id="lottie-voice" width="36" height="36"></canvas></button>
+  <button class="icon-btn" id="btn-settings" title="设置">⚙</button>
+</header>
+<div id="subbar">
+  <button type="button" class="hud-chip" id="hud-mode" title="对话模式">雑談</button>
+  <button type="button" class="hud-chip hidden" id="btn-posture" title="坐/站">坐</button>
   <div class="spacer"></div>
   <div id="hud-rpg">
     <button type="button" class="hud-chip" id="hud-stamina" title="スタミナ"></button>
     <button type="button" class="hud-chip" id="hud-money" title="所持金"><img src="assets/icons/hud_coin.svg" alt=""><span id="hud-money-n">0</span></button>
     <button type="button" class="hud-chip" id="hud-level" title="レベル">Lv1</button>
   </div>
-  <button class="icon-btn" id="btn-voice" title="语音开关"><canvas id="lottie-voice" width="36" height="36"></canvas></button>
-  <button class="icon-btn" id="btn-settings" title="设置">⚙</button>
-</header>
+</div>
 
 <nav id="drawer">
   <div class="drawer-head">
@@ -90,6 +93,7 @@
 <section id="view-world" class="view">
   <div class="view-head"><h2 data-i18n="world.title">世界地图</h2>
     <div class="head-actions">
+      <button class="mini-btn" id="btn-world-people">👥 <span data-i18n="world.people">此地の人</span></button>
       <select id="world-area"></select>
       <button class="mini-btn" id="btn-tod">🌤 <span id="btn-tod-label">时段</span></button>
     </div>
@@ -189,6 +193,12 @@
   <div class="sheet-handle"></div>
   <h3 data-i18n="st.title">冒険ステータス</h3>
   <div id="status-body"></div>
+</div>
+
+<div id="sheet-npc" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <h3 id="npc-sheet-title">この場所にいる人</h3>
+  <div id="npc-sheet-list"></div>
 </div>
 
 <div id="sheet-lang" class="sheet hidden">
