@@ -1,7 +1,9 @@
 # 实现核对（相对源 APK v1.0.2）
 
 日期：2026-08-31（音景与源包两首 BGM 对齐；腮红 Normal；Physics 单次 update）
-增补：2026-09-01（动作抽动与不自然：注视/指针/张力/眨眼/重掷加权/hash；见 §3.7）  
+增补：2026-09-01（动作抽动与不自然：注视/指针/张力/眨眼/重掷加权/hash；见 §3.7）
+增补：2026-09-02（**游戏系统补全**：GameState/体力苹果/主线 8 段/每日登录/背包/NPC
+上下文；桌面壳换 Electron 无边框；点击热区修复。见 §6；§5 的「不做」清单已改）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -174,7 +176,105 @@
 
 1. 标题/语音钮是画布演出，不是官方 Lottie 运行时（包内没有运行时）
 2. `spine/objects/` 仍只有图集、没有完整 skel
+3. 闹钟仅前台
 
-**明确不做：** 登录/Firebase、付费墙、代币、体力、皮肤内购、每日登录、远程资源门、公告、强制更新、分析、官方 marionette websocket。
+**明确不做（官方服务端/商业能力）：** 登录/Firebase、订阅付费墙、代币/回合票购买、
+皮肤内购、远程资源门、公告、强制更新、分析、官方 marionette websocket。
+**2026-09-02 起「体力」「每日登录」移出此清单**——按用户决定作为玩法约束本地实现，
+付费解除换成设置里的作弊模式（§6.6）。
 
 **做不到像素级、屏幕要在：** 委托正文、教程对白 — 本地池 / 玩家 LLM。
+
+---
+
+## 6. 游戏系统补全（2026-09-02）
+
+### 6.1 证据：源包里到底有什么
+
+`data/libapp_strings_ascii.txt`（AOT 快照字符串）里游戏系统的键名是完整的：
+
+| 键 | 含义 | 落地 |
+|---|---|---|
+| `exp_total`、`stamina`、`money_delta` | 数值态 | `Game.s.exp_total/stamina/money` |
+| `stamina_delta` | 体力增减事件 | `applyDelta.stamina_delta` |
+| `inventory_added/removed`、`ryza_inventory_added/removed` | 双背包事件 | `applyDelta` 双列表 |
+| `states.inventory/ryza_inventory/memory/met_charas/met_pairs/quest_desc/quest_complete/quest_activity` | `GameStates.fromJson` 的字段 | `Game.s` 同名字段 + 提示词注入 |
+| `staminaMaxForExpTotal`、`staminaAppleFills`、`StaminaAppleRow`、`stamina_apple_*.svg` | 苹果条体力、上限随总经验 | `Game.apples()/max()` |
+| `dynamic_quest{_type,_goal,_obstacle,_cost,_no}`、`need_quest_gen`、`quest_pending_advance`、`quest_step_changed`、`quest8_goal/earned`、`talk.quest.title/active/cost/costValue/complete/empty/summary/button`、`talk.questClear.praises.0..2`、`audio/se/se_quest_clear.m4a`、`quest_clear_ef/icon.svg` | 动态任务 + 完成演出 | `quests.js` 全套 |
+| `dailyLogin.title/subtitle/cta/progressLabel/nextGoal*/weekday.mon..sun`、`5日連続ログインで報酬獲得`（ja 文案） | 每日登录 | `daily.js` |
+| `talk.inventory.bag.small/normal/large/huge`、`talk.inventory.you/ryza/emptySlot/title`、`talk.initialGameState.ryzaInventory` | 双背包 + 四档容量 | 背包面板 + `BAGS` |
+| `onboarding.tutorialTalk.drama1.explain*` + ja 原句（`画面の見方を説明するね`、`無くなると気絶しちゃうから 気をつけて`、`安全な場所で寝ると回復するよ`、`手に入れたアイテムは ここにしまわれるよ`、`この世界のお金だよ`、`クエストを進めてみて`、`まずは船を手に入れて`、`船で自由に旅へ出よう`） | 教程/序章文案 | `onboarding.js` TUTORIAL 重建 |
+| 图标 `cauldron/shop/hud_coin/fire/bag/present/quest_map_ai/asterisk/lock` | 任务类型/金币/奖励/锁定 | HUD 与任务卡图标 |
+
+**没有的**：官方任务表正文、数值曲线、等级表——都在 `/v1/masters`（服务器）。
+所以「形制照抄、数值本地定」，定值全部列在 §6.3，不许当成官方数值传。
+
+### 6.2 结构（高内聚低耦合）
+
+- `game.js`：唯一的状态存储 + reducer（`applyDelta` 全钳位，敌意输入打不崩——
+  回归里有 `-1e9/+1e9/垃圾类型` 用例）。不认识任务，`quest` 块转发给 `Quests.onQuestDelta`。
+- `quests.js`：任务生命周期 + 离线行动表 + 动态生成 + 完成演出 + Welcome 瓦片。
+- `daily.js`：连续登录。奖励只通过 `Game` 发放。
+- `api.js`：只认协议（拼提示词、剥 `<state>`），不认识玩法。
+- `app.js`：编排层。上下文注入 = `Game.promptBlock + App._peopleBlock + Quests.promptBlock`，
+  人物块由 App 拼（World 的名字表只有 App 会同时拿到 World 和 Game，模块间不互相 import）。
+- 事件：`Game.on(cb)` 单向广播，HUD/面板只读不写。
+
+### 6.3 本地定值（≠ 官方数值）
+
+- 等级 `1+⌊√(exp/30)⌋`；体力上限 `50+10×Lv`（≤140）；苹果 5 格。
+- 每轮对话体力：文字 1 / 语音 +1 / 物語・没入 2 / ASMR 3。
+- 背包 6/12/24/40 格；扩容 150/600/1500G。
+- 主线 8 段的目标/消耗/奖励、采集表、配方、战斗概率、店铺价、出航 200G。
+- 每日奖励 7 档（第 5 天里程碑按源文案）。
+
+### 6.4 与源流程的对应与偏差
+
+- 官方：状态服务器权威（`appserver_progress`、`GameStateAuthorityMirror`、
+  `AppServer response game_state cursor mismatch`），LLM 走 marionette/yorisoi
+  websocket，`*"Stamina"*` 等内联样式段。
+  **本地**：localStorage 权威；玩家自填 OpenAI 兼容接口；机器块换成回复尾部
+  `<state>{json}</state>`（显示/朗读前剥除）。协议在系统提示词里给了白名单和
+  「无事发生不要发」约束，实测弱模型漏发/错发时 reducer 钳位兜底。
+- 官方任务推进主要靠 LLM 回包；本地双通道（LLM `<state>` + 离线行动按钮），
+  talk 类同轮不双计（`app.js say()` 里判 `reply.state.quest`）。
+
+### 6.5 UI 修复（截图走查发现，全部有回归截图）
+
+1. **顶栏换行压视图头**：单行 topbar 塞 7 个 chip 在 420px 下换行，盖住
+   view-head 与气泡 → 拆成 `#topbar` + `#subbar` 两行定高，视图统一
+   `padding-top: var(--bars-h)`；chip `nowrap+ellipsis`，长地名收缩。
+2. **视图透明底**：非对话视图原本透出立绘，文字打架 → `.view:not(#view-talk)`
+   加暗底（源各 screen 独立页的观感）。
+3. **气泡层吃掉点击**：`#bubble-wrap` 是 `pointer-events:auto` 的全宽 flex 容器，
+   挡住立绘上半身热区（点击无波纹/无反应）→ 改 `pointer-events:none`。
+   验证：点击脸部 → 捂嘴反应动作 + 金色波纹环（`tap2.png`）。
+4. toast 从底部移到顶栏下方（源 `top_toast.dart`），每日登录提示延后 3.2s 错峰。
+5. 标题页 `body.boot` 隐藏 chrome，但 Electron 的 `#winctl`（📌/—/✕）保留，
+   否则无边框窗在标题页关不掉。
+6. 日历格苹果图标被通用 sepia 滤镜染绿 → `src*='apple'` 豁免 `filter:none`。
+
+### 6.6 作弊模式（用户拍板的付费替代）
+
+设置→游戏性→`app.cheat`：体力无限（不掉晕、行动不扣）、每日登录七格随便领、
+背包满不挡路；配套按钮「全恢复」「解锁世界地图」。默认关，随时可关回去。
+
+### 6.7 打包与隐私
+
+- 桌面：Electron `frame:false` + `setAlwaysOnTop('screen-saver')` 开关 + 顶栏拖拽；
+  NSIS 安装/卸载走系统「应用和功能」，存档在 `%AppData%\RyzaChat`（卸载默认保留）。
+  产物 `output/desktop/RyzaChat-Setup-1.0.0.exe`（612.5MB，含全部素材）。
+- 安卓：`AssetServer` 补 `/_proxy`（缺它手机端对话必 CORS 挂）、`config/*` 一律 404；
+  去 androidx；`scripts/build_apk.ps1` 无 Gradle 直出签名 APK；正常安装/卸载。
+- 隐私：包内**无** `providers.json`；`config.js` 默认端点中立化（不再内置个人地址）；
+  `src/` 原型、`data/*.wav` 测试音频、`output/*.png` 截图已从仓库删除；
+  keystore 目录 gitignore。安装包扫描：无 `aliyuncs/xiaomimimo/bmh05/token-plan` 字样。
+
+### 6.8 回归
+
+- `scripts/game_logic_regression.js`：体力/等级/苹果/价目、cheat、背包与扩容、
+  `<state>` 解析→reducer、敌意输入钳位、**主线 1→8 全程通关到出航**、每日登录
+  连续/重复领取、快照往返。
+- `scripts/boot_smoke.js`：真实 `index.html` 的 id 集 + 真模块假 DOM 假 Avatar，
+  App.init 全链路 + 渲染面（任务卡/日历/状态/设置表单）不抛错。
+- `scripts/motion_regression.js`：立绘 60s×2 姿态，本轮未动未回归失败。

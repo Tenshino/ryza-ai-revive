@@ -2,28 +2,38 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
+【当前状态（2026-09-02）】
+RPG 游戏系统已按源包数据补全：GameState（体力苹果/经验等级/金币/双背包/相遇名单/记忆）、
+主线 8 段任务（终点造船出海→解锁世界地图 area_02–05）、对话驱动 <state> 数值协议、
+每日登录（5 日连续里程碑）、体力耗尽与睡觉恢复、作弊模式（设置→游戏性，一键解除限制）。
+桌面壳 = Electron 无边框窗（置顶/最小化/关闭/顶栏拖拽），NSIS 安装包已产出；
+安卓壳 = 纯 Activity + AssetServer（含 /_proxy），scripts/build_apk.ps1 无 Gradle 直出 APK。
+先读 docs/AUDIT.md §6（证据表 + 本地定值清单 + UI 修复记录），不要重复实现。
+
 【一比一（强制）】
 源 APK：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（v1.0.2）。
 玩家侧**能从 APK 落地的功能必须按源模块 + 原始数据一比一实现**，不要另起一套「能聊就行」的简化玩法。
 屏幕/数据流以 `docs/dart_source_tree.txt` 的 features 文件名为准。
 行为以 `web/assets/` 里的原始 JSON / 音频目录 / 骨骼 / UI 图为准（已与 APK 3609 个 flutter 资源对过，无缺无多）。
-没有 Dart 源码可抄。官方登录/付费/分析等见下面「明确不要做」。
+数值曲线类（等级表、价目、任务正文）在官方服务器（/v1/masters），包里只有键名和文案——
+本地定值必须列在 AUDIT §6.3，不许当成官方数值传。
+没有 Dart 源码可抄。官方登录/订阅/代币购买本身仍不做（见「明确不要做」）。
 
-已核对记录：`docs/AUDIT.md`（2026-08-31；增补 2026-09-01 动作抽动修复，§3.7）。结论：**素材对；主路径已接上；抽动已修**。
-音景与源包一致：**对话页没有 BGM**（包里只有 `bgm_opening` / `bgm_world_map` 两首），对话页播地点 ambient；进地图才切 `bgm_world_map`。不要把「地图才出 BGM」当成漏做。腮红 overlay 按 Normal。角色 `Physics.update` **只一次**。
-`config/providers.json` 含水合用的 API Key，**不要进 git**；复制 `config/providers.example.json` 再填。
-不要把 AUDIT 旧段落里的「NPC 调度错、FX_BY_EMOTION、循环 fade_in」当成还没修——那些已经改过。先读 AUDIT 全文再动手。
+已核对记录：`docs/AUDIT.md`（2026-08-31 基线；09-01 动作修复 §3.7；09-02 游戏系统 §6）。
+音景与源包一致：**对话页没有 BGM**（包里只有 `bgm_opening` / `bgm_world_map` 两首），对话页播地点 ambient；进地图才切 `bgm_world_map`。不要把「地图才出 BGM」当成漏做。腮红 overlay 按 Normal。角色 Physics **每帧只 update 一次**。
+`config/providers.json` 含水合用的 API Key，**不要进 git、不要打进任何安装包**；复制 `config/providers.example.json` 再填。
+不要把 AUDIT 旧段落里的「NPC 调度错、FX_BY_EMOTION、循环 fade_in、sourceHash 对不上」当成还没修——那些已经改过。先读 AUDIT 全文再动手。
 
 【先读这两个文件，它们描述了整个项目】
   projects/ryza-ai-revive/docs/PROJECT.md
-    ├─ 第 1-2 节：目录结构、每个 JS 文件的职责与关键函数
-    ├─ 第 3 节：源项目功能对照表
-    ├─ 第 4-6 节：已跑通的部分、剩余问题、素材脚本
-    └─ 第 7 节：源包解包产物的完整位置对照表
+     ├─ 第 1-2 节：目录结构、每个 JS 文件的职责与关键函数（含 game/quests/daily）
+     ├─ 第 3 节：源项目功能对照表
+     ├─ 第 4-6 节：已跑通的部分、剩余问题、素材脚本
+     └─ 第 7 节：源包解包产物的完整位置对照表
   projects/ryza-ai-revive/docs/dart_source_tree.txt
-    479 条源码路径（只有路径，没有代码）。功能按 features 下的模块名来写，
-    屏幕/数据流以这些文件名称为准（talk_screen、world_map_screen、
-    alarm_ringing_screen、onboarding_questions_screen 等），不要自己发明另一套玩法。
+     479 条源码路径（只有路径，没有代码）。功能按 features 下的模块名来写，
+     屏幕/数据流以这些文件名称为准（talk_screen、world_map_screen、
+     alarm_ringing_screen、onboarding_questions_screen 等），不要自己发明另一套玩法。
 
 【关于素材：请直接读原始文件，不要只看文档转述】
 PROJECT.md 第 7 节列出了所有解包产物的路径。其中这些是**原始数据**，
@@ -36,127 +46,129 @@ PROJECT.md 第 7 节列出了所有解包产物的路径。其中这些是**原�
       mix ← `mixDurationMin/Max` + `mixDurationSaturationRatio`；
       手臂 ← `MotionGroups` + `idleGroupIds.byPosture`；
       注视/指尖 ← `DriverDefs`、`fingerTrack*`、`rigConfig.aimSlots/rollSlots`；
-      口型 ← `lipSyncClosure`。
-  web/assets/world_map/world_hierarchy.json
-      5 区域 / 38 场景块 / 120 舞台的层级与地名
-  web/assets/world_map/npc_placement.json
-      34 位 NPC：bases / move / companions / resolveOrder
-  web/assets/world_map/ui/*.svg
-      地图钉子 / 区域针
-  web/assets/data/stage_background_map.json
-      120 个舞台 → 50 套背景的映射
-  web/assets/data/posture_camera.json
-      sitting zoom 1.93 / standing 1.45 / ASMR 3.5。ASMR 特写是表里的，不是比例算错。
-      代码里视野高度是 `1720 / (zoom/1.93)`，不要改回用角色 AABB 缩放整屏。
-  web/assets/spine/scenes/<舞台>_<时段>/spine/
-      200 组场景骨骼（50 套 × mor/aft/eve/ngt 四时段）
-  web/assets/spine/scenes/<舞台>_<时段>/<同名>.json
-      constraintOverrides（视差 mix 已写）、light.rim*（FBO 轮廓着色器）、midgroundPostures（选坐/站骨骼）
-  web/assets/audio/alarm/<语种>/<语气>/<类型>/<时段>/
-      1120 条预录语音，旁挂同名 .env.json（口型）
-  web/assets/audio/bgm/  ambient/  se/  tap_voice/  prologue/
-      BGM 只有两首：`bgm_opening.m4a`（标题，`BackgroundTrackId.bgmOpening`）、
-      `bgm_world_map.m4a`（地图，`bgmWorldMap`）。对话页没有第三首 BGM，
-      背景是 `ambient/amb_NNN_{day,night}.m4a`（`amb001Day`…）。
-      路由见 `docs/AUDIT.md` §3.6。`audio.js` / `onboarding.js` 已接线。
-  web/assets/welcome_mission/
-      欢迎任务 UI 图
-  web/assets/voice/ryza_wav/*.wav
-      从开场白原声转出的 24kHz 单声道 wav，TTS 声音克隆用
+      口型 ← `lipSyncClosure`；点击 ← `hitPartNames` + `TapReactions`。
+  web/assets/world_map/world_hierarchy.json   5 区域 / 38 场景块 / 120 舞台
+  web/assets/world_map/npc_placement.json     34 位 NPC：bases / move / companions / resolveOrder
+  web/assets/data/stage_background_map.json   120 个舞台 → 50 套背景
+  web/assets/data/posture_camera.json         sitting 1.93 / standing 1.45 / ASMR 3.5
+  web/assets/spine/scenes/<舞台>_<时段>/      场景骨骼 + constraintOverrides/light/midgroundPostures
+  web/assets/audio/…                          alarm 1120 条 + env、prologue 9 条、tap_voice、ambient/bgm/se
+  web/assets/icons/ + welcome_mission/        UI 图标（stamina_apple_*、hud_coin、cauldron、shop、lock、text_speed_*）
+游戏系统的键名证据在：
+  data/libapp_strings_ascii.txt   stamina_delta / exp_total / inventory_added / dailyLogin.* /
+                                  dynamic_quest_* / quest8_goal / talk.inventory.bag.* / …
+  data/libapp_strings_ja.txt      日文原句（体力说明、教程、序章、每日登录）
 另有抽取产物（非原始文件，仅供参考）：
   docs/dart_source_tree.txt      源码路径名（功能模块清单）
-  data/libapp_strings_ja.txt     1601 条日文 UI 文案原文
   docs/reference/apk_asset_inventory.txt   源包内 3609 个文件的清单
   docs/reference/strings_ja_ui.txt         清洗后的日文文案
 
 【重要前提：没有反编译源码】
 源包是 Flutter 应用，业务逻辑是二进制里的 Dart AOT 编译快照，不可逆回源码；
 8 个 dex 也只是 Flutter/Firebase 样板，没有业务逻辑。
-所以不要试图去找「原来的函数」照着改。实现方式是：
+实现方式是：
   1. 用 dart_source_tree 的模块/屏幕/文件名，还原源项目的页面与数据流；
   2. 用上面的原始 JSON / 音频 / 骨骼 / UI 图，填进这些页面；
-  3. 文案可对照 data/libapp_strings_ja.txt。
+  3. 文案可对照 data/libapp_strings_ja.txt；键名对照 libapp_strings_ascii.txt。
 不要另起一套「能聊就行」的简化玩法。
 
 【运行方式】
   cd projects/ryza-ai-revive
   python scripts/serve.py
   打开 http://127.0.0.1:8765/
-
 必须用 `scripts/serve.py`（静态 + `POST /_proxy` 转发 LLM/TTS）。
-`python -m http.server` 没有代理，浏览器会 CORS 失败。
+桌面开发：cd desktop && npx electron .（首次需 npm install，脚本里有镜像环境变量）
+安装包：powershell -File scripts/build_desktop.ps1
+APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk17 + android-sdk），
+      再 scripts/build_apk.ps1
+
+【测试（改完必须全绿）】
+  node scripts/motion_regression.js       # 立绘 60s×2 姿态
+  node scripts/game_logic_regression.js   # 数值/任务链 1→8 通关/每日登录/reducer 钳位
+  node scripts/boot_smoke.js              # App.init 用真实 index.html id 集全链路
+截图走查（UI 改动必做）：外部工具在 D:\agent\temp\ryza-shot（puppeteer-core + 本机 Edge），
+  node shot.js title talk quest daily world people settings inv status faint tap
+  出图在 shots/*.png，用 read 工具看图核对。Electron 窗口自检：
+  $env:RYZA_SHOT='...png'; npx electron .   （9 秒后截图退出）
 
 【已经跑通的部分】
-标题页、onboarding 问卷/序章/教程、
-单 WebGL 画布立绘+场景（fade 一次、不闪）、坐/站随 `midgroundPostures`（双姿态舞台顶栏可坐/站切换）、
-gesture：待机不跟情绪换、一次性覆盖、effectSets 特效、注视/指尖、手臂组、lipSync、
-说话锁脸 3s（gazeEntries.lookAtUser）、张力三带衰减、closed 长眨、driver 重复循环、rollFollowSpeed 随动、
-分部位点击（含金色 touch ripple）、腮红 overlay 按 Normal（颊线/鼻高光仍摘）、
-世界钉子图 + NPC 全字段、音景（标题 opening BGM / 对话 ambient / 地图 world BGM）、闹钟响铃/贪睡/env、
-5 槽换装+veil、欢迎任务、存档槽、道具栏、
-LLM 经代理 + providers.json 水合、TTS 克隆、
-desktop/ 有 pywebview 壳，android/ 有 WebView 薄壳（本机尚未打出 exe/apk）。
+标题页（隐藏全部 chrome）、onboarding 问卷/序章/教程（教程台词用源包挖回的原文）、
+单 WebGL 画布立绘+场景、坐/站随 midgroundPostures、gesture 全套、注视/张力/指尖/口型、
+分部位点击（波纹环+反应动作+tap_voice，热区已不被气泡遮挡）、
+世界钉子图 + NPC 全字段调度 + 人物面板（area_bottom_sheet）、出航前 area_02–05 上锁、
+游戏系统全链路（见上）、双背包+金币扩容、状态面板、音景、闹钟、5 槽换装+veil、
+欢迎任务、存档槽（含游戏态）、LLM 经代理 + providers.json 水合、TTS 克隆、
+重试条、数据抹除、7 语 UI、Electron 无边框壳 + NSIS、APK 构建脚本。
 
 【立绘坑（已经踩过，不要退回去）】
 1. 两块 WebGL 或给 avatar-canvas 再 getContext，Windows 会闪。点击层是 div。
-2. 场景 `anm_fade_in` 必须 loop:false。loop 会每秒从透明重来。
-3. 图集没有 pma:true。全局 PMA 会让网格接缝发黑。Multiply 的颊线/鼻高光直通 Alpha 会过曝：idle 摘掉这两槽。ON 腮红走 `038_face_cheek`，**按 Normal 画**（不要 Multiply 第二遍 PMA，腮红会过曝）。头发阴影才 PMA。
-4. 换情绪不要 `setAnimation(0, 新idle)`。`fixedBasePoseMode` 下一次性动作在 track 1，empty 的 delay 必须 ≤0（从片段结束淡出）。delay 0.2 会在开拍 0.2 秒把动作掐掉。一次性 `motion_oneshot_D_*` **不要** mute 手臂/躯干/腿。
-5. 不要用角色 AABB 当镜头，换装会连带缩放背景。
-6. Occupancy 的 `motion_add_F/G/B/E/C` 是完整肢体 pose，track 上必须 `MixBlend.replace`。`MixBlend.add` 只给 `effect_wind*`。用 add 会把手臂叠成立柱。
-7. 场景 rim：角色先画到屏幕，FBO 只加算轮廓。不要把角色主画面改成 FBO blit（会变成黑剪影）。
-8. idle 重掷不要重抽仍适用的 MotionGroup；同 AnimName 不要 out→in。未标 `poseTypeIds` 的 A_* 不要当所有姿势类型的候选。
-9. 角色 `Physics.update` **只一次**。不要再 `Physics.none`，那会丢掉物理、动作抖。肢体换组时不要 `setEmptyAnimation(mix=0)` 再 delay，也不要 `addAnimation` 接到 looping 当前片段后面（永远不会开始）。
-10. 音景是源设计，不是漏做：对话页 **不要** 播 BGM；进 `world_map_screen` 才播 `bgm_world_map`。对话页 `setRoute('talk')` 必须播地点 ambient。`Sound.unlock` 用独立 Audio；循环 src 记在 `_loopSrc`，禁止写 `_ambientSrc`（会把解析函数覆盖掉，环境音永久没声）。
-
-11. 【动作抽动/不自然 · 2026-09-01 已修，别退回去】详见 `docs/AUDIT.md` §3.7。核心：
-    - 指针偏移（`fingerTrack*`，±514 单位）**必须**乘 `Avatar._ptrW`（按 `gazeReturnToFront` 进出缓动 0.4–0.8s）；平滑指针初值钉在 `rig_face`，鼠标进/出立绘区时眼睛/头/身 IK 目标禁止一帧瞬移。
-    - 张力是连续值（`tensionConfig` decayRates，high→mid→low 约 2s 收尾），band 走 `_tensionBand()`，别退回「说话=high 否则=low」的二值切换。
-    - `ambientBindings.repeatMin/Max` 由 `_lookCyc` 兑现（同一 driver 连做 2–8 次）；`eyeModeEntries.closed`（1.5s 深眨）已实现，用 `addAnimation(open, delay)` 保持闭眼（0 长度 pose 片段上可行，回归验证过）。
-    - DriverDefs 分 `driver:'eye'|'head'`：eye 驱动只打眼睛（幅度系数 ~0.18×unit），head 驱动带 followers。`lookAtUser:true` 的窗口本身跨 0=看着玩家，别改成随机乱飘。
-    - `Util.hashHex` 解析 skel 的有符号两半 hash（`-2a81ab33-1db7ab26`→`d57e54cde24854da`），与 `MixDurationPoses.sourceHash` **坐/站都精确相等**——「hash 对不上」这条旧结论作废。
-    - `_effectNames` 按 `emotion|band` memo；setTalking 不再同步换口型档前先想清楚会不会把腮红重摇。ASMR=weak 档，走 `Avatar.onModeChange()`。
-    - 回归方法：`node` 里 eval `web/vendor/spine-webgl.js` + 桩 Atlas（findRegion 返回假 region 即可 `readSkeletonData`），配桩 DOM 加载真实 `avatar.js` 驱 60s，查 NaN/卡轨（本轮两份 skel 全过）。
+2. 场景 `anm_fade_in` 必须 loop:false。
+3. 图集没有 pma:true。头发阴影 Multiply 第二遍 PMA；腮红/pale/tear 第一遍改 Normal。
+   setup 的 cheek_line/nose_hi 每帧摘掉。
+4. 换情绪不要 setAnimation(0, 新idle)。一次性在 track 1，empty delay ≤0。
+   oneshot_D_* 不要 mute 手臂/躯干/腿。
+5. 不要用角色 AABB 当镜头。
+6. Occupancy motion_add_F/G/B/E/C 必须 MixBlend.replace；add 只给 effect_wind*。
+7. 场景 rim：角色先画到默认 FB，FBO 只加算轮廓。
+8. idle 重掷不要重抽仍适用的 MotionGroup；同 AnimName 不要 out→in。
+9. 角色 Physics.update 每帧只一次。
+10. 音景是源设计：对话页不要 BGM；Sound.unlock 用独立 Audio；循环源记 _loopSrc，
+    禁止写 Sound['_ambientSrc']。
+11. 动作抽动修复全套见 AUDIT §3.7（_ptrW、张力三带、_lookCyc、closed 深眨、
+    hashHex 有符号两半、_effectNames memo、gazeEntries 锁脸 3s、rollFollowSpeed、
+    双姿态舞台才出坐/站 chip）。
+12. 【2026-09-02 新增，不要退回去】
+    - 顶栏是两行定高（#topbar + #subbar），视图 padding-top 用 var(--bars-h)；
+      往顶栏加 chip 记得 .hud-chip 是 nowrap+ellipsis，别加会换行的东西。
+    - 非对话视图必须保持暗底（.view:not(#view-talk)），别为了透出立绘改透明——字会糊。
+    - #bubble-wrap 是 pointer-events:none（立绘热区靠它透下去），别改回 auto。
+    - toast 在顶部（--bars-h 之下）；每日登录提示延后 3.2s 错峰。
+    - body.boot 隐藏 chrome 时 #winctl 要保留，否则无边框窗在标题页关不掉。
+    - 苹果图标（stamina_apple_*）不吃通用 sepia 滤镜（css 有 src*='apple' 豁免）。
+    - <state> 块必须在显示/朗读前剥掉（api.parseTaggedReply 里做）；reducer 是唯一写入口。
+    - talk 类任务：同轮 LLM 已回 quest 数据时不要再 progressEvent（防双计）。
+    - AssetServer / Electron main 的 /_proxy 与 serve.py 是同一契约，改一处三处同步。
 
 【三条必须知道的技术约束】
-1. Spine 4.2 的 skeleton.updateWorldTransform() 必须传参，
-   传 spine.Physics.update（那是个枚举，不是类）；
-   每帧还要先 skeleton.update(dt) 推进 skeleton.time，否则物理约束不动。
-   场景用 Physics.none。
-2. 渲染用官方示例的写法（ManagedWebGLRenderingContext + 自建 Matrix4 MVP
-   + PolygonBatcher + SkeletonRenderer）。SceneRenderer 的 OrthoCamera 不要
-   用，它的 zoom 语义是乘不是除。
-3. TTS 参考音频只接受 wav / mp3，传 m4a 会报
-   "Unsupported audio.voice source format: mp4"。
+1. Spine 4.2：skeleton.updateWorldTransform(spine.Physics.update) 必须传枚举；
+   每帧先 skeleton.update(dt)。场景用 Physics.none。
+2. 渲染用官方示例写法（ManagedWebGLRenderingContext + 自建 Matrix4 + PolygonBatcher +
+   SkeletonRenderer）。SceneRenderer 的 OrthoCamera 不要用（zoom 语义相反）。
+3. TTS 参考音频只接受 wav / mp3，m4a 会报 "Unsupported audio.voice source format"。
 
 【怎么写功能（强制）】
 按源项目逻辑写，不要猜。每个功能先读：
-  - dart_source_tree 里对应 features/<模块>/ 的 screens、widgets、models、data 文件名
+  - dart_source_tree 里对应 features/<模块>/ 的文件名
   - PROJECT.md 第 7 节对应的原始数据
-  - 日文文案里相关句子
+  - data/libapp_strings_*.txt 里的键名/文案
 然后再改 web/js、web/index.html、web/css。
 缺数据的官方接口（mission-board、登录、订阅）用本地 JSON / localStorage 替代，
 但玩家看见的流程要跟源模块一致。
 
 【还剩的、能做的】
-  - 标题/语音钮是按 Lottie JSON 帧率画的画布，不是 Lottie 运行时（源包未带运行时，CDN 也不引入）
-  - `spine/objects/` 仍只有图集、没有完整 skel
+  - 闹钟后台化（Web 层做不到，可考虑桌面壳加系统级排程）
+  - 标题/语音钮按 Lottie JSON 帧率画，不是 Lottie 运行时（源包未带运行时，不引 CDN）
+  - spine/objects/ 只有图集没有 skel，加载不了
+  - 安装包代码签名（自用可跳过）
 
-【明确不要做】（源项目有、本重建去掉）
-登录 / Firebase、订阅付费墙、代币与回合票、体力苹果、皮肤内购、
-每日登录领奖、远程资源下载门、公告服、强制更新、分析/崩溃上报、
-官方 marionette/yorisoi websocket（LLM 继续走玩家自己填的 OpenAI 兼容接口）。
+【明确不要做】（官方服务端/商业能力）
+登录 / Firebase、订阅付费墙、代币与回合票购买、皮肤内购、远程资源下载门、
+公告服、强制更新、分析/崩溃上报、官方 marionette/yorisoi websocket
+（LLM 继续走玩家自己填的 OpenAI 兼容接口）。
+注意：**体力与每日登录已经本地实现**（用户拍板保留约束），
+付费解除 = 设置里的作弊模式，别再往「删掉体力系统」方向改。
 法律条文页不必复刻官方文本。
 
 【怎么看画面（强制）】
-你有多模态，可以直接看图。打开 http://127.0.0.1:8765/ 之后，
-自己看真实页面：立绘与场景是否对齐、地图钉子、闹钟响铃、问卷、换装、标题。
-不要写 ASCII 密度图，不要用 puppeteer / 无头截图脚本，
-不要用「测 canvas 像素」的脚本代替自己看。
+你有多模态，可以直接看图。用上面的截图工作流（temp/ryza-shot），
+自己看真实页面：顶栏、任务卡、日历、地图锁、响铃、问卷、换装、标题、点击反应。
+不要写 ASCII 密度图，不要用「测 canvas 像素」的脚本代替自己看。
 
 【输出位置】
-只改 projects/ryza-ai-revive/ 内的文件。仓库根目录规范见 AGENTS.md 与 structure.md，
-不要往仓库根目录丢文件。
+只改 projects/ryza-ai-revive/ 内的文件（截图工具例外，在 D:\agent\temp\ryza-shot）。
+仓库根目录规范见 AGENTS.md 与 structure.md，不要往仓库根目录丢文件。
+每完成一个阶段做 git 提交。打包产物只进 output/（已 gitignore）。
+任何安装包/仓库内容不得含 config/providers.json、个人端点、测试音频。
 
 两点补充说明：
 

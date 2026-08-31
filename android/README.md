@@ -1,17 +1,30 @@
-# Android WebView shell (no Flutter)
+# Android WebView shell (no Flutter, no androidx)
 
-Open this folder in Android Studio and sync. `web/` is pulled in as assets via `sourceSets` (no copy). The APK will be large (~572 MB of art).
+Plain `android.app.Activity` + framework `WebView`. `web/` is bundled as
+APK assets; `AssetServer` serves them on `http://127.0.0.1:8765/` AND
+forwards `POST /_proxy?u=https://…` to the LLM/TTS endpoint (same contract
+as `scripts/serve.py` / `desktop/main.js` — without it, WebView CORS kills
+chat). `config/*` requests answer 404: providers.json never ships.
 
-```text
-android/
-  settings.gradle
-  build.gradle
-  app/build.gradle
-  app/src/main/AndroidManifest.xml
-  app/src/main/java/com/ryza/chat/MainActivity.java
-  app/src/main/java/com/ryza/chat/AssetServer.java
+## Build the APK (no Gradle needed)
+
+```powershell
+powershell -File scripts/setup_android_tools.ps1   # one-time: JDK17 + SDK 34 on D:\agent\tools
+powershell -File scripts/build_apk.ps1             # -> output\android\RyzaChat-<ver>.apk
 ```
 
-`AssetServer` serves `web/` on `http://127.0.0.1:8765/` so fetch/Spine work the same as in the browser. LLM/TTS still need INTERNET.
+Pipeline: `aapt2 compile/link` → `javac --release 11` → `d8` →
+`scripts/pack_apk_assets.py` (assets MUST go in with forward slashes —
+`aapt2 -A` on Windows writes `assets\js\…` which AssetManager can't open) →
+`zipalign` → `apksigner` (self-signed keystore in `android/keystore/`,
+gitignored). Output ≈ 560 MB, installs and uninstalls like any APK
+(`adb install -r` or sideload; uninstall clears app data).
 
-Requires Android SDK (API 24+) and a JDK. This machine did not have `ANDROID_HOME` / `JAVA_HOME` when the shell was written, so the APK was not built here.
+The Gradle project still works for Android Studio users
+(`assets.srcDirs = ["../../web"]`), but the script above is the maintained path.
+
+## Privacy
+
+- No providers.json / API keys / personal endpoints inside the package
+  (verified by scanning every packaged js/css/html + zip listing).
+- No analytics, no permissions beyond INTERNET + VIBRATE.

@@ -4,7 +4,12 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-09-01）：**玩家主路径已按源数据接上；动作抽动/不自然已修**（注视指针进出缓动、张力三带衰减、driver 循环、深眨、重掷加权、skel hash 签名解析——见 `docs/AUDIT.md` §3.7，行为回归在 `node`+vendor spine 上跑过 60s 双姿态无 NaN）。音景与源包两首 BGM 对齐：标题 `bgm_opening`、对话只有地点 ambient、地图 `bgm_world_map`。腮红 overlay 走普通 Alpha。动作 Physics 每帧只 `update` 一次。细目见 `docs/AUDIT.md`。
+状态（2026-09-02）：**RPG 层已按源数据补全**——游戏状态（体力苹果 / 经验等级 / 金币 /
+双背包 / 相遇名单 / 记忆）、8 段主线任务（终点「造船出海」解锁世界地图）、
+对话驱动的 `<state>` 数值增减、每日登录、体力耗尽与睡觉恢复，全部本地实现；
+官方付费墙不做，改为设置里的**作弊模式**一键解除全部限制。
+桌面壳换成 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK 的构建脚本就绪。
+立绘动作与音景维持 2026-09-01 的修复结论（见 `docs/AUDIT.md` §3.7）。
 
 本目录已 `git init`，作为防错改快照。`config/providers.json` **不要提交**（含 API Key）；模板是 `config/providers.example.json`。
 
@@ -19,17 +24,23 @@ projects/ryza-ai-revive/
 ├── web/                    # 应用本体（纯静态，无构建步骤）
 │   ├── index.html
 │   ├── css/app.css
-│   ├── js/                 # util / avatar / app / i18n / fx / world / audio / …
+│   ├── js/                 # 见 §2 逐文件说明
 │   ├── vendor/spine-webgl.js  # Spine 4.2 官方运行时
-│   └── assets/             # 素材（约 572 MB）
-├── desktop/                # pywebview 桌面壳（本地 HTTP + 竖屏窗）
-├── android/                # WebView 薄壳（AssetServer 起 127.0.0.1:8765）
-├── src/                    # 早期 Python 原型（LLM/TTS 验证）
-├── scripts/serve.py        # 静态站 + LLM/TTS CORS 代理（日常用这个）
-├── scripts/build_indexes.py
-├── scripts/motion_regression.js  # 立绘动作离线回归（node 直接跑，见 AUDIT §3.7）
-├── config/providers.json
-└── docs/                   # 本文件、接力提示词 HANDOFF.md、AUDIT.md、reference/
+│   └── assets/             # 素材（约 572 MB，与源 APK 一比一）
+├── desktop/                # Electron 桌面壳（无边框窗 + 本地 HTTP + /_proxy）
+├── android/                # WebView 薄壳（AssetServer 起 127.0.0.1:8765，含 /_proxy）
+├── scripts/
+│   ├── serve.py            # 静态站 + LLM/TTS CORS 代理（日常开发用）
+│   ├── build_indexes.py    # 素材 → web/assets/_index/*.json
+│   ├── motion_regression.js    # 立绘动作离线回归（node）
+│   ├── game_logic_regression.js# 游戏系统离线回归（node，桩 DOM）
+│   ├── boot_smoke.js       # App.init 全接线冒烟（真实 index.html 的 id 集）
+│   ├── build_desktop.ps1   # Electron → NSIS 安装包
+│   ├── build_apk.ps1       # aapt2/javac/d8/zipalign/apksigner 直打 APK（无 Gradle）
+│   └── setup_android_tools.ps1 # 便携 JDK17 + Android SDK 装到 D:\agent\tools
+├── config/providers.json   # 开发水合用（gitignore）；模板 providers.example.json
+├── data/                   # 源包抽取产物（libapp_strings_*.txt）
+└── docs/                   # 本文件、HANDOFF.md、AUDIT.md、reference/
 ```
 
 **为什么是网页内核**：同一套 HTML/JS 跑在浏览器、桌面壳、Android WebView 里。
@@ -44,86 +55,142 @@ python scripts/serve.py
 
 不要用 `python -m http.server`：没有 `/_proxy`，浏览器打官方兼容接口会 CORS 失败。
 
-桌面：`pip install -r desktop/requirements.txt && python desktop/app.py`  
-安卓：用 Android Studio 打开 `android/`（本机若无 JDK/SDK 则打不出 APK）。
+桌面开发：`cd desktop && npm install && npx electron .`
+安装包：`powershell -File scripts/build_desktop.ps1` → `output/desktop/RyzaChat-Setup-<ver>.exe`
+安卓：`powershell -File scripts/setup_android_tools.ps1`（一次性）后
+`powershell -File scripts/build_apk.ps1` → `output/android/RyzaChat-<ver>.apk`
 
 ---
 
 ## 2. 代码路径逐项说明
 
-### `web/js/config.js` — 设置存储
+### 游戏系统（本轮新增，源证据见 AUDIT §6）
 
-全部进 `localStorage`（键 `ryza.settings.v1`），**没有服务端**。
-段：`llm` / `tts` / `chara` / `profile` / `app` / `state` / `audio`。
+#### `web/js/game.js` — GameState（源 `features/talk/models/game_states.dart`）
 
-- `Config.get()` / `Config.set('llm.model', v)` / `reset()` / `exportJSON()` / `importJSON()`
-- `Config.hydrate()`：从 `config/providers.json` 灌空 key，或覆盖已保存但 host 对不上的旧地址
-- `state`：模式、服装、所在地、时段、同伴天数
+localStorage 键 `ryza.game.v1`。字段与 delta 键名**照抄 AOT 快照里挖出的线上名**：
+`stamina` / `exp_total` / `money` / `inventory` / `ryza_inventory` / `quest` /
+`memory` / `met_charas` / `met_pairs`；事件名 `stamina_delta`、`money_delta`、
+`inventory_added/removed`、`ryza_inventory_added/removed`、`need_quest_gen` 等。
 
-### `web/js/api.js` — LLM 与 TTS
+- `Game.applyDelta(obj, origin)` — 唯一写入口（reducer）。全部钳位：
+  stamina∈[0,max]、money±2000、exp±500、条目 id 白名单化、数量 1–99。
+- 体力：`staminaMaxForExpTotal`（源同名符号）→ `max = 50 + 10×Lv`；苹果条
+  `apples()` 5 格（`stamina_apple_filled/empty.svg`，源 `StaminaAppleRow`）。
+- 每轮对话消耗 `turnCost(mode, style)`：文字 1，语音 +1，物語/没入 2，ASMR 3。
+  归零 → `faint()` → 对话页弹「気絶」overlay；睡觉恢复：家（`stage_01_001_04`）
+  夜→朝切换、或 overlay 的「回家睡觉」按钮（源文案「安全な場所で寝ると回復するよ」）。
+- 背包四档 `talk.inventory.bag.small/normal/large/huge`（源文案名）= 6/12/24/40 格，
+  扩容花金币（官方内购的本地替代）。
+- **作弊模式** `Config app.cheat`：体力无限、不掉晕、领取自由、背包不挡——
+  官方「无限体力/无限任务」付费权益的本地开关，不花钱。
+- `Game.promptBlock()` — 把状态写成日文段落，供系统提示词注入。
+- `Game.on(cb)` 事件订阅（App 刷新 HUD）；`snapshot()/restoreSnapshot()` 进存档槽。
 
-都走 OpenAI 兼容 `chat/completions`，经 `localProxy('/_proxy?u=')` 转发。
+#### `web/js/quests.js` — 任务引擎（源 `quest_sheet.dart` / `quest_clear_detector.dart` / `mission`）
 
-- `Api.buildSystemPrompt(mode, style)` — 性格、好恶、处境、玩家档案、模式、输出格式
-- `Api.chat` → `{emotion, attitude, text}`
-- `Api.speak` — `clone` 时把参考 wav 做成 `data:audio/wav;base64,...` 放进 `audio.voice`
-- 情绪 9 种 × 态度 3 种：`EMOTIONS` / `ATTITUDES`
+状态存在 `Game.s.quest` + `Game.s.flags.quest_log`。
 
-### `web/js/avatar.js` — Spine 渲染
+- **主线 8 段**（重建依据：序章文案「一緒にお店を始めたり / 冒険したり / 調合して /
+  まずは船を手に入れて / 船で自由に旅へ出よう」+ 埋点符号 `quest8_goal/quest8_earned`）：
+  1 会話 → 2 探索（地图移动）→ 3 採集 → 4 調合 → 5 戦闘 → 6 店経営 → 7 造船材料×4 → 8 出航。
+  第 8 段完成 → `Game.s.sailed = true` → 世界地图 area_02–05 解锁（`world.js` 的
+  `World.locked()`，未解锁区域钉子挂 `lock.svg`）。
+- **行动结算全离线可玩**：`Quests.doAction(type)` 用本地表（区域采集表、
+  配方表、战斗概率=等级+道具、店铺卖价、船部件 4 件、出航 200G），
+  没 API Key 也能推进任务链。
+- **LLM 通道**：回复尾部的 `<state>{...,"quest":{step_add/complete}}` 走
+  `onQuestDelta`；talk/explore 类任务由 App 事件推进（`progressEvent`），
+  同轮已有 LLM quest 数据时不双计。
+- **8 段之后 =「无限任务生成」**（源 `need_quest_gen` + 付费文案）：`Quests.generate()`
+  让 LLM 出 JSON，失败回退本地池。
+- 完成演出：`quest_clear` SE + 彩纸 + `PRAISES`（源文案）+ 奖励 exp/G + 记忆行。
+- `Welcome`（欢迎任务五格）也住这里（源 `welcome_mission`，素材 `assets/welcome_mission/`）。
+
+#### `web/js/daily.js` — 每日登录（源 `daily_login_screen.dart`）
+
+localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日历条、
+连续计数（断一天归零）、第 5 天里程碑（源文案「5日連続ログインで報酬獲得」）、
+奖励全走 `Game`（体力/G/道具/exp/宝箱）。作弊模式下七格随便点。
+
+#### `web/js/api.js` — LLM/TTS 传输 + RPG 注入
+
+- `buildSystemPrompt(mode, style, rpgContext)` — 第三参非空时注入
+  人格 + 状态 + 人物 + 任务四块，并附 `<state>` 协议说明（key 白名单、
+  「没有事件发生就不要 <state>」）。
+- `parseTaggedReply` 剥掉 `<state>` 块（含忘写闭合标签的宽容解析），
+  返回 `{emotion, attitude, text, state}`；显示与朗读永远不含机器块。
+- `Api.chat / Api.speak` 走 `localProxy('/_proxy?u=')`；TTS clone 用
+  `data:audio/wav;base64` 参考音频（只收 wav/mp3）。
+
+### 渲染与交互
+
+#### `web/js/avatar.js` — Spine 渲染（本轮未动，结论维持 AUDIT §3）
 
 路径：`ManagedWebGLRenderingContext` + 自建 `Matrix4` MVP + `PolygonBatcher` +
-`SkeletonRenderer`。不要用 `SceneRenderer` 的 `OrthoCamera`（zoom 语义是乘不是除）。
+`SkeletonRenderer`。单画布 `#scene-canvas`，点击层 `#avatar-hit`。
+坐/站随场景 `midgroundPostures`；`fixedBasePoseMode`；注视/张力/指尖/口型/
+Occupancy/rim 全部见 AUDIT §3.7。**不要退回旧坑**（HANDOFF 的 21 条）。
 
-- **一块** WebGL（`#scene-canvas`）。点击用 `#avatar-hit`，不要再给立绘开第二块 canvas。
-- 上下文 `{ alpha: false, premultipliedAlpha: false }`。头发阴影等 Multiply 槽第二遍 PMA；腮红/pale/tear 在第一遍改成 Normal（不要当 Multiply，会过曝）。setup 的 `cheek_line` / `nose_hi` 每帧摘掉。
-- 画布 backing store = CSS 尺寸 × `devicePixelRatio`
-- 角色与场景**共用同一套正交镜头**。视野高度 `1720 / (cameraZoom / 1.93)`（sitting 1.93 为基准）。ASMR zoom 3.5 是表里的特写，不是比例算错。
-- 角色放在场景骨骼 `chara_root` + `posture_camera.json` 的 offset/scale 上
-- 坐/站骨骼：场景 `midgroundPostures` → `_01` / `_99`；玩家选的是 outfit（`crf_skn_002_0001`），不是带后缀的目录名。**实测只有 stage_01_002_01（四时段）同时列两种姿态**，其余场景只有坐姿；双姿态场景顶栏出「坐下/站起」chip（`state.posture` 持久化，见 AUDIT §3.7-13）
-- `setEmotion`：脸/特效/一次性动作；**不换** track 0 待机（`fixedBasePoseMode`）
-- 待机重掷、`PoseTypeSets`、`MotionGroups` Occupancy 分层见 AUDIT §3
-- **注视指针与张力（2026-09-01，见 AUDIT §3.7）**：`fingerTrack*` 的偏移必须乘 `_ptrW`（按 `gazeReturnToFront` entry/exit 进出缓动，平滑指针初值钉在 `rig_face`），禁止裸 `+=`；`ambientBindings.repeatMin/Max` 由 `_lookCyc` 兑现；`tensionConfig` 的三带速率驱动连续 `_tension`（high→mid→low 收尾约 2s），`_tensionBand()` 决定 gaze/torso/眨眼档，ASMR 用 `intensityProfiles.weak` + `onModeChange()`；`eyeModeEntries.closed`（闭眼 1.5s）在 blink 队列里用 delay 兑现；`_effectNames` 按 `emotion|band` memo
-- `Util.hashHex` 把 skel 的**有符号两半** hash（`-2a81ab33-1db7ab26`）转成无符号 `d57e54cde24854da`，与 `MixDurationPoses.sourceHash` 精确相等（坐/站都已验证）——距离 mix 路径因此始终可走
-- 特效只来自 `effectSets` → `fxOnAnimNames` / `fxOffAnimNames`
-- 注视 `DriverDefs` + aim/roll（`followers[].delay` 用注视历史队列）；指尖 `fingerTrack*`；口型 `lipSyncClosure` 或 `.env.json`
-- 轨道：0 待机 / 1 一次性 / 2 眼 / 3 眉 / 4 嘴 / 5 特效 / 6 触摸 / 7+15+16 额外特效 / 8–9 手臂（B 或 FG，`MixBlend.replace`）/ 10 风（`MixBlend.add`）/ 11–12 躯干 / 13–14 腿
-- 场景 rim：角色先画到默认 framebuffer，FBO 只加算轮廓。不要把角色 blit 进 FBO 再当主画面（会变成黑剪影）
-- `setHidden`：抽屉「显示/隐藏立绘」
-- 页面收在竖屏 `#phone` 列（`min(100vw, 100vh * 9/19.5)`）
+#### `web/js/app.js` — 主控制器（只编排，不存状态）
 
-**Spine 4.2 硬约束**：`skeleton.updateWorldTransform(spine.Physics.update)` 必须传这个枚举；
-每帧先 `skeleton.update(dt)`。场景用 `Physics.none`（视差是 transform constraint，不是物理）。
-场景动画只播一次 `anm_fade_in`，不要 loop。
+- `init()`：Game→Daily→Quests 顺序装载，`Game.on` 订阅刷 HUD。
+- `say()`：体力门槛（不足弹 overlay）→ `Api.chat`（带 `_rpgContext()`：
+  Game+人物+Quests 三块，ASMR/テキスト不注入）→ `applyDelta` → 扣体力 →
+  任务进度 → 气泡/朗读。失败出「重试」条（源 reconnect 语义的本地化）。
+- `gotoStage()`：换景 + `meetCharas`（met_charas/met_pairs 记录 + 记忆行）+
+  explore 任务进度。
+- `_showPeople()`：源 `area_bottom_sheet.dart` —— 按当前地图层级列在场 NPC
+  （头像/名字/注记/位置；没见过的名字带「？」）。
+- 顶栏两行：`#topbar`（菜单/地点/时段/语音/设置）+ `#subbar`（模式/坐站 +
+  苹果条/金币/等级）；HUD 三枚 chip 点开 `#sheet-status`（冒险状态面板）。
+- 视图规则：`#view-talk` 透明叠在立绘上，其余视图自带暗底（源各 screen 独立页）。
+- toast 在顶部（源 `top_toast.dart`）；标题页 `body.boot` 隐藏全部 chrome，
+  但 Electron 的窗口控制钮 `#winctl` 保留。
+- 存档槽 3 格：settings + history + memory + **game + daily** + alarms。
+- 设置页：文本速度用源图标（`text_speed_1x/15x/2x/3x.svg`）分段钮；
+  「游戏性」区 = 作弊开关 + 全恢复 + 解锁世界（仅作弊时显示）；
+  「抹除全部本地数据」= 源 `local_save_data_eraser`（`Config.eraseAll()`）。
 
-### `web/js/world.js` — 世界地图
+#### `web/js/world.js` — 世界地图
 
-- `world_hierarchy.json`：5 区域 / 38 场景块 / 120 舞台
-- `npcsAt(stageId, day)`：bases + move(area/field/stage) + companions，按 `resolveOrder`、按天哈希
-- `backgroundFor(stageId)`：120 → 50 套场景骨骼
-- UI：`world_map/ui/*.svg` 钉子，区域 → 场景块 → 舞台
+`world_hierarchy.json`（5 区域/38 场景块/120 舞台）+ `npc_placement.json`
+（34 NPC：bases + move(area/field/stage) + companions，按 `resolveOrder`、按天哈希）。
+`World.locked(areaId)`：未出航时 area_02–05 上锁；`npcsInArea/npcName` 供人物面板。
 
-### `web/js/util.js`
+#### `web/js/audio.js` / `alarm.js` / `fx.js` / `shell.js`
 
-- `clamp` / `lerp` / `pad3` / `hashHex` / `swapHashHalves` / `weighted`
-- 不引用 App / Avatar / World，给 audio / avatar 共用
+- 音景路由不变（标题 opening BGM / 对话 ambient / 地图 world BGM；对话页无 BGM 是源设计）。
+- `VoiceBank`（闹钟/反应语音目录）从 alarm.js 挪进 audio.js——语音目录属于声音路由模块。
+- `fx.js`：按 `assets/animations/*.json` 的 fr/op 画布播（无 Lottie 运行时）。
+- `shell.js`：只在 Electron 里出现（`window.ryzaShell`）——📌置顶/最小化/关闭。
 
-### `web/js/alarm.js` / `web/js/quest.js` / `web/js/onboarding.js` / `web/js/audio.js` / `web/js/fx.js`
+#### `web/js/i18n.js`
 
-- 闹钟：列表/编辑、类型/语气/星期、贪睡、全屏响铃、`pick()` + `.env.json`
-- 委托：本地日文池或 LLM；完成 overlay + 画布彩纸；欢迎任务瓦片
-- 问卷 / 序章 / 教程：`onboarding.js`
-- 音景：与源 `current_audio_route` / `BackgroundTrackId` 对齐。包里 BGM 只有 `bgm_opening`（标题）和 `bgm_world_map`（地图）；对话页 **没有** BGM，播 `amb_NNN_day/night`。地图上 ambient 压到 0.35。`Sound` 不读 `World`（App 传入 scene keys / background id）。浏览器要手势才 `play()`，`Sound.unlock` 用独立 Audio。
-- `fx.js`：按 `assets/animations/*.json` 的 `fr`/`op` 用 canvas 播语音钮、标题火、委托彩纸（没有 Lottie 运行时）
+UI 7 语（zh / zh-tw / ja / en / hi / id / pt-br）。本轮新增系统的全部文案键
+（任务卡、每日登录、状态面板、作弊、体力耗尽、背包扩容、重试条…）zh/ja/en 全量，
+zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 
-### `web/js/i18n.js` / `web/js/app.js`
+### 壳
 
-- UI 文案 `zh` / `zh-tw` / `ja` / `en` / `hi` / `id` / `pt-br`（`I18n.LANGS`）；角色台词仍是日文
-- 主控：标题、对话循环、代理水合、设置/角色/存档槽、服装 veil、抽屉（`talk_drawer` 键）与底栏 sheet、语言 sheet、全屏
+#### `desktop/`（Electron）
 
-### `desktop/` `android/`
+`main.js`：`frame:false` 无边框窗（420×860，Win11 自动圆角），
+置顶开关 `setAlwaysOnTop('screen-saver')`，单实例锁，顶栏可拖窗
+（`-webkit-app-region`），外链走系统浏览器。内置 `127.0.0.1` 静态服务 +
+`POST /_proxy`（与 serve.py 同契约）。`preload.js` 暴露 `window.ryzaShell`。
+`RYZA_SHOT=路径 npx electron .` 9 秒后自截图退出（开发自检）。
+打包：electron-builder NSIS —— 正常「添加或删除程序」安装/卸载，
+存档在 `%AppData%\RyzaChat`，卸载默认保留（要清就在应用内抹除或删目录）。
+`web/` 以 extraResources 随包；**providers.json 不在包内**（默认端点也已中立化）。
 
-壳只负责「本地 HTTP + 窗口/WebView」。资源路径：冻结后走 `sys._MEIPASS/web`；
-安卓 `sourceSets` 指向 `../../web`，`AssetServer` 提供 `http://127.0.0.1:8765/`。
+#### `android/`
+
+`MainActivity`（纯 `android.app.Activity`，无 androidx）+ `AssetServer`
+（assets 静态服务 + **`/_proxy` 转发**——之前缺它手机端 LLM 必挂；
+`config/*` 直接 404，不打包密钥）。Gradle 工程保留给 Android Studio 用户；
+命令行出包走 `scripts/build_apk.ps1`（aapt2→javac→d8→zipalign→apksigner，
+自签 keystore 落在 `android/keystore/`，已 gitignore）。
 
 ---
 
@@ -131,60 +198,74 @@ python scripts/serve.py
 
 模块名来自 `docs/dart_source_tree.txt`。没有 Dart 源码，行为以第 7 节的**原始数据**为准。
 
-**不要做**（源项目有、本重建明确去掉）：登录/Firebase、订阅付费墙、代币/回合票、
-体力苹果、皮肤内购、每日登录领奖、远程资源门、公告服、强制更新、分析/崩溃上报。
+**不要做**（官方服务端/商业能力，本地替代已注明）：登录/Firebase、订阅付费墙、
+代币/回合票、皮肤内购、远程资源门、公告服、强制更新、分析/崩溃上报、
+官方 marionette/yorisoi websocket（LLM 走玩家自填接口）。
+**体力与每日登录不再是「不做」**——用户拍板保留玩法约束，付费部分换成作弊模式。
 
-| 源模块 | 玩家侧应该有的 | 现在（2026-08-31） |
+| 源模块 | 玩家侧应该有的 | 现在（2026-09-02） |
 |---|---|---|
-| `title` | 标题画面再进游戏 | `overlay-title` |
-| `onboarding` | 问卷、序章语音、教程对话 | 有；对白本地/LLM |
-| `talk` | 五种模式、气泡、日志、重置 | 有；模式是 HUD 药丸不是 bottom sheet |
-| `spine_avatar` | 情绪叠层、表情、眨眼、分部位点击、注视、指尖、物理、站/坐、ASMR、视差、rim | 已接；见 AUDIT §3 |
-| `audio` | 标题 opening BGM；对话 ambient；地图 world BGM；SE；分路；tap_voice | `audio.js`（对话无 BGM 是源设计） |
-| `world_map` | 钉子图、选舞台、NPC 头像、时段 | 钉子三级；调度按 placement 全字段 |
+| `title` | 标题画面再进游戏 | `overlay-title`；标题页隐藏全部 chrome |
+| `onboarding` | 问卷、序章语音、教程对话 | 有；教程对白用源包挖回的原文（体力/背包/金币/任务提示） |
+| `talk` | 五种模式、气泡、日志、重置 | 有；模式=底栏 sheet；失败出重试条 |
+| **GameState** | `exp_total/stamina/money/inventory/ryza_inventory/met_charas/met_pairs/memory` | **已实现**（game.js，键名同源） |
+| **体力苹果** | `StaminaAppleRow`、耗尽气絶、睡觉恢复 | **已实现**（HUD 苹果条 + faint overlay + 睡觉） |
+| **任务/委托** | 任务卡（goal/cost/概要）、完成演出、动态生成 | **已实现**（quests.js：主线 8 段 + 无限支线） |
+| **出航解锁世界** | 船/世界地图推进（`entry_map_move`） | **已实现**（quest8 → sailed → area 门） |
+| **每日登录** | 7 日日历、连续 5 日奖励 | **已实现**（daily.js + 抽屉红点） |
+| **背包** | `inventory_sheet`、you/ryza 两包、四档容量 | **已实现**（双 tab + 金币扩容） |
+| **NPC** | 地图在场、`met_charas` 进状态、`area_bottom_sheet` | **已实现**（人物面板 + 提示词注入 + 状态页名单） |
+| 付费墙/代币/订阅 | — | 不做；**作弊模式**替代（设置→游戏性） |
+| `spine_avatar` | 情绪/表情/眨眼/分部位点击/注视/物理/站坐/ASMR/视差/rim | 已接（AUDIT §3；点击热区本轮修复） |
+| `audio` | 标题 opening BGM；对话 ambient；地图 world BGM；SE；tap_voice | `audio.js`（不变，对话无 BGM 是源设计） |
 | `alarm` | 列表+编辑、贪睡、响铃全屏、env 口型 | 有；仅前台 |
-| `mission` + `welcome_mission` | 委托板、完成演出、欢迎任务 | 本地池 + overlay + 瓦片（无官方 master） |
-| `chara` | 角色设定、存档槽 | 表单 + 3 槽 |
-| `skin` | 5 预览、2 可穿、veil | 有；姿势跟场景 |
-| `talk` 库存 | `inventory_sheet` | `#sheet-inv` |
-| 口型 | env / RMS | `lipSyncClosure` + envelope |
-| `i18n` | UI 多语言；闹钟 6 语 | UI zh / zh-TW / ja / en / hi / id / pt-BR；语音目录随语言 |
-| 包装 | 可安装的桌面/安卓 | 壳已写，本环境未打出 exe/apk |
+| `chara` + `save_slot` | 角色卡、存档槽 | 设定表单 + 3 槽（含游戏态） |
+| `skin` | 5 预览、2 可穿、veil | 有；3 套无骨骼只有预览图，作弊也穿不了（数据缺失） |
+| `i18n` | UI 多语言 | 7 语（新系统全量 zh/ja/en） |
+| 包装 | 可安装的桌面/安卓 | **exe 安装包已产出**；APK 构建脚本就绪（见 §5） |
 
 素材在包里、代码**故意未用或做不到**的：
 
-- `web/assets/animations/`：标题火 / 语音钮 / 委托彩纸用画布按 JSON 帧率播
-- `web/assets/spine/objects/`（场景 JSON 未引用）
-- `MixDurationPoses.sourceHash` 可能对不上 `skeleton.hash`（`animPoses` 有骨头时仍用距离 mix）
+- `web/assets/animations/`：标题火/语音钮/彩纸用画布按 JSON 帧率播（无 Lottie 运行时）
+- `web/assets/spine/objects/`（场景 JSON 未引用，只有图集没有完整 skel）
+- `paywall_*.svg`、`subscription.svg`、`tokushoho/tos/privacypolicy.svg`、
+  `voicetoken_*.svg`、`logout/link/report*` 等：付费/法务/账号图标，本地版无对应流程
 
 ---
 
 ## 4. 已跑通的部分
 
-- 标题页 → 进游戏；问卷/序章/教程
-- 角色骨骼（坐/站随场景）、单画布、场景 fade 一次、共享镜头、竖屏 `#phone`
-- `gesture.json`：待机 / 一次性覆盖 / 表情 / 特效 / 注视 / 指尖 / Occupancy 肢体层 / 口型 / 点击部位
-- 世界钉子图 + NPC 全字段调度；语音库 6 语目录；UI 7 语
-- 抽屉 `talk_drawer` 键；地图/委托从对话底栏进
-- LLM 经 `/_proxy`；TTS 用 `web/assets/voice/ryza_wav/` 克隆（须 wav/mp3）
-- 闹钟响铃+贪睡+env；音景（标题 BGM / 对话 ambient / 地图 BGM）；5 槽换装+veil；欢迎任务；存档槽；道具栏
+- 标题 → （问卷/序章/教程）→ 对话；立绘全链路（AUDIT §3/§3.7 的 21 条坑不回退）
+- 游戏系统全链路：对话/行动 → `<state>`/本地结算 → 体力/经验/金币/背包/任务/记忆 →
+  HUD 与面板；主线 8 段通关到出航解锁世界地图（`scripts/game_logic_regression.js` 全程演练）
+- 世界钉子图 + NPC 全字段调度 + 人物面板；闹钟响铃/贪睡/env；音景；5 槽换装+veil；
+  欢迎任务；存档槽；双背包+扩容；每日登录；作弊模式；数据抹除
+- LLM 经 `/_proxy`（serve.py / Electron / AssetServer 三处同契约）；TTS 克隆
+- 桌面：无边框 Electron 窗（置顶/最小化/关闭/拖拽）+ NSIS 安装包（612MB，含全部素材）
+- 无头测试三件套全绿：`motion_regression.js`（立绘 60s×2 姿态）、
+  `game_logic_regression.js`（数值/任务链/每日登录/ reducer 钳位）、
+  `boot_smoke.js`（App.init 用真实 index.html 的 id 集跑通）
+- 截图走查（外部 puppeteer-core + 本机 Edge，工具在 `D:\agent\temp\ryza-shot`）：
+  标题/对话/任务/每日/地图/人物/设置/背包/状态/耗尽/教程/点击反应 12 个状态
 
 ---
 
 ## 5. 已知问题 / 剩余
 
-1. ~~`MixDurationPoses.sourceHash` 仍可能对不上 `skeleton.hash`~~（2026-09-01 已解决：skel hash 是两个有符号 32 位半拼的字符串，`Util.hashHex` 已按签名解析，坐/站均精确命中，距离 mix 走正路）。
-2. 闹钟只在应用前台触发。
-3. 参考音频只接受 wav/mp3；克隆用 wav 在 `web/assets/voice/ryza_wav/`。
-4. 桌面/安卓壳未在本机打出安装包。
-5. 标题/语音钮/彩纸是画布按 Lottie JSON 帧率播，不是 Lottie 运行时。
-6. `spine/objects/` 仍只有图集、没有完整 skel，无法加载。
+1. 闹钟只在应用前台触发（Web 层无系统排程）。
+2. 参考音频只接受 wav/mp3；克隆用 `web/assets/voice/ryza_wav/`。
+3. 主线 8 段的具体文案是**按源素材文案重建**，不是官方任务表（表在服务器，包里只有键名）。
+4. 等级曲线（`1+√(exp/30)`）、体力价目、背包容量档位是本地定的——源值在服务器。
+5. APK 需要在装了 JDK+SDK 的机器上跑 `build_apk.ps1`（本机构建进行中/产物见 `output/android/`）。
+6. 标题/语音钮/彩纸是画布按 Lottie JSON 帧率播，不是 Lottie 运行时。
+7. `spine/objects/` 仍只有图集、没有完整 skel，无法加载。
+8. 安装包未做代码签名（SmartScreen 会警告「未知发布者」，自用无碍）。
 
 ---
 
 ## 6. 素材与脚本
 
-素材分类见第 7 节。改了 `web/assets/` 下的文件后跑：
+改了 `web/assets/` 下的文件后跑：
 
 ```bash
 python scripts/build_indexes.py
@@ -204,11 +285,13 @@ python scripts/build_indexes.py
 |---|---|
 | ✅ 有 | 全部**原始素材**（图像、音频、骨骼、字体） |
 | ✅ 有 | 全部**原始配置 JSON**（动作表、世界、NPC、镜头、场景 rig） |
-| ✅ 有 | 抽取的字符串、源码**路径名**清单 |
+| ✅ 有 | 抽取的字符串（含游戏状态键名）、源码**路径名**清单 |
 | ❌ 没有 | 反编译 Dart 源码（AOT 快照不可逆） |
 | ❌ 没有 | Java/Kotlin 业务逻辑（dex 是 Flutter/Firebase 样板） |
+| ❌ 没有 | 官方任务表/数值表/等级曲线（`/v1/masters` 在服务器） |
 
-不能「对着原来的函数抄」，只能**按原始数据 + 模块划分重新实现**。
+不能「对着原来的函数抄」，只能**按原始数据 + 模块划分重新实现**；
+数值曲线类只能定「同形制、本地值」，并在 AUDIT 里注明。
 
 ### 7.2 原始素材
 
@@ -218,33 +301,31 @@ python scripts/build_indexes.py
 | `web/assets/spine/crf_chr_002/crf_skn_002_0001_99/` | 站姿服装，结构同上（`postureKey`: standing） |
 | `web/assets/spine/scenes/<舞台>_<时段>/spine/` | 50 套 × 4 时段场景骨骼 |
 | `web/assets/spine/scenes/<舞台>_<时段>/<同名>.json` | `constraintOverrides`、`light`、`midgroundPostures` |
-| `web/assets/spine/objects/` | 3 个物件骨骼（当前未加载） |
 | `web/assets/audio/alarm/<语种>/<语气>/<类型>/<时段>/` | 预录语音 + 同名 `.env.json` |
 | `web/assets/audio/prologue/jp/` | 9 条开场白原声 |
 | `web/assets/audio/tap_voice/` | 点击反应语音 |
-| `web/assets/audio/ambient/` `bgm/` `se/` | 地点环境音（对话页背景）；BGM 仅 `bgm_opening.m4a` + `bgm_world_map.m4a`；SE |
-| `web/assets/images/chara_icons/` `skins/` | 头像、服装预览 |
-| `web/assets/world_map/ui/` | 地图钉子 SVG |
-| `web/assets/welcome_mission/` | 欢迎任务 UI 图 |
-| `web/assets/icons/` `animations/` `fonts/` | 图标、Lottie JSON（画布播）、字体 |
+| `web/assets/audio/ambient/` `bgm/` `se/` | 地点环境音；BGM 仅两首；SE 三条（quest_clear/skin_change/touch_start） |
+| `web/assets/icons/` | 全部 UI 图标（含 `stamina_apple_*`、`hud_coin`、`cauldron`、`shop`、`text_speed_*`） |
+| `web/assets/world_map/ui/`、`welcome_mission/`、`images/`、`animations/`、`fonts/` | 地图钉子、欢迎任务图、头像/预览、Lottie JSON、字体 |
 | `web/assets/voice/ryza_wav/` | 开场白转出的 24kHz 单声道 wav（TTS 克隆） |
 
 ### 7.3 原始配置 JSON（行为的权威来源）
 
 | 路径 | 用途 | 当前读取者 |
 |---|---|---|
-| `web/assets/spine/crf_chr_002/*/…_gesture.json` | 情绪×态度、表情、特效、mix、aim/roll/gaze、手臂组 | `avatar.js` |
-| `web/assets/world_map/world_hierarchy.json` | 区域 / 场景块 / 舞台 | `world.js` |
+| `web/assets/spine/crf_chr_002/*/…_gesture.json` | 角色动作表全套 | `avatar.js` |
+| `web/assets/world_map/world_hierarchy.json` | 区域/场景块/舞台 | `world.js` |
 | `web/assets/world_map/npc_placement.json` | NPC 分布与同行 | `world.js` |
 | `web/assets/data/stage_background_map.json` | 舞台→背景套 | `world.js` |
 | `web/assets/data/posture_camera.json` | 站/坐镜头与 ASMR | `avatar.js` |
 
-### 7.4 抽取产物（非原始文件，只当目录/文案索引）
+### 7.4 抽取产物（非原始文件，只当目录/文案/键名索引）
 
 | 路径 | 内容 |
 |---|---|
-| `docs/dart_source_tree.txt` | 479 条源码路径（无代码）——**功能清单以这个模块树为准** |
-| `data/libapp_strings_ja.txt` | 抽取的日文 UI 原文 |
+| `docs/dart_source_tree.txt` | 479 条源码路径（无代码）——功能清单以模块树为准 |
+| `data/libapp_strings_ascii.txt` | **游戏系统键名的出处**（`stamina_delta`、`dailyLogin.*`、`talk.inventory.bag.*`、`quest8_goal`…）AUDIT §6 逐条引用 |
+| `data/libapp_strings_ja.txt` | 抽取的日文文案（含序章/教程/体力说明原句） |
 | `docs/reference/apk_asset_inventory.txt` | 源包 3609 个文件清单 |
 | `docs/reference/strings_ja_ui.txt` | 清洗后的日文文案 |
 | `docs/reference/spine_example.html` 等 | Spine 官方示例，渲染路径对照 |
