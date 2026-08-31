@@ -250,22 +250,6 @@
       }
     },
 
-    /* Kept for older call sites; prefer setRoute. */
-    playBgm: function (which) {
-      if (which === 'world') Sound.setRoute('world');
-      else if (which === 'opening') Sound.setRoute('title');
-      else if (!which || which === 'off') {
-        if (Sound._route === 'world' || Sound._route === 'title') Sound.setRoute('talk');
-        else Sound._playLoop(Sound.bgm, '', 'bgm');
-      }
-    },
-
-    playAmbient: function (stageId, tod, bgId) {
-      Sound.setPlace(stageId, tod, bgId);
-      if (Sound._route === 'title' || Sound._route === 'prologue') Sound.setRoute('talk');
-      else Sound._applyRoute();
-    },
-
     se: function (name) {
       var src = SE_FALLBACK[name];
       if (!src && Sound.seFiles.length) {
@@ -307,13 +291,43 @@
       return 'assets/audio/prologue/' + loc + '/prologue_' + pad + '.m4a';
     },
 
-    voiceLocale: voiceLocale,
+    voiceLocale: voiceLocale
+  };
 
-    stopAll: function () {
-      Sound._playLoop(Sound.bgm, '', 'bgm');
-      Sound._playLoop(Sound.amb, '', 'ambient');
+  /* Pre-recorded Ryza voice catalog (alarm lines, wellDone clips …) —
+     assets/_index/voice_bank.json mirrors <locale>/<style>/<type>/<tod>/. */
+  var VoiceBank = {
+    index: null,
+
+    load: function () {
+      return fetch('assets/_index/voice_bank.json')
+        .then(function (r) { return r.json(); })
+        .then(function (j) { VoiceBank.index = j; return j; });
+    },
+
+    locale: function () { return voiceLocale().alarm; },
+
+    pick: function (type, style, tod) {
+      var idx = VoiceBank.index;
+      if (!idx) return null;
+      var locName = VoiceBank.locale();
+      var loc = idx[locName] || idx.ja || idx.en;
+      if (!loc) return null;
+      var s = loc[style] || loc.normal;
+      if (!s) return null;
+      var t = s[type] || s.goodMorning;
+      if (!t) return null;
+      var arr = t[tod] || t.daytime || t[Object.keys(t)[0]];
+      if (!arr || !arr.length) return null;
+      return arr[Math.floor(Math.random() * arr.length)];
+    },
+
+    envPath: function (clip) {
+      if (!clip) return null;
+      return clip.replace(/\.m4a$/i, '.env.json');
     }
   };
 
   global.Sound = Sound;
+  global.VoiceBank = VoiceBank;
 })(window);

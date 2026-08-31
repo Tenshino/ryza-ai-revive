@@ -1,27 +1,33 @@
 /* Main controller: boots straight into the game (no login, no official
-   backend), wires the talk loop, and builds the settings/chara forms. */
+   backend), wires the talk loop, the RPG layer (game.js / quests.js /
+   daily.js) and the settings/chara forms. This module only orchestrates:
+   state lives in Config/Game/Quests/Daily, rendering of the avatar in
+   Avatar, sound in Sound, map in World. */
 (function (global) {
   'use strict';
 
   var MEM_KEY = 'ryza.memory.v1';
-  var INV_KEY = 'ryza.inv.v1';
   var SAVE_KEY = 'ryza.saves.v1';
-  var INV_DEFAULT = [
-    { id: 'emeralia', name: 'エメラリア草', count: 3 },
-    { id: 'uni', name: 'うに', count: 2 },
-    { id: 'wasser', name: '蒸留水', count: 5 }
+  var HOME_STAGE = 'stage_01_001_04';       // ライザの家 — the safe place to sleep
+  var TEXT_SPEEDS = [
+    { v: 30, icon: 'text_speed_1x' },
+    { v: 18, icon: 'text_speed_15x' },
+    { v: 12, icon: 'text_speed_2x' },
+    { v: 8,  icon: 'text_speed_3x' }
   ];
+  var RPG_MODES = { chat: 1, story: 1, immersive: 1 };
 
   var App = {
     history: [],
     memory: [],
-    inventory: [],
     audio: null,
     speaking: false,
     _typeTimer: null,
     _pendingQuestion: null,
     _ringAlarm: null,
     _inTutorial: false,
+    _lastText: '',
+    _invBag: 'you',
 
     /* ------------------------------------------------------------- utils */
     toast: function (msg, isErr) {
@@ -70,12 +76,15 @@
       App.audio.crossOrigin = 'anonymous';
       try { App.memory = JSON.parse(localStorage.getItem(MEM_KEY) || '[]'); }
       catch (e) { App.memory = []; }
-      try { App.inventory = JSON.parse(localStorage.getItem(INV_KEY) || 'null') || INV_DEFAULT.slice(); }
-      catch (e) { App.inventory = INV_DEFAULT.slice(); }
+
+      Game.load();
+      Daily.load();
+      Quests.ensure();
 
       App._bindChrome();
       App._bindTalk();
       App._bindOverlays();
+      Game.on(function () { App.refreshHud(); App._syncOpenViews(); });
 
       Promise.all([Config.hydrate(), World.init(), VoiceBank.load(), Sound.init()]).then(function () {
         Sound.setCatalog(Object.keys(World.scenes || {}));
@@ -89,7 +98,8 @@
         App.renderWorld();
         Alarm.load(); Alarm.render(document.getElementById('alarm-list'), App.playFile);
         Alarm.start(App._onAlarm);
-        Quest.load(); Quest.render(document.getElementById('quest-list'), App._takeQuest);
+        Quests.render(document.getElementById('quest-list'), {});
+        Daily.render(document.getElementById('daily-body'));
         App.renderSkins();
         App.buildSettings();
         App.buildCharaForm();
@@ -118,6 +128,7 @@
       Sound.setPlace(st.stage, st.tod, World.backgroundFor(st.stage));
       Sound.setRoute('talk');
       App._showDisclosure();
+      App._dailyNudge();
       if (fromOnboard) return;
       App.greet();
     },
@@ -129,6 +140,20 @@
         Config.set('state.day', (st.day || 1) + 1);
       }
       if (st.lastDayDate !== today) Config.set('state.lastDayDate', today);
+      Daily.load();                       /* breaks the streak if too long a gap */
+      App._dailyBadge();
+    },
+
+    _dailyNudge: function () {
+      Daily.load();
+      if (Daily.available()) {
+        App.toast(I18n.t('dl.title') + ' · ' + I18n.t('dl.cta'));
+      }
+    },
+
+    _dailyBadge: function () {
+      var dot = document.getElementById('daily-dot');
+      if (dot) dot.classList.toggle('hidden', !Daily.available());
     },
 
     _showDisclosure: function () {
@@ -257,11 +282,34 @@
       document.getElementById('btn-map').onclick = function () { App.showView('world'); };
       document.getElementById('btn-quest-sheet').onclick = function () { App.showView('quest'); };
       document.getElementById('btn-log').onclick = function () { App.showView('memory'); };
-      document.getElementById('btn-bag').onclick = function () { App.renderInv(); document.getElementById('sheet-inv').classList.toggle('hidden'); };
+      ['hud-stamina', 'hud-money', 'hud-level'].forEach(function (id) {
+        var el = document.getElementById(id);
+        if (el) el.onclick = function () { App.renderStatus(); document.getElementById('sheet-status').classList.remove('hidden'); };
+      });
+      document.getElementById('btn-bag').onclick = function () {
+        App.renderInv();
+        document.getElementById('sheet-inv').classList.toggle('hidden');
+      };
+      document.querySelectorAll('#inv-tabs [data-bag]').forEach(function (b) {
+        b.onclick = function () {
+          App._invBag = b.getAttribute('data-bag');
+          document.querySelectorAll('#inv-tabs [data-bag]').forEach(function (x) {
+            x.classList.toggle('active', x === b);
+          });
+          App.renderInv();
+        };
+      });
       document.getElementById('btn-tod').onclick = function () {
         var s = Config.section('state');
+        var prev = s.tod;
         var next = World.nextTod(s.tod);
         Config.set('state.tod', next);
+        /* 安全な場所で寝ると回復するよ — sleeping home at dawn refills. */
+        if (prev === 'ngt' && next === 'mor' && s.stage === HOME_STAGE) {
+          Game.refill();
+          Game.remember('安全なおうちでぐっすり眠った。');
+          App.toast(I18n.t('stamina.slept'));
+        }
         App._loadSceneFor(s.stage, next);
         Sound.setPlace(s.stage, next, World.backgroundFor(s.stage));
         App.updateHud();
@@ -269,7 +317,14 @@
       document.getElementById('world-area').onchange = function (e) {
         World.jumpArea(e.target.value, Config.section('state').stage, App.gotoStage);
       };
-      document.getElementById('btn-quest-new').onclick = function () { App._newQuest(); };
+      document.getElementById('btn-quest-new').onclick = function () {
+        var hasKey = !!(Config.section('llm').apiKey);
+        if (hasKey) App.toast(I18n.t('toast.questGen'));
+        Quests.generate(hasKey).then(function (q) {
+          App.toast(I18n.t('quest.newOk') + '「' + q.title + '」');
+          Quests.render(document.getElementById('quest-list'), {});
+        });
+      };
       document.getElementById('btn-alarm-new').onclick = function () { App._newAlarm(); };
       document.getElementById('btn-memory-clear').onclick = function () {
         App.memory = []; App.saveMemory(); App.renderMemory();
@@ -288,6 +343,7 @@
       });
       document.getElementById('sheet-mode').classList.add('hidden');
       document.getElementById('sheet-inv').classList.add('hidden');
+      document.getElementById('sheet-status').classList.add('hidden');
       var langSheet = document.getElementById('sheet-lang');
       if (langSheet) langSheet.classList.add('hidden');
       if (name === 'world') {
@@ -301,6 +357,20 @@
       if (name === 'skin') { Welcome.mark('skin'); App.renderSkins(); }
       if (name === 'welcome') Welcome.render(document.getElementById('welcome-body'));
       if (name === 'alarm') Welcome.mark('alarm');
+      if (name === 'quest') Quests.render(document.getElementById('quest-list'), {});
+      if (name === 'daily') Daily.render(document.getElementById('daily-body'));
+    },
+
+    _syncOpenViews: function () {
+      var q = document.getElementById('view-quest');
+      if (q && q.classList.contains('active')) {
+        Quests.render(document.getElementById('quest-list'), {});
+      }
+      var d = document.getElementById('view-daily');
+      if (d && d.classList.contains('active')) Daily.render(document.getElementById('daily-body'));
+      if (!document.getElementById('sheet-status').classList.contains('hidden')) App.renderStatus();
+      if (!document.getElementById('sheet-inv').classList.contains('hidden')) App.renderInv();
+      App.refreshHud();
     },
 
     updateHud: function () {
@@ -320,6 +390,27 @@
       var todBtn = document.getElementById('btn-tod-label');
       if (todBtn) todBtn.textContent = World.todLabel(st.tod);
       document.getElementById('drawer-day').textContent = '同伴 ' + (st.day || 1) + ' 天';
+      App.refreshHud();
+    },
+
+    /* RPG strip: apples (StaminaAppleRow) + coin + level. */
+    refreshHud: function () {
+      var chip = document.getElementById('hud-stamina');
+      if (chip) {
+        var a = Game.apples();
+        var html = '';
+        for (var i = 0; i < a.slots; i++) {
+          html += '<img alt="" src="assets/icons/' +
+            (i < a.filled ? 'stamina_apple_filled' : 'stamina_apple_empty') + '.svg">';
+        }
+        html += ' <b>' + (Game.cheat() ? '∞' : Game.s.stamina) + '</b>';
+        chip.innerHTML = html;
+      }
+      var m = document.getElementById('hud-money-n');
+      if (m) m.textContent = Game.s.money;
+      var lv = document.getElementById('hud-level');
+      if (lv) lv.textContent = 'Lv' + Game.level();
+      App._dailyBadge();
     },
 
     gotoStage: function (stageId) {
@@ -332,6 +423,10 @@
       App.updateHud();
       var place = World.find(stageId);
       if (place) App.toast('来到：' + place.stage);
+      var npcs = World.npcsAt(stageId, st.day || 1);
+      var names = Game.meetCharas(npcs, st.day);
+      if (names.length) Game.remember(names.join('、') + ' と出会った。');
+      Quests.progressEvent('explore');
       App.showView('talk');
     },
 
@@ -369,6 +464,11 @@
           if (overlay) Sound.tapVoice(overlay);
         }
       };
+      var retry = document.getElementById('btn-retry');
+      if (retry) retry.onclick = function () {
+        document.getElementById('retry-bar').classList.add('hidden');
+        if (App._lastText) App.say(App._lastText);
+      };
     },
 
     _bindOverlays: function () {
@@ -379,6 +479,28 @@
       document.getElementById('ring-snooze').onclick = function () { App._snoozeAlarm(); };
       document.getElementById('qc-ok').onclick = function () {
         document.getElementById('overlay-quest-clear').classList.add('hidden');
+        if (Quests.pendingAdvance()) {
+          Quests.takeNext();
+          Quests.render(document.getElementById('quest-list'), {});
+          Welcome.mark('quest');
+          var st = Config.section('state');
+          var clip = VoiceBank.pick('wellDone', st.mode === 'asmr' ? 'whisper' : 'normal',
+                                    Alarm.todForHour(new Date().getHours()));
+          setTimeout(function () { clip && App.playFile(clip); }, 500);
+        }
+      };
+      document.getElementById('faint-cancel').onclick = function () {
+        document.getElementById('overlay-faint').classList.add('hidden');
+      };
+      document.getElementById('faint-sleep').onclick = function () { App._sleepHome(); };
+      document.getElementById('faint-cheat').onclick = function () {
+        if (!Game.cheat()) {
+          Config.set('app.cheat', true);
+          App.toast(I18n.t('cheat.on'));
+        }
+        Game.refill();
+        document.getElementById('overlay-faint').classList.add('hidden');
+        App.buildSettings();
       };
       document.querySelectorAll('.sheet-handle').forEach(function (h) {
         h.onclick = function () {
@@ -386,6 +508,144 @@
           if (sheet) sheet.classList.add('hidden');
         };
       });
+    },
+
+    _showFaint: function () {
+      var ov = document.getElementById('overlay-faint');
+      var cheatBtn = document.getElementById('faint-cheat');
+      if (cheatBtn) cheatBtn.classList.toggle('hidden', !Game.cheat());
+      if (ov) ov.classList.remove('hidden');
+      Avatar.setEmotion('crying', 'deny');
+    },
+
+    _sleepHome: function () {
+      var st = Config.section('state');
+      Config.set('state.stage', HOME_STAGE);
+      Config.set('state.tod', 'mor');
+      App._loadSceneFor(HOME_STAGE, 'mor');
+      Sound.setPlace(HOME_STAGE, 'mor', World.backgroundFor(HOME_STAGE));
+      Game.refill();
+      Game.remember('安全なおうちでぐっすり眠った。');
+      document.getElementById('overlay-faint').classList.add('hidden');
+      App.showView('talk');
+      App.toast(I18n.t('stamina.slept'));
+      App.updateHud();
+    },
+
+    _onSailed: function () {
+      Game.remember('船でクーケン島を出航した！');
+      App.toast(I18n.t('toast.sailed'));
+      App.showView('world');
+      App.renderWorld();
+    },
+
+    /* ------------------------------------------------------- status sheet */
+    renderStatus: function () {
+      var root = document.getElementById('status-body');
+      if (!root) return;
+      root.innerHTML = '';
+      var a = Game.apples();
+      var appleHtml = '';
+      for (var i = 0; i < a.slots; i++) {
+        appleHtml += '<img class="apple-mini" alt="" src="assets/icons/' +
+          (i < a.filled ? 'stamina_apple_filled' : 'stamina_apple_empty') + '.svg">';
+      }
+      var e = Game.expIntoLevel();
+      function row(k, v) {
+        var d = document.createElement('div');
+        d.className = 'st-row';
+        var kk = document.createElement('span'); kk.className = 'st-k'; kk.textContent = k;
+        var vv = document.createElement('span'); vv.className = 'st-v'; vv.innerHTML = v;
+        d.appendChild(kk); d.appendChild(vv);
+        root.appendChild(d);
+        return d;
+      }
+      function sect(t) {
+        var d = document.createElement('div');
+        d.className = 'st-sect'; d.textContent = t;
+        root.appendChild(d);
+      }
+      sect(I18n.t('st.level') + ' ' + Game.level());
+      row(I18n.t('stamina') || 'スタミナ', appleHtml + ' <b>' + (Game.cheat() ? '∞' : Game.s.stamina + '/' + Game.max()) + '</b>');
+      row(I18n.t('st.exp'), e.into + ' / ' + e.span + '（' + Game.s.exp_total + '）');
+      row('G', String(Game.s.money));
+      var q = Quests.active();
+      if (q) row(I18n.t('quest.goal'),
+        '「' + App.esc(q.title) + '」 ' + (q.step | 0) + '/' + q.need);
+      row(I18n.t('st.met'), String(Game.s.met_charas.length));
+      row(I18n.t('quest.ship'), Game.flag('ship_parts', 0) + ' / 4' + (Game.s.sailed ? ' ⛵' : ''));
+
+      sect(I18n.t('st.memory'));
+      var mems = Game.s.memory.slice(-12).reverse();
+      if (!mems.length) {
+        var e2 = document.createElement('div');
+        e2.className = 'empty'; e2.textContent = I18n.t('memory.empty');
+        root.appendChild(e2);
+      }
+      mems.forEach(function (m) {
+        var d = document.createElement('div');
+        d.className = 'st-mem'; d.textContent = m.text;
+        root.appendChild(d);
+      });
+    },
+
+    /* ------------------------------------------------------ inventory sheet */
+    renderInv: function () {
+      var which = App._invBag;
+      var root = document.getElementById('inv-list');
+      root.innerHTML = '';
+      var list = Game.bagList(which);
+      if (!list.length) {
+        root.innerHTML = '<div class="empty">' + I18n.t('inv.empty') + '</div>';
+      }
+      list.forEach(function (it) {
+        var row = document.createElement('div');
+        row.className = 'inv-row';
+        row.innerHTML = '<span class="inv-name"></span><span class="inv-n"></span>';
+        var name = (Game.ITEMS[it.id] && Game.ITEMS[it.id].name) || it.id;
+        row.querySelector('.inv-name').textContent = name;
+        row.querySelector('.inv-n').textContent = '×' + (it.count || 1);
+        row.onclick = function () {
+          var inp = document.getElementById('input');
+          inp.value = ((inp.value || '') + ' ' + name).trim();
+          document.getElementById('sheet-inv').classList.add('hidden');
+          App.showView('talk');
+          inp.focus();
+        };
+        root.appendChild(row);
+      });
+      var cap = document.getElementById('inv-cap');
+      if (cap) cap.textContent = I18n.t('inv.cap')
+        .replace('{u}', String(Game.bagUsed(which)))
+        .replace('{c}', String(Game.bagCap(which)));
+      var up = document.getElementById('btn-bag-up');
+      if (up) {
+        var order = Game.BAG_ORDER;
+        var cur = which === 'ryza' ? Game.s.bagRyza : Game.s.bagYou;
+        var idx = order.indexOf(cur);
+        var next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
+        var price = next ? (Game.BAG_UPGRADE_COST[next] || 0) : 0;
+        up.classList.toggle('hidden', !next);
+        if (next) {
+          up.textContent = I18n.t('inv.upgrade').replace('{p}', String(price));
+          up.onclick = function () {
+            if (Game.upgradeBag(which)) {
+              App.toast(I18n.t('inv.upgraded'));
+              if (window.Sound) Sound.se('quest_clear');
+            } else {
+              App.toast(I18n.t('inv.tooSmall'), true);
+            }
+            App.renderInv();
+          };
+        }
+      }
+    },
+
+    /* --------------------------------------------------------------- LLM */
+    _rpgContext: function () {
+      var st = Config.section('state');
+      if (!RPG_MODES[st.mode]) return '';
+      return Game.promptBlock() + '\n\n' + Quests.promptBlock();
     },
 
     _openLangSheet: function () {
@@ -452,34 +712,6 @@
       });
     },
 
-    renderInv: function () {
-      var root = document.getElementById('inv-list');
-      root.innerHTML = '';
-      if (!App.inventory.length) {
-        root.innerHTML = '<div class="empty">' + I18n.t('inv.empty') + '</div>';
-        return;
-      }
-      App.inventory.forEach(function (it) {
-        var row = document.createElement('div');
-        row.className = 'inv-row';
-        row.innerHTML = '<span class="inv-name"></span><span class="inv-n"></span>';
-        row.querySelector('.inv-name').textContent = it.name;
-        row.querySelector('.inv-n').textContent = '×' + (it.count || 1);
-        row.onclick = function () {
-          var inp = document.getElementById('input');
-          inp.value = ((inp.value || '') + ' ' + it.name).trim();
-          document.getElementById('sheet-inv').classList.add('hidden');
-          App.showView('talk');
-          inp.focus();
-        };
-        root.appendChild(row);
-      });
-    },
-
-    saveInv: function () {
-      try { localStorage.setItem(INV_KEY, JSON.stringify(App.inventory)); } catch (e) {}
-    },
-
     greet: function () {
       var st = Config.section('state');
       App.showBubble('……' + (st.day > 1 ? '今日も' : 'やあ、') + '会えたね。');
@@ -493,13 +725,22 @@
         App.showView('settings');
         return;
       }
+      if (Game.faint() || !Game.canAct(Game.turnCost(st.mode, st.style))) {
+        App.toast(I18n.t('toast.staminaOut'), true);
+        App._showFaint();
+        return;
+      }
+      App._lastText = text;
+      var retryBar = document.getElementById('retry-bar');
+      if (retryBar) retryBar.classList.add('hidden');
       App.speaking = true;
       document.getElementById('btn-send').disabled = true;
       App.showTyping();
-      App.toast(I18n.t('toast.thinking'));
       Welcome.mark('talk');
 
-      Api.chat(App.history, text, { mode: st.mode, style: st.style })
+      Api.chat(App.history, text, {
+        mode: st.mode, style: st.style, rpgContext: App._rpgContext()
+      })
         .then(function (reply) {
           App.speaking = false;
           document.getElementById('btn-send').disabled = false;
@@ -508,28 +749,27 @@
           App.remember('user', text);
           App.remember('ryza', reply.text);
 
+          if (reply.state && typeof reply.state === 'object') {
+            Game.applyDelta(reply.state, 'llm');
+          }
+          var cost = Game.turnCost(st.mode, st.style);
+          Game.spend(cost, 'talk');
+
           Avatar.setEmotion(reply.emotion, reply.attitude);
           App.typeBubble(reply.text, function () {
             App.speakThen(reply.text, reply.emotion);
           });
 
-          var q = Quest.advance();
-          if (q && q.done) {
-            Welcome.mark('quest');
-            Quest.render(document.getElementById('quest-list'), App._takeQuest);
-            Quest.showClear(q);
-            var clip = VoiceBank.pick('wellDone', st.mode === 'asmr' ? 'whisper' : 'normal',
-                                      Alarm.todForHour(new Date().getHours()));
-            setTimeout(function () {
-              clip && App.playFile(clip);
-            }, 900);
-          } else if (q) {
-            Quest.render(document.getElementById('quest-list'), App._takeQuest);
-          }
+          /* Talk-quests advance once per turn — if the LLM already reported
+             quest progress through <state>, don't double-count it here. */
+          if (!(reply.state && reply.state.quest)) Quests.progressEvent('talk');
+          Quests.render(document.getElementById('quest-list'), {});
         })
         .catch(function (e) {
           App.speaking = false;
           document.getElementById('btn-send').disabled = false;
+          var bar = document.getElementById('retry-bar');
+          if (bar && e.message !== 'NO_KEY') bar.classList.remove('hidden');
           App.toast(e.message === 'NO_KEY' ? I18n.t('toast.needKey')
                                            : I18n.t('toast.llmFail') + e.message, true);
           App.showBubble('（……うまく聞こえなかった。もう一回言って？）');
@@ -645,11 +885,7 @@
       })();
     },
 
-    _takeQuest: function (q) {
-      App.showView('talk');
-      App.say('「' + q.title + '」というお題を一緒にやろう。' + q.desc);
-    },
-
+    /* ------------------------------------------------------------ alarms */
     _onAlarm: function (a, clip) {
       App._ringAlarm = a;
       var ov = document.getElementById('overlay-alarm');
@@ -816,47 +1052,6 @@
       });
     },
 
-    _newQuest: function () {
-      App.openModal({
-        title: I18n.t('quest.new'),
-        okLabel: I18n.t('form.create'),
-        build: function (body) {
-          body.appendChild(App._fieldEl(I18n.t('quest.qtitle'),
-            '<input type="text" id="f-quest-title" maxlength="40" placeholder="朝の調合">'));
-          body.appendChild(App._fieldEl(I18n.t('quest.desc'),
-            '<textarea id="f-quest-desc" rows="3" placeholder="ライザと一緒に、今日ひとつめの調合をする。"></textarea>'));
-          body.appendChild(App._fieldEl(I18n.t('quest.turns'),
-            '<input type="number" id="f-quest-turns" min="2" max="8" value="3">'));
-          var row = document.createElement('div');
-          row.className = 'btn-row';
-          var auto = document.createElement('button');
-          auto.type = 'button';
-          auto.className = 'btn';
-          auto.textContent = I18n.t('quest.auto');
-          auto.onclick = function () {
-            var hasKey = !!Config.section('llm').apiKey;
-            App.toast(hasKey ? '莱莎正在想一个委托…' : '用内置委托池生成');
-            App.closeModal();
-            Quest.create(hasKey).then(function (q) {
-              Quest.render(document.getElementById('quest-list'), App._takeQuest);
-              App.toast('新委托：' + q.title);
-            });
-          };
-          row.appendChild(auto);
-          body.appendChild(row);
-        },
-        onOk: function (body) {
-          var title = body.querySelector('#f-quest-title').value.trim();
-          var desc = body.querySelector('#f-quest-desc').value.trim();
-          var turns = body.querySelector('#f-quest-turns').value;
-          if (!title && !desc) { App.toast('请填写标题或说明', true); return false; }
-          var q = Quest.createManual(title, desc, turns);
-          Quest.render(document.getElementById('quest-list'), App._takeQuest);
-          App.toast('新委托：' + q.title);
-        }
-      });
-    },
-
     /* ------------------------------------------------------------ memory */
     remember: function (who, text) {
       App.memory.push({ who: who, text: text, at: Date.now() });
@@ -940,7 +1135,7 @@
       }, 160);
     },
 
-    /* ----------------------------------------------------------- forms */
+    /* -------------------------------------------------------------- forms */
     _field: function (wrap, labelKey, value, onInput, opts) {
       opts = opts || {};
       var d = document.createElement('div');
@@ -1025,7 +1220,7 @@
       App._title(w, T('settings.llm'));
       App._field(w, T('settings.baseUrl'), Config.section('llm').baseUrl,
         function (v) { Config.set('llm.baseUrl', v); },
-        { hint: '以 /v1 结尾的 OpenAI 兼容地址' });
+        { hint: 'OpenAI 兼容地址，以 /v1 结尾；也可放 config/providers.json 自动水合' });
       App._field(w, T('settings.model'), Config.section('llm').model,
         function (v) { Config.set('llm.model', v); });
       App._field(w, T('settings.apiKey'), Config.section('llm').apiKey,
@@ -1060,12 +1255,12 @@
       App._select(w, T('settings.lang'), Config.section('app').lang,
         (I18n.LANGS || []).map(function (x) { return { v: x.id, t: x.label }; }),
         function (v) {
-        Config.set('app.lang', v); I18n.setLang(v); I18n.apply(document);
-        App.buildSettings(); App.buildCharaForm();
-      });
-      App._field(w, T('settings.volume'), Config.section('app').volume,
+          Config.set('app.lang', v); I18n.setLang(v); I18n.apply(document);
+          App.buildSettings(); App.buildCharaForm(); App.updateHud();
+        });
+      App._range(w, T('settings.volume'), Config.section('app').volume,
         function (v) {
-          Config.set('app.volume', parseFloat(v) || 0.9);
+          Config.set('app.volume', v);
           if (window.Sound) Sound.applyVolumes();
         });
       App._range(w, T('vol.bgm'), (Config.section('audio') || {}).bgm, function (v) {
@@ -1080,11 +1275,31 @@
       App._range(w, T('vol.se'), (Config.section('audio') || {}).se, function (v) {
         Config.set('audio.se', v);
       });
-      App._field(w, T('settings.textSpeed'), Config.section('app').textSpeed,
-        function (v) { Config.set('app.textSpeed', parseInt(v, 10) || 28); });
+      /* talk speed: the official sheet is icon pills, not a raw ms input. */
+      var sp = document.createElement('div');
+      sp.className = 'field';
+      var spl = document.createElement('label');
+      spl.textContent = T('settings.speed');
+      sp.appendChild(spl);
+      var seg = document.createElement('div');
+      seg.className = 'speed-seg';
+      TEXT_SPEEDS.forEach(function (o) {
+        var b = document.createElement('button');
+        b.type = 'button';
+        var cur = Number(Config.section('app').textSpeed) || 28;
+        b.className = Math.abs(cur - o.v) < 3 ? 'on' : '';
+        b.innerHTML = '<img alt="" src="assets/icons/' + o.icon + '.svg">';
+        b.onclick = function () {
+          Config.set('app.textSpeed', o.v);
+          App.buildSettings();
+        };
+        seg.appendChild(b);
+      });
+      sp.appendChild(seg);
+      w.appendChild(sp);
       App._switch(w, T('settings.voice'), Config.section('app').voice,
         function (v) { Config.set('app.voice', v); });
-      App._switch(w, T('settings.bubble'), Config.section('app').showBubble,
+      App._switch(w, T('settings.bubble'), Config.section('app').showBubble !== false,
         function (v) { Config.set('app.showBubble', v); });
       App._switch(w, T('settings.autoAdvance'), Config.section('app').autoAdvance,
         function (v) { Config.set('app.autoAdvance', v); });
@@ -1092,6 +1307,41 @@
         function (v) { Config.set('app.vibration', v); });
       App._switch(w, T('settings.rim'), Config.section('app').rim !== false,
         function (v) { Config.set('app.rim', v); });
+
+      /* ---------------- game balance / cheat (user-side replacement for
+         the official paywall: limits stay, but can be switched off freely) */
+      App._title(w, T('settings.cheat'));
+      var cheatHint = document.createElement('div');
+      cheatHint.className = 'hint';
+      cheatHint.textContent = T('cheat.desc');
+      w.appendChild(cheatHint);
+      App._switch(w, T('cheat.title') + (Config.section('app').cheat ? ' 🍎∞' : ''),
+        Config.section('app').cheat,
+        function (v) {
+          Config.set('app.cheat', v);
+          App.toast(v ? T('cheat.on') : T('cheat.off'));
+          App.refreshHud();
+          App.buildSettings();
+        });
+      if (Config.section('app').cheat) {
+        var crow = document.createElement('div');
+        crow.className = 'btn-row';
+        var cRef = document.createElement('button');
+        cRef.className = 'btn'; cRef.textContent = T('cheat.refill');
+        cRef.onclick = function () { Game.refill(); App.toast(T('cheat.refill')); };
+        var cMap = document.createElement('button');
+        cMap.className = 'btn'; cMap.textContent = T('cheat.unlockWorld');
+        cMap.onclick = function () {
+          Game.s.sailed = true; Game.save(); Game.emit('flags');
+          App.toast(T('cheat.unlockDone'));
+        };
+        crow.appendChild(cRef); crow.appendChild(cMap);
+        w.appendChild(crow);
+      }
+      var g = document.createElement('div');
+      g.className = 'hint';
+      g.textContent = T('stamina.faintMsg');
+      w.appendChild(g);
 
       App._title(w, T('settings.data'));
       var row = document.createElement('div');
@@ -1126,6 +1376,30 @@
       };
       row2.appendChild(bExp); row2.appendChild(bImp);
       w.appendChild(row2);
+
+      /* local_save_data_eraser.dart equivalent. */
+      var bErase = document.createElement('button');
+      bErase.className = 'btn danger'; bErase.textContent = T('settings.erase');
+      bErase.onclick = function () {
+        App.openModal({
+          title: T('settings.erase'),
+          okLabel: T('settings.eraseOk'),
+          build: function (body) {
+            var p = document.createElement('p');
+            p.className = 'onb-sub';
+            p.textContent = T('settings.eraseMsg');
+            body.appendChild(p);
+          },
+          onOk: function () {
+            Config.eraseAll();
+            location.reload();
+          }
+        });
+      };
+      var row3 = document.createElement('div');
+      row3.className = 'btn-row';
+      row3.appendChild(bErase);
+      w.appendChild(row3);
     },
 
     _testLlm: function () {
@@ -1209,6 +1483,7 @@
       w.appendChild(row);
     },
 
+    /* -------------------------------------------------------- save slots */
     _loadSlots: function () {
       var slots;
       try { slots = JSON.parse(localStorage.getItem(SAVE_KEY) || '[]'); }
@@ -1231,8 +1506,8 @@
         settings: JSON.parse(Config.exportJSON()),
         history: App.history,
         memory: App.memory,
-        inventory: App.inventory,
-        quests: Quest.items,
+        game: Game.snapshot(),
+        daily: JSON.parse(localStorage.getItem('ryza.daily.v1') || 'null'),
         alarms: Alarm.items
       };
     },
@@ -1243,10 +1518,10 @@
       App.history = snap.history || [];
       App.memory = snap.memory || [];
       App.saveMemory();
-      App.inventory = snap.inventory || INV_DEFAULT.slice();
-      App.saveInv();
-      Quest.items = snap.quests || [];
-      Quest.save();
+      Game.restoreSnapshot(snap.game);
+      try { localStorage.setItem('ryza.daily.v1', JSON.stringify(snap.daily || { lastDate: '', streak: 0, claimedDays: [] })); } catch (e) {}
+      Daily.load();
+      Quests.ensure();
       Alarm.items = snap.alarms || [];
       Alarm.save();
       var st = Config.section('state');
@@ -1259,7 +1534,8 @@
       App.updateHud();
       App.renderWorld();
       Alarm.render(document.getElementById('alarm-list'), App.playFile);
-      Quest.render(document.getElementById('quest-list'), App._takeQuest);
+      Quests.render(document.getElementById('quest-list'), {});
+      Daily.render(document.getElementById('daily-body'));
       App.renderMemory();
       App.buildSettings();
       App.buildCharaForm();
@@ -1279,6 +1555,7 @@
           var d = new Date(s.at);
           info.textContent = (i + 1) + '. ' + (s.label || '') +
             ' · day ' + (s.day || 1) + ' · ' +
+            'Lv' + (s.game ? 1 + Math.floor(Math.sqrt((s.game.exp_total || 0) / 30)) : '?') + ' · ' +
             d.toLocaleDateString() + ' ' + d.toLocaleTimeString();
         } else {
           info.textContent = (i + 1) + '. ' + I18n.t('slot.empty');

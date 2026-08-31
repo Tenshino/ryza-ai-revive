@@ -60,7 +60,7 @@
     return lines.join('\n');
   }
 
-  function buildSystemPrompt(mode, style) {
+  function buildSystemPrompt(mode, style, rpgContext) {
     var L = [persona()];
     L.push('');
     L.push('## 今回の会話モード');
@@ -71,15 +71,51 @@
       L.push('音声で読み上げる。短く、話し言葉だけで書く。');
     }
     if (mode === 'asmr') L.push('一文は短く。息づかいを意識して、ゆっくり。');
+    if (rpgContext) {
+      L.push('');
+      L.push(rpgContext);
+      L.push('');
+      L.push('## 状態更新プロトコル（RPG）');
+      L.push('セリフの中で実際に探索・採集・調合・戦闘・買い物・製作・移動などの成果が出たら、');
+      L.push('セリフの最後に1行だけ次の機械可読ブロックを付けてください（プレイヤーには見えない）：');
+      L.push('<state>{"stamina_delta":-2,"exp_delta":10,"money_delta":30,"inventory_added":[{"id":"emeralia","count":1}],"quest":{"step_add":1}}</state>');
+      L.push('使用できる key：stamina_delta / exp_delta / money_delta / inventory_added /');
+      L.push('inventory_removed / ryza_inventory_added / ryza_inventory_removed /');
+      L.push('memory_add / quest{step_add,complete,desc,goal} のみ。');
+      L.push('採れた素材・できた品物は inventory_added に {id,count} で入れる（既存IDを優先）。');
+      L.push('クエスト目標を1つ満たすたびに quest.step_add、目標達成で quest.complete:true。');
+      L.push('スタミナを消費する行動には必ず stamina_delta のマイナス値を付ける。');
+      L.push('何も発生しない普通の会話には <state> を付けない。');
+    }
     L.push('');
     L.push('## 出力形式（厳守）');
     L.push('先頭にタグ行を1行だけ置くこと：');
     L.push('[emotion:<emotion>|attitude:<attitude>]');
     L.push('<セリフ本文>');
+    if (rpgContext) L.push('<必要なら最後の行に <state>{...}</state>');
     L.push('- <emotion> は次のいずれか：' + EMOTIONS.join(' '));
     L.push('- <attitude> は次のいずれか：' + ATTITUDES.join(' '));
     L.push('- タグ行以外に余計な行を出さないこと。');
     return L.join('\n');
+  }
+
+  /* Replies may carry a trailing machine block; it must never be displayed
+     or spoken. (Client-side counterpart of the official state_updated /
+     parsed_message pipeline.) */
+  function extractState(body) {
+    var state = null;
+    var m = /<state>\s*([\s\S]*?)\s*<\/state>/i.exec(body);
+    if (!m) m = /<state>\s*([\s\S]*)$/i.exec(body);   // forgotten closing tag
+    if (m) {
+      body = (body.slice(0, m.index) + body.slice(m.index + m[0].length)).trim();
+      try {
+        state = JSON.parse(m[1]
+          .replace(/[{,]\s*\/\/[^\n]*/g, '')
+          .replace(/,\s*([}\]])/g, '$1'));
+      } catch (e) { state = null; }
+      if (state && typeof state !== 'object') state = null;
+    }
+    return { text: body, state: state };
   }
 
   function parseTaggedReply(text) {
@@ -98,7 +134,8 @@
         });
       }
     }
-    return { emotion: emotion, attitude: attitude, text: body };
+    var ex = extractState(body);
+    return { emotion: emotion, attitude: attitude, text: ex.text, state: ex.state };
   }
 
   function upstreamUrl(baseUrl, path) {
@@ -138,6 +175,7 @@
     ATTITUDES: ATTITUDES,
     parseTaggedReply: parseTaggedReply,
     buildSystemPrompt: buildSystemPrompt,
+    extractState: extractState,
 
     /* ------------------------------------------------------------- LLM */
     chat: function (history, userText, opts) {
@@ -145,7 +183,8 @@
       if (!llm.apiKey) return Promise.reject(new Error('NO_KEY'));
       opts = opts || {};
       var st = Config.section('state');
-      var system = buildSystemPrompt(opts.mode || st.mode, opts.style || st.style);
+      var system = buildSystemPrompt(opts.mode || st.mode, opts.style || st.style,
+                                     opts.rpgContext || '');
       var keep = Math.max(0, (llm.historyTurns || 12) * 2);
       var msgs = [{ role: 'system', content: system }]
         .concat(history.slice(-keep))

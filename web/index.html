@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>ライザと話す — Ryza Chat</title>
-<link rel="stylesheet" href="css/app.css?v=fx-2">
+<link rel="stylesheet" href="css/app.css?v=rpg-1">
 </head>
 <body>
 <div id="phone">
@@ -27,6 +27,11 @@
     <button type="button" class="hud-chip hidden" id="btn-posture" title="坐/站">坐</button>
   </div>
   <div class="spacer"></div>
+  <div id="hud-rpg">
+    <button type="button" class="hud-chip" id="hud-stamina" title="スタミナ"></button>
+    <button type="button" class="hud-chip" id="hud-money" title="所持金"><img src="assets/icons/hud_coin.svg" alt=""><span id="hud-money-n">0</span></button>
+    <button type="button" class="hud-chip" id="hud-level" title="レベル">Lv1</button>
+  </div>
   <button class="icon-btn" id="btn-voice" title="语音开关"><canvas id="lottie-voice" width="36" height="36"></canvas></button>
   <button class="icon-btn" id="btn-settings" title="设置">⚙</button>
 </header>
@@ -42,6 +47,8 @@
   <ul class="drawer-list">
     <li data-view="talk" class="active"><img src="assets/icons/chara.svg" alt=""> <span data-i18n="nav.talk">对话</span></li>
     <li data-view="welcome"><img src="assets/icons/welcome_mission.svg" alt=""> <span data-i18n="nav.welcome">欢迎任务</span></li>
+    <li data-view="daily" id="li-daily"><img src="assets/icons/present.svg" alt=""> <span data-i18n="nav.daily">每日登录</span><i class="badge-dot hidden" id="daily-dot"></i></li>
+    <li data-view="quest"><img src="assets/icons/quest.svg" alt=""> <span data-i18n="nav.quest">任务</span></li>
     <li data-view="alarm"><img src="assets/icons/alarm.svg" alt=""> <span data-i18n="nav.alarm">闹钟</span></li>
     <li data-action="lang"><img src="assets/icons/language.svg" alt=""> <span data-i18n="nav.lang">语言</span></li>
     <li data-view="chara"><img src="assets/icons/profile.svg" alt=""> <span data-i18n="nav.profile">玩家档案</span></li>
@@ -61,13 +68,17 @@
   </div>
   <div id="talk-menu">
     <button type="button" class="icon-btn" id="btn-bag" title="道具"><img src="assets/icons/bag.svg" alt=""></button>
-    <button type="button" class="icon-btn" id="btn-quest-sheet" title="委托"><img src="assets/icons/quest.svg" alt=""></button>
+    <button type="button" class="icon-btn" id="btn-quest-sheet" title="任务"><img src="assets/icons/quest.svg" alt=""></button>
     <button type="button" class="icon-btn" id="btn-map" title="地图"><img src="assets/icons/world_map.svg" alt=""></button>
     <button type="button" class="icon-btn" id="btn-log" title="回忆"><img src="assets/icons/save_data.svg" alt=""></button>
   </div>
   <div id="input-bar">
     <input id="input" type="text" placeholder="和莱莎说点什么…" autocomplete="off">
     <button id="btn-send"><img src="assets/icons/send.svg" alt="send"></button>
+  </div>
+  <div id="retry-bar" class="hidden">
+    <span data-i18n="talk.retryHint">连接失败了</span>
+    <button class="mini-btn" id="btn-retry" data-i18n="talk.retry">重试</button>
   </div>
 </main>
 
@@ -93,9 +104,14 @@
 </section>
 
 <section id="view-quest" class="view">
-  <div class="view-head"><h2 data-i18n="quest.title">委托</h2>
-    <button class="mini-btn" id="btn-quest-new">+ 新委托</button></div>
-  <div id="quest-list"></div>
+  <div class="view-head"><h2 data-i18n="quest.title">任务</h2>
+    <button class="mini-btn" id="btn-quest-new" data-i18n="quest.auto">让莱莎想一个</button></div>
+  <div id="quest-list" class="form-wrap"></div>
+</section>
+
+<section id="view-daily" class="view">
+  <div class="view-head"><h2 data-i18n="dl.title">每日登录</h2></div>
+  <div id="daily-body" class="form-wrap"></div>
 </section>
 
 <section id="view-alarm" class="view">
@@ -158,7 +174,21 @@
 <div id="sheet-inv" class="sheet hidden">
   <div class="sheet-handle"></div>
   <h3 data-i18n="inv.title">道具</h3>
+  <div id="inv-tabs" class="inv-tabs">
+    <button class="mode-pill active" data-bag="you"><span data-i18n="inv.you">あなたのバッグ</span></button>
+    <button class="mode-pill" data-bag="ryza"><span data-i18n="inv.ryza">ライザのバッグ</span></button>
+  </div>
   <div id="inv-list"></div>
+  <div class="inv-foot">
+    <span id="inv-cap"></span>
+    <button class="mini-btn hidden" id="btn-bag-up"></button>
+  </div>
+</div>
+
+<div id="sheet-status" class="sheet hidden">
+  <div class="sheet-handle"></div>
+  <h3 data-i18n="st.title">冒険ステータス</h3>
+  <div id="status-body"></div>
 </div>
 
 <div id="sheet-lang" class="sheet hidden">
@@ -208,9 +238,23 @@
   <canvas id="lottie-confetti" class="confetti-canvas"></canvas>
   <div class="qc-card">
     <img src="assets/icons/quest_clear_icon.svg" alt="">
-    <h3>Clear</h3>
+    <h3 data-i18n="quest.cleared">クエストクリア</h3>
     <p class="qc-title"></p>
+    <p class="qc-praise"></p>
     <button type="button" class="btn primary" id="qc-ok" data-i18n="form.ok">确定</button>
+  </div>
+</div>
+
+<div id="overlay-faint" class="overlay hidden">
+  <div class="qc-card">
+    <img src="assets/icons/stamina_apple_empty.svg" alt="">
+    <h3 data-i18n="stamina.faintTitle">スタミナがゼロ…</h3>
+    <p class="faint-msg" data-i18n="stamina.faintMsg">無くなると気絶しちゃうから。安全な場所で寝ると回復するよ。</p>
+    <div class="btn-row">
+      <button type="button" class="btn" id="faint-cancel" data-i18n="form.cancel">戻る</button>
+      <button type="button" class="btn" id="faint-cheat" data-i18n="cheat.refill">作弊：全回復</button>
+      <button type="button" class="btn primary" id="faint-sleep" data-i18n="stamina.sleep">おうちへ帰って寝る</button>
+    </div>
   </div>
 </div>
 
@@ -218,16 +262,18 @@
 
 <script src="vendor/spine-webgl.js"></script>
 <script src="js/util.js?v=hash-2"></script>
-<script src="js/config.js?v=rim-1"></script>
-<script src="js/i18n.js?v=langs-2"></script>
-<script src="js/api.js"></script>
+<script src="js/config.js?v=rpg-1"></script>
+<script src="js/i18n.js?v=rpg-1"></script>
+<script src="js/api.js?v=rpg-1"></script>
+<script src="js/game.js?v=rpg-1"></script>
+<script src="js/quests.js?v=rpg-1"></script>
+<script src="js/daily.js?v=rpg-1"></script>
 <script src="js/avatar.js?v=motion-smooth-2"></script>
-<script src="js/world.js?v=pin-1"></script>
-<script src="js/audio.js?v=route-5"></script>
-<script src="js/alarm.js"></script>
-<script src="js/quest.js?v=fx-1"></script>
-<script src="js/onboarding.js?v=prologue-sync-1"></script>
+<script src="js/world.js?v=lock-1"></script>
+<script src="js/audio.js?v=route-6"></script>
+<script src="js/alarm.js?v=vb-1"></script>
+<script src="js/onboarding.js?v=tut-2"></script>
 <script src="js/fx.js?v=1"></script>
-<script src="js/app.js?v=motion-sync-3"></script>
+<script src="js/app.js?v=rpg-1"></script>
 </body>
 </html>

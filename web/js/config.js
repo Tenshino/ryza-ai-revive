@@ -1,6 +1,10 @@
 /* Settings store. Everything lives in localStorage; there is no server.
    The official backend (api.craft.spiral-ai-app.com) and Firebase/Google
-   sign-in are intentionally absent — the app boots straight into the game. */
+   sign-in are intentionally absent — the app boots straight into the game.
+
+   Defaults are neutral on purpose: this file ships inside the desktop/
+   Android packages, so no personal endpoint belongs here. Fill yours via
+   Settings, or via an uncommitted config/providers.json (dev server). */
 (function (global) {
   'use strict';
 
@@ -9,21 +13,21 @@
   var DEFAULTS = {
     /* ---- LLM (OpenAI-compatible) ---- */
     llm: {
-      baseUrl: 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1',
-      model: 'qwen3.8-flash',
+      baseUrl: '',
+      model: 'gpt-4o-mini',
       apiKey: '',
       temperature: 0.9,
       maxTokens: 400,
       historyTurns: 12
     },
 
-    /* ---- TTS (Xiaomi MiMo, OpenAI-compatible chat/completions + audio) ---- */
+    /* ---- TTS (any OpenAI-compatible chat/completions + audio.voice) ---- */
     tts: {
-      baseUrl: 'https://api.xiaomimimo.com/v1',
+      baseUrl: '',
       apiKey: '',
       mode: 'clone',                 // 'clone' | 'preset' | 'off'
-      modelClone: 'mimo-v2.5-tts-voiceclone',
-      modelPreset: 'mimo-v2.5-tts',
+      modelClone: 'voice-clone-model',
+      modelPreset: 'tts-model',
       presetVoice: 'Chloe',
       format: 'wav',
       // Ryza's own take, shipped inside the APK.
@@ -61,6 +65,9 @@
       vibration: true,
       fullscreen: false,
       rim: true,
+      showBubble: true,              // talk bubbles over the stage
+      cheat: false,                  // 作弊模式：スタミナ無制限・全開放
+      pet: false                     // desktop-shell pet mode
     },
 
     /* ---- session state ---- */
@@ -70,6 +77,7 @@
       skin: 'crf_skn_002_0001',
       stage: 'stage_01_001_04',      // ライザの家
       tod: 'aft',                    // mor | aft | eve | ngt
+      posture: 'posture_sitting',
       day: 1,
       lastDayDate: '',
       onboardingDone: false,
@@ -129,6 +137,16 @@
         data.state.skin = String(data.state.skin).replace(/_(01|99)$/, '');
       }
       Config.save();
+    },
+    /* local_save_data_eraser.dart equivalent: everything this app wrote. */
+    eraseAll: function () {
+      var doomed = [];
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('ryza.') === 0) doomed.push(k);
+      }
+      doomed.forEach(function (k) { localStorage.removeItem(k); });
+      Config._hydrated = Promise.resolve();   // never re-hydrate after a wipe
     },
 
     /* Fill connection settings from config/providers.json.

@@ -1,5 +1,7 @@
 /* Alarms: APK layout assets/audio/alarm/<locale>/<normal|whisper>/<type>/<tod>/<n>.m4a
-   + sibling .env.json (durationMs, windowMs, envelope[]) for lipsync. */
+   + sibling .env.json (durationMs, windowMs, envelope[]) for lipsync.
+   The clip catalog (VoiceBank) itself lives in audio.js with the rest of
+   the sound routing. */
 (function (global) {
   'use strict';
 
@@ -7,39 +9,6 @@
   var TYPES = ['goodMorning', 'playWithMe', 'task', 'wellDone'];
   var STYLES = ['normal', 'whisper'];
   var WEEK = ['日', '一', '二', '三', '四', '五', '六'];
-
-  var VoiceBank = {
-    index: null,
-
-    load: function () {
-      return fetch('assets/_index/voice_bank.json').then(function (r) { return r.json(); })
-        .then(function (j) { VoiceBank.index = j; return j; });
-    },
-
-    locale: function () {
-      return (window.Sound && Sound.voiceLocale) ? Sound.voiceLocale().alarm : 'ja';
-    },
-
-    pick: function (type, style, tod) {
-      var idx = VoiceBank.index;
-      if (!idx) return null;
-      var locName = VoiceBank.locale();
-      var loc = idx[locName] || idx.ja || idx.en;
-      if (!loc) return null;
-      var s = loc[style] || loc.normal;
-      if (!s) return null;
-      var t = s[type] || s.goodMorning;
-      if (!t) return null;
-      var arr = t[tod] || t.daytime || t[Object.keys(t)[0]];
-      if (!arr || !arr.length) return null;
-      return arr[Math.floor(Math.random() * arr.length)];
-    },
-
-    envPath: function (clip) {
-      if (!clip) return null;
-      return clip.replace(/\.m4a$/i, '.env.json');
-    }
-  };
 
   function todForHour(h) {
     if (h < 5) return 'night';
@@ -188,6 +157,5 @@
     todForHour: todForHour
   };
 
-  global.VoiceBank = VoiceBank;
   global.Alarm = Alarm;
 })(window);

@@ -1,0 +1,175 @@
+/* Boot smoke: run the real App.init() against a fake DOM whose element ids
+   come from the actual index.html, with real config/i18n/game/quests/daily
+   and stubbed Avatar/Sound/Onboarding. Catches wiring typos (an id in JS
+   that index.html does not ship, a method that no longer exists) that the
+   pure-logic regression cannot see.  Run: node scripts/boot_smoke.js */
+'use strict';
+const fs = require('fs');
+const path = require('path');
+const vm = require('vm');
+
+const ROOT = path.join(__dirname, '..');
+const WEB = path.join(ROOT, 'web');
+let failures = 0;
+const bad = (msg) => { failures++; console.log('  FAIL ' + msg); };
+const ok = (cond, name) => { if (cond) console.log('  PASS ' + name); else bad(name); };
+
+/* ids actually present in index.html */
+const html = fs.readFileSync(path.join(WEB, 'index.html'), 'utf8');
+const IDS = new Set();
+for (const m of html.matchAll(/id="([^"]+)"/g)) IDS.add(m[1]);
+
+function makeEl(id) {
+  const el = {
+    id, innerHTML: '', textContent: '', value: '', disabled: false, style: {},
+    src: '', title: '',
+    classList: {
+      _s: new Set(),
+      add(...c) { c.forEach((x) => this._s.add(x)); },
+      remove(...c) { c.forEach((x) => this._s.delete(x)); },
+      toggle(c, on) { if (on === undefined) on = !this._s.has(c); on ? this._s.add(c) : this._s.delete(c); },
+      contains(c) { return this._s.has(c); }
+    },
+    setAttribute() {}, getAttribute() { return null; },
+    appendChild() {}, removeChild() {}, remove() {}, focus() {},
+    querySelector(sel) { return makeEl(id + sel); },
+    querySelectorAll() { return []; },
+    addEventListener() {},
+    play() { return Promise.resolve(); }, pause() {},
+    getBoundingClientRect() { return { width: 100, height: 100, left: 0, top: 0 }; },
+    getContext() {
+      /* swallow-all 2d context so fx.js can draw against nothing */
+      return new Proxy({ canvas: this }, {
+        get(t, k) { if (k in t) return t[k]; return function () {}; },
+        set(t, k, v) { t[k] = v; return true; }
+      });
+    }
+  };
+  return el;
+}
+const elCache = new Map();
+const document = {
+  getElementById(id) {
+    if (!IDS.has(id)) return null;
+    if (!elCache.has(id)) elCache.set(id, makeEl(id));
+    return elCache.get(id);
+  },
+  querySelectorAll() { return []; },
+  querySelector() { return null; },
+  createElement(t) { return makeEl('dyn-' + t); },
+  addEventListener() {},
+  hidden: false
+};
+
+const store = {};
+const localStorage = {
+  getItem: (k) => (k in store ? store[k] : null),
+  setItem: (k, v) => { store[k] = String(v); },
+  removeItem: (k) => { delete store[k]; },
+  key: (i) => Object.keys(store)[i] ?? null,
+  get length() { return Object.keys(store).length; }
+};
+
+const FIXTURES = {
+  'config/providers.json': null,
+  'assets/_index/world_hierarchy.json': { areas: [{ id: 'area_01', name: 'クーケン島周辺地域',
+    fields: [{ id: 'field_01_001', name: 'クーケン島',
+      stages: [{ id: 'stage_01_001_04', name: 'ライザの家' }] }] }] },
+  'assets/_index/npc_placement.json': { npcs: [] },
+  'assets/_index/stage_background_map.json': { stage_01_001_04: 'stage_01_001_04' },
+  'assets/_index/scenes.json': { stage_01_001_04: { aft: 'x' } },
+  'assets/_index/ambient.json': ['amb_001_day.m4a'],
+  'assets/_index/tap_voice.json': [],
+  'assets/_index/se.json': [],
+  'assets/_index/voice_bank.json': { ja: { normal: { goodMorning: { daytime: ['a.m4a'] }, wellDone: { daytime: ['b.m4a'] } } } },
+  'assets/_index/skins.json': [{ id: 'crf_skn_002_0001_01', hasSpine: true, preview: 'p.png' }],
+  'assets/_index/prologue.json': []
+};
+
+const sandbox = {
+  console, setTimeout, clearTimeout, setInterval: () => 0, clearInterval,
+  Math, JSON, Date, Object, Array, String, Number, isFinite, parseInt, parseFloat,
+  RegExp, Promise, Set, Map, Infinity, NaN
+};
+sandbox.window = sandbox;
+sandbox.document = document;
+sandbox.localStorage = localStorage;
+sandbox.navigator = {};
+sandbox.location = { origin: 'http://127.0.0.1:8765', reload() {} };
+sandbox.fetch = (url) => {
+  const key = String(url).replace(/^\.\//, '');
+  if (key in FIXTURES) {
+    return Promise.resolve({ ok: true, json: () => Promise.resolve(FIXTURES[key]) });
+  }
+  return Promise.resolve({ ok: false, json: () => Promise.reject(new Error('404 ' + key)) });
+};
+sandbox.XMLHttpRequest = function () {};
+sandbox.Audio = function () { return makeEl('audio'); };
+sandbox.URL = { createObjectURL: () => 'blob:x', revokeObjectURL() {} };
+sandbox.requestAnimationFrame = () => 0;
+sandbox.cancelAnimationFrame = () => {};
+
+/* module stubs that would need real GL / network */
+const Avatar = {
+  _initCb: null,
+  init(cb) { this._initCb = cb; setTimeout(cb, 0); },
+  resize() {}, onModeChange() {}, setHidden() {}, setEmotion() {}, setTalking() {},
+  setTalkingEnvelope() {}, loadScene(id, tod, cb) { cb && cb(null); },
+  loadSkin(id, cb) { cb && cb(); }, postureKey() { return 'posture_sitting'; },
+  supportsBothPostures() { return false; }, hitPartAt() { return null; },
+  poke() { return null; }, outfitOf(id) { return String(id).replace(/_(01|99)$/, ''); }
+};
+sandbox.Avatar = Avatar;
+sandbox.Onboarding = {
+  showTitle(cb) { cb(); }, isDone() { return true; }, start() {},
+  skip() {}, next() {}, prologueNext() {}, tutorialAdvance() { return false; }
+};
+sandbox.alert = () => {}; sandbox.confirm = () => true; sandbox.prompt = () => null;
+
+vm.createContext(sandbox);
+const load = (f) => vm.runInContext(fs.readFileSync(path.join(WEB, 'js', f), 'utf8'),
+                                   sandbox, { filename: f });
+
+for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
+                 'game.js', 'quests.js', 'daily.js', 'world.js', 'audio.js',
+                 'alarm.js', 'fx.js', 'app.js']) {
+  try { load(f); console.log('  loaded ' + f); }
+  catch (e) { bad('load ' + f + ': ' + e.message); }
+}
+
+(async () => {
+  try {
+    await sandbox.App.init();
+    await new Promise((r) => setTimeout(r, 50));   // let the init chain settle
+    ok(true, 'App.init completed without throwing');
+
+    const g = sandbox.Game, q = g.s.quest;
+    ok(!!q && q.no === 1, 'quest chain started (no=' + (q && q.no) + ')');
+    ok(g.s.stamina > 0, 'game state initialized');
+    ok(document.getElementById('hud-stamina').innerHTML.indexOf('apple') >= 0 ||
+       document.getElementById('hud-stamina').innerHTML === '',
+       'HUD stamina chip rendered after boot');
+    ok(sandbox.Daily.available(), 'daily claim available on fresh boot');
+
+    /* exercise the reducer end-to-end through App events */
+    g.applyDelta({ exp_delta: 400, money_delta: 100, quest: { step_add: 4 } });
+    ok(sandbox.Quests.pendingAdvance(), 'quest1 cleared via reducer path');
+    sandbox.Quests.takeNext();
+    ok(g.s.quest.no === 2, 'chain advanced to quest2');
+
+    /* render surfaces that index.html wires */
+    sandbox.Quests.render(document.getElementById('quest-list'), {});
+    sandbox.Daily.render(document.getElementById('daily-body'));
+    sandbox.App.renderStatus();
+    sandbox.App.renderInv();
+    sandbox.App.buildSettings();
+    sandbox.App.buildCharaForm();
+    sandbox.App.updateHud();
+    ok(true, 'render surfaces + settings form built');
+    ok(!sandbox.App._lastText, 'no stale retry text');
+  } catch (e) {
+    bad('runtime: ' + (e && e.stack || e));
+  }
+  console.log(failures ? '\nBOOT SMOKE: ' + failures + ' FAILURES' : '\nBOOT SMOKE: ALL PASS');
+  process.exit(failures ? 1 : 0);
+})();

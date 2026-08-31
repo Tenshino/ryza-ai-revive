@@ -48,10 +48,22 @@
     ];
   }
 
+  /* Tutorial lines. The ones marked ✎ are recovered verbatim from the AOT
+     snapshot (tutorial_intro_talk_presenter / intro coachmarks / stamina
+     copy); the connective tissue around them is ours. */
   var TUTORIAL = [
     { emotion: 'happy', attitude: 'agree', ja: 'やあ、会えたね。あたし、ライザ。これからよろしくね。' },
-    { emotion: 'laughing', attitude: 'agree', ja: 'あたしとお喋りでもしてリフレッシュしよっ' },
-    { emotion: 'tease', attitude: 'question', ja: '今日は眠くなるまであなたとお喋りしたいなー' }
+    { emotion: 'happy', attitude: 'agree', ja: '画面の見方を説明するね。' },                    /* ✎ */
+    { emotion: 'neutral', attitude: 'agree', ja: '上のほうのリンゴはあたしのスタミナ。' +
+        '無くなると気絶しちゃうから、気をつけて。' +                                              /* ✎ */
+        '安全な場所で寝ると回復するよ。' },                                                        /* ✎ */
+    { emotion: 'laughing', attitude: 'agree', ja: '手に入れたアイテムは、ここにしまわれるよ。' + /* ✎ */
+        'この世界のお金だよ——これも。' },                                                          /* ✎ */
+    { emotion: 'tease', attitude: 'question', ja: 'なんでも聞いてね。' +
+        '困ったときは、まずは船を手に入れて、船で自由に旅へ出ようとあたしは思ってる！' },          /* ✎ prologue */
+    { emotion: 'happy', attitude: 'agree', ja: '迷ったら、クエストを進めてみて。' +               /* ✎ */
+        '君だけの自由な発想で、クエストをクリアしていくのを、楽しみにしてるよ。' },                /* ✎ */
+    { emotion: 'laughing', attitude: 'agree', ja: 'まずはあたしとお喋りでもしてリフレッシュしよっ' }  /* ✎ */
   ];
 
   var Onboarding = {

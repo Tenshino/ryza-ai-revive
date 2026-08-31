@@ -242,6 +242,13 @@
     },
 
     /* --------------------------------------------------------- pin map */
+    /* Source flow: the world beyond クーケン島 (area_01) opens when the
+       ship quest finishes (`sailed` in game.js — entry_map_move.dart). */
+    locked: function (areaId) {
+      if (!window.Game || !Game.s) return false;
+      return !Game.s.sailed && areaId !== 'area_01';
+    },
+
     _pinGrid: function (root, items, currentId, opts) {
       opts = opts || {};
       root.innerHTML = '';
@@ -250,7 +257,8 @@
       items.forEach(function (it, i) {
         var el = document.createElement('button');
         el.type = 'button';
-        el.className = 'map-pin' + (it.id === currentId ? ' here' : '') + (it.inactive ? ' inactive' : '');
+        el.className = 'map-pin' + (it.id === currentId ? ' here' : '') +
+          (it.inactive ? ' inactive' : '') + (it.locked ? ' locked' : '');
         var col = (i % 4) + 1;
         var row = Math.floor(i / 4) + 1;
         el.style.gridColumn = String(col);
@@ -274,6 +282,13 @@
           here.src = PIN.here;
           here.alt = '';
           el.appendChild(here);
+        }
+        if (it.locked) {
+          var lk = document.createElement('img');
+          lk.className = 'pin-lock';
+          lk.src = 'assets/icons/lock.svg';
+          lk.alt = '';
+          el.appendChild(lk);
         }
         if (it.faces && it.faces.length) {
           var faces = document.createElement('span');
@@ -319,10 +334,15 @@
           var on = here && here.areaId === a.id;
           return {
             id: a.id, name: a.name, pin: PIN.area, here: on,
+            locked: World.locked(a.id),
             faces: []
           };
         }), World.mapAreaId, {
           onPick: function (it) {
+            if (it.locked) {
+              if (window.App) App.toast(I18n.t('world.lockedToast'), true);
+              return;
+            }
             World.mapLevel = 'fields';
             World.mapAreaId = it.id;
             World.render(root, sideRoot, currentStageId, onPick);
@@ -424,6 +444,10 @@
     },
 
     jumpArea: function (areaId, currentStageId, onPick) {
+      if (World.locked(areaId)) {
+        if (window.App) App.toast(I18n.t('world.lockedToast'), true);
+        return;
+      }
       World.mapLevel = 'fields';
       World.mapAreaId = areaId;
       var root = document.getElementById('world-fields');
