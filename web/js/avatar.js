@@ -117,7 +117,6 @@
     _lipSync: FALLBACK_LIP,
     _view: { left: 0, bottom: 0, worldW: 1, worldH: 1, cssW: 1, cssH: 1 },
     _env: null,
-    _aimRest: null,
     _look: { yaw: 0, pitch: 0, roll: 0, ty: 0, tp: 0, tr: 0, hold: 2, trans: 0.8, t: 0 },
     _pointer: { x: 0, y: 0, on: false },
     _ptrSm: { x: 0, y: 0 },

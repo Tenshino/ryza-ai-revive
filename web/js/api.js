@@ -24,6 +24,7 @@
     'どんな困難も乗り越えられるはずだから'
   ];
 
+  /* Text-generation mode prompts (system prompt section). */
   var MODES = {
     chat: '自由な雑談。相手の話を聞いて、自然に会話を続ける。',
     story: '短い物語を一緒に進める。情景描写を少し入れつつ、会話を前に進める。',
@@ -31,6 +32,44 @@
     asmr: '静かで近い距離感。ゆっくり、やさしく、耳元で囁くような短い言葉。',
     text: 'テキストでのやり取り。簡潔にはっきりと。'
   };
+
+  /* Voice direction per mode — SEPARATE from MODES on purpose: the LLM
+     writes the line, but the TTS engine never sees that prompt, so without
+     its own per-mode instruction every mode (ASMR especially) comes back
+     sounding identically bright and normal. The user-editable base hint
+     (tts.styleHint) says WHO the voice is; these say HOW it delivers the
+     current mode. Overridable per mode via tts.modeHints[mode] (settings
+     import/export JSON). Applied to:
+       - openai/MiMo path: the style message before the assistant line
+       - qwen path: input.instructions, but ONLY on qwen3-tts-instruct-*
+         (plain flash / cloned-vc models don't take instructions). */
+  var MODE_TTS = {
+    chat: '',  /* base hint alone: bright everyday conversation */
+    story: '物語を聞かせる語り手のように、落ち着いて温かく、行間で少し間を取って。',
+    immersive: '今すぐそばで語りかけるように、優しくゆっくり、余韻を残す読み方で。',
+    asmr: 'ASMRとして耳元でささやくように。ごく低速で、小さく、息混じりの柔らかなささやき声。文の区切りで長めに間を取る。',
+    text: ''
+  };
+
+  /* Per-mode playback shaping for shells whose endpoint ignores voice
+     direction (or as an extra layer): ASMR slows and softens the audio. */
+  var MODE_PLAY_FX = {
+    asmr: { rate: 0.93, gain: 0.82 },
+    immersive: { rate: 0.97, gain: 0.95 }
+  };
+
+  function ttsStyleFor(mode, tts) {
+    var base = String(tts.styleHint || '').trim();
+    var over = (tts.modeHints && tts.modeHints[mode] != null)
+      ? String(tts.modeHints[mode]).trim()
+      : (MODE_TTS[mode] || '');
+    return [base, over].filter(Boolean).join(' ');
+  }
+
+  /* True for shipped placeholders — never send upstream, never a real model. */
+  function isPlaceholderModel(m) {
+    return !m || !!PLACEHOLDER_MODELS[m];
+  }
 
   function persona() {
     var c = Config.section('chara'), p = Config.section('profile');
@@ -194,9 +233,14 @@
   var Api = {
     EMOTIONS: EMOTIONS,
     ATTITUDES: ATTITUDES,
+    MODE_TTS: MODE_TTS,
+    MODE_PLAY_FX: MODE_PLAY_FX,
     parseTaggedReply: parseTaggedReply,
     buildSystemPrompt: buildSystemPrompt,
     extractState: extractState,
+    isPlaceholderModel: isPlaceholderModel,
+    /* resolved per-mode TTS voice direction (base hint + mode layer) */
+    ttsStyleFor: function (mode) { return ttsStyleFor(mode, Config.section('tts')); },
 
     /* resolved reply language (auto = UI) */
     replyLang: function () {
@@ -255,13 +299,16 @@
     /* ------------------------------------------------------------- TTS */
     /* Resolves to a Blob URL. Returns null when voice is disabled.
        provider: 'openai' (chat/completions + audio, MiMo-style) or
-       'qwen' (Bailian DashScope multimodal-generation, wav URL reply). */
-    speak: function (text, lang) {
+       'qwen' (Bailian DashScope multimodal-generation, wav URL reply).
+       `mode` is the talk mode (chat/story/immersive/asmr/text); it picks
+       the per-mode voice direction — see MODE_TTS. */
+    speak: function (text, lang, mode) {
       var tts = Config.section('tts');
       if (tts.mode === 'off') return Promise.resolve(null);
+      mode = mode || (Config.section('state') || {}).mode || 'chat';
       /* Per-provider credentials: qwen has its own baseUrl/apiKey so a MiMo
          setup can never leak into a DashScope call (or back). */
-      if ((tts.provider || 'openai') === 'qwen') return Api._qwenSpeak(text, lang);
+      if ((tts.provider || 'openai') === 'qwen') return Api._qwenSpeak(text, lang, mode);
       if (!tts.apiKey) return Promise.reject(new Error('NO_KEY'));
 
       var audio = { format: tts.format || 'wav' };
@@ -275,10 +322,10 @@
       /* The shipped defaults are placeholders; sending them yields the
          server's confusing "unsupported model tts-model". Fail locally with
          a clear, translated toast instead. */
-      if (!model || PLACEHOLDER_MODELS[model]) {
+      if (isPlaceholderModel(model)) {
         return Promise.reject(new Error('NO_MODEL'));
       }
-      var styleHint = tts.styleHint || '';
+      var styleHint = ttsStyleFor(mode, tts);
 
       function send(voiceField) {
         audio.voice = voiceField;
@@ -306,19 +353,27 @@
     /* ------------------------------------------- Qwen / Bailian (DashScope) */
     QWEN_DEFAULT_BASE: 'https://dashscope.aliyuncs.com',
 
-    _qwenSpeak: function (text, lang) {
+    _qwenSpeak: function (text, lang, mode) {
       var tts = Config.section('tts');
       if (!tts.qwenApiKey) return Promise.reject(new Error('NO_KEY'));
       var lg = lang || (window.Langs ? Langs.tts() : 'ja');
       var langType = window.Langs ? Langs.ttsLangType(lg) : 'Auto';
       var base = (tts.qwenBaseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
+      var model = tts.qwenModel || 'qwen3-tts-flash';
+      var input = {
+        text: text,
+        voice: tts.qwenVoice || 'Cherry',
+        language_type: langType
+      };
+      /* Only qwen3-tts-instruct-* accepts natural-language voice direction
+         (input.instructions); plain flash and the cloned vc models don't. */
+      if (/instruct/i.test(model)) {
+        var style = ttsStyleFor(mode || 'chat', tts);
+        if (style) input.instructions = style;
+      }
       return request(localProxy(base + '/api/v1/services/aigc/multimodal-generation/generation'), {
-        model: tts.qwenModel || 'qwen3-tts-flash',
-        input: {
-          text: text,
-          voice: tts.qwenVoice || 'Cherry',
-          language_type: langType
-        }
+        model: model,
+        input: input
       }, tts.qwenApiKey, 180000).then(function (j) {
         var aud = j && j.output && j.output.audio;
         if (aud && aud.data) return Api._b64ToUrl(aud.data, 'audio/wav');

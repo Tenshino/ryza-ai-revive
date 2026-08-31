@@ -167,6 +167,27 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
     sandbox.App.updateHud();
     ok(true, 'render surfaces + settings form built');
     ok(!sandbox.App._lastText, 'no stale retry text');
+
+    /* per-mode TTS voice direction: base hint + mode layer, overridable */
+    const A = sandbox.Api, C = sandbox.Config;
+    const base = C.section('tts').styleHint.trim();
+    ok(A.ttsStyleFor('chat') === base, 'chat TTS = base hint only');
+    const asmr = A.ttsStyleFor('asmr');
+    ok(asmr.indexOf(base) === 0 && asmr.length > base.length &&
+       /ささや/i.test(asmr), 'asmr TTS layers whisper direction');
+    C.set('tts.modeHints', { asmr: '自定义耳语' });
+    ok(A.ttsStyleFor('asmr') === base + ' 自定义耳语', 'tts.modeHints overrides the mode layer');
+    C.set('tts.modeHints', {});
+    ok(A.MODE_PLAY_FX.asmr.rate < 1 && A.MODE_PLAY_FX.asmr.gain < 1,
+       'asmr playback shaping present');
+    ok(A.isPlaceholderModel('tts-model') && !A.isPlaceholderModel('mimo-audio'),
+       'placeholder-model check centralized');
+
+    /* bubble lifecycle: showBubble arms the auto-fade, keep cancels it */
+    sandbox.App.showBubble('テスト');
+    ok(!!sandbox.App._bubbleTimer, 'showBubble arms the bubble auto-hide timer');
+    sandbox.App._bubbleKeep();
+    ok(!sandbox.App._bubbleTimer, '_bubbleKeep cancels the auto-hide');
   } catch (e) {
     bad('runtime: ' + (e && e.stack || e));
   }

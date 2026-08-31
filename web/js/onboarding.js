@@ -110,8 +110,6 @@
       Onboarding._onDone && Onboarding._onDone();
     },
 
-    _qs: questions,
-
     _render: function () {
       var qs = questions();
       var q = qs[Onboarding.step];

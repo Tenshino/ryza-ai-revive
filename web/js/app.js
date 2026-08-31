@@ -62,7 +62,13 @@
       } catch (e) {}
     },
 
-    esc: function (s) { return String(s == null ? '' : s); },
+    /* HTML escaper for the few places that build innerHTML around dynamic
+       (LLM-authored) text — e.g. the quest title row in the status sheet. */
+    esc: function (s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    },
 
     /* Desktop UI zoom. #phone now fills the window (no more letterbox), so a
        small window must scale the fixed-px chrome instead of letting it
@@ -927,13 +933,14 @@
       var prep = (ttsL !== replyL && Api.translate)
         ? Api.translate(text, ttsL) : Promise.resolve(text);
       prep.then(function (speakText) {
-        return Api.speak(speakText, ttsL);
+        /* mode selects the per-mode TTS voice direction (ASMR whisper…) */
+        return Api.speak(speakText, ttsL, st.mode);
       }).then(function (url) {
         /* Talking starts when the audio actually exists — before that the
            mouth sat closed (RMS target 0) for the whole TTS latency, and a
            failed synth left _talking stuck true forever. */
         if (!url) return;
-        App.playUrl(url);
+        App.playUrl(url, Api.MODE_PLAY_FX[st.mode] || null);
       }).catch(function (e) {
         App.toast(e.message === 'NO_KEY' ? I18n.t('toast.needKey')
               : e.message === 'NO_MODEL' ? I18n.t('toast.needModel')
@@ -941,24 +948,32 @@
       });
     },
 
-    playUrl: function (url) {
+    /* fx: optional { rate, gain } per-mode playback shaping (see
+       Api.MODE_PLAY_FX — ASMR slows and softens even on endpoints that
+       ignore voice instructions). */
+    playUrl: function (url, fx) {
       App._ensureVoiceGraph();
       if (App._voiceCtx && App._voiceCtx.state === 'suspended') {
         App._voiceCtx.resume().catch(function () {});
       }
       var a = App.audio;
       a.src = url;
-      a.volume = (window.Sound && Sound._gain) ? Sound._gain('voice')
+      var base = (window.Sound && Sound._gain) ? Sound._gain('voice')
         : (Number(Config.section('app').volume) || 0.9);
+      a.volume = Math.max(0, Math.min(1, base * ((fx && fx.gain) || 1)));
+      a.playbackRate = (fx && fx.rate) || 1;
       a.onended = function () {
+        a.playbackRate = 1;
         Avatar.setTalking(false);
         URL.revokeObjectURL(url);
+        App._bubbleHold(1600);   /* done talking → bubble steps aside */
         if (Config.section('app').autoAdvance && App._pendingQuestion) {
           App.say(App._pendingQuestion);
           App._pendingQuestion = null;
         }
       };
       Avatar.setTalking(true);
+      App._bubbleKeep();         /* stay put while she talks */
       a.play().catch(function () { Avatar.setTalking(false); });
       App.buzz();
     },
@@ -989,10 +1004,36 @@
       App.buzz();
     },
 
+    /* ---------------------------------------------------- bubble lifecycle
+       The bubble floats over the stage and used to sit there forever with
+       an opaque backing — hiding the avatar behind it. Now it shows, then
+       fades itself out once the line has been read; _bubbleKeep() pins it
+       while talking, _bubbleHold(ms) schedules the fade afterwards. */
+    _bubbleKeep: function () {
+      if (App._bubbleTimer) { clearTimeout(App._bubbleTimer); App._bubbleTimer = null; }
+    },
+    _bubbleHold: function (ms) {
+      App._bubbleKeep();
+      if (Config.section('app').showBubble === false) return;
+      App._bubbleTimer = setTimeout(function () {
+        var b = document.getElementById('bubble');
+        if (!b || b.classList.contains('hidden')) return;
+        b.classList.add('fade-out');
+        App._bubbleTimer = setTimeout(function () {
+          b.classList.remove('fade-out');
+          b.classList.add('hidden');
+        }, 520);
+      }, ms != null ? ms : 5200);
+    },
+    _bubbleReveal: function (b) {
+      App._bubbleKeep();
+      b.classList.remove('hidden', 'fade-out');
+    },
+
     showTyping: function () {
       var b = document.getElementById('bubble');
       var vig = document.getElementById('vignette');
-      b.classList.remove('hidden');
+      App._bubbleReveal(b);
       b.classList.add('typing', 'speaking');
       document.getElementById('bubble-text').innerHTML =
         '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>';
@@ -1008,8 +1049,9 @@
         b.classList.add('hidden');
         return;
       }
-      b.classList.remove('hidden');
+      App._bubbleReveal(b);
       document.getElementById('bubble-text').textContent = text;
+      App._bubbleHold(6500);
     },
 
     typeBubble: function (text, done) {
@@ -1017,7 +1059,8 @@
       var b = document.getElementById('bubble');
       var span = document.getElementById('bubble-text');
       var vig = document.getElementById('vignette');
-      b.classList.remove('hidden', 'typing');
+      App._bubbleReveal(b);
+      b.classList.remove('typing');
       b.classList.add('speaking');
       if (vig) vig.classList.add('talk-glow');
       var speed = Number(Config.section('app').textSpeed) || 28;
@@ -1026,6 +1069,12 @@
         if (i >= text.length) {
           b.classList.remove('speaking');
           if (vig) vig.classList.remove('talk-glow');
+          /* no voice coming (text style / voice off / TTS off) → the fade
+             is scheduled here; otherwise playUrl owns the timing. */
+          var st = Config.section('state');
+          if (st.style === 'text' || !Config.section('app').voice ||
+              Config.section('tts').mode === 'off') App._bubbleHold(5200);
+          else App._bubbleHold(12000);   /* fallback if TTS never returns */
           done && done();
           return;
         }
@@ -1446,7 +1495,8 @@
           function (v) { Config.set('tts.presetVoice', v); });
       }
       App._field(w, T('settings.styleHint'), Config.section('tts').styleHint,
-        function (v) { Config.set('tts.styleHint', v); });
+        function (v) { Config.set('tts.styleHint', v); },
+        { hint: T('settings.styleHint.hint') });
       }
 
       /* ---------------- language matrix: UI / recorded voice / reply / TTS */
@@ -1627,10 +1677,12 @@
       if (!key) { App.toast(I18n.t('toast.needKey'), true); return; }
       var model = (tts.provider === 'qwen') ? (tts.qwenModel || 'qwen3-tts-flash')
                 : (tts.mode === 'clone' ? tts.modelClone : tts.modelPreset);
-      if (!model || model === 'tts-model' || model === 'voice-clone-model') {
+      if (Api.isPlaceholderModel(model)) {
         App.toast(I18n.t('toast.needModel'), true); return;
       }
       App.toast('合成中…');
+      /* no explicit mode → Api.speak uses the live talk mode, so this
+         doubles as a preview of the per-mode voice direction. */
       Api.speak('やあ、聞こえてる？').then(function (url) {
         if (!url) { App.toast('语音已关闭'); return; }
         App.playUrl(url);

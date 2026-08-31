@@ -145,9 +145,15 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .mode-sep{width:1px;background:var(--line);margin:4px 3px;flex:0 0 auto}
 #bubble-wrap{flex:1;display:flex;align-items:flex-start;justify-content:center;
   padding:0 16px;margin-top:6px;pointer-events:none}
-#bubble{max-width:min(680px,94%);background:rgba(24,17,21,.9);border:1px solid var(--line);
-  border-radius:var(--radius);padding:14px 17px;line-height:1.75;font-size:16px;
-  backdrop-filter:blur(12px);box-shadow:0 10px 34px rgba(0,0,0,.5);animation:pop .22s ease}
+/* Semi-transparent bubble that fades itself out after the line is read
+   (App._bubbleHold → .fade-out → hidden). It used to be opaque and pinned,
+   walling off the avatar behind it. */
+#bubble{max-width:min(680px,94%);background:rgba(22,15,19,.52);border:1px solid var(--line);
+  border-radius:var(--radius);padding:13px 16px;line-height:1.75;font-size:16px;
+  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
+  box-shadow:0 8px 26px rgba(0,0,0,.38);animation:pop .22s ease;
+  transition:opacity .45s ease,transform .45s ease;text-shadow:0 1px 3px rgba(0,0,0,.8)}
+#bubble.fade-out{opacity:0;transform:translateY(-10px)}
 #bubble.speaking{border-color:var(--gold);box-shadow:0 0 26px rgba(232,180,92,.32)}
 #bubble.typing{min-width:72px}
 .dots{display:inline-flex;gap:5px;align-items:center;height:1.2em;padding:0 4px}
@@ -160,8 +166,6 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
   border-radius:14px}
 @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
 #bubble-text{white-space:pre-wrap;word-break:break-word}
-.caret{display:inline-block;width:8px;animation:blink 1s steps(2) infinite;color:var(--gold)}
-@keyframes blink{50%{opacity:0}}
 
 #input-bar{display:flex;gap:9px;padding:10px 12px calc(10px + var(--safe-b));
   background:linear-gradient(0deg,rgba(10,7,12,.86),transparent)}

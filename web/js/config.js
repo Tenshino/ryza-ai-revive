@@ -38,7 +38,11 @@
       format: 'wav',
       // Ryza's own take, shipped inside the APK.
       reference: 'assets/voice/ryza_wav/prologue_08.wav',
+      /* Base voice identity ("who talks"). Per-mode delivery ("how": ASMR
+         whisper, story narrator…) lives in api.js MODE_TTS and is layered
+         on top; put a string here (or per mode in modeHints) to override. */
       styleHint: '明るく元気な若い女性の声。親しみやすい口調で。',
+      modeHints: {},                 // { chat, story, immersive, asmr, text } overrides
       /* qwen-specific — endpoint + key are SEPARATE from the openai ones so
          switching providers never sends a MiMo URL/key to DashScope or back.
          Empty qwenBaseUrl falls back to the public DashScope host. */
@@ -88,9 +92,8 @@
       vibration: true,
       fullscreen: false,
       rim: true,
-      showBubble: true,              // talk bubbles over the stage
-      cheat: false,                  // 作弊模式：スタミナ無制限・全開放
-      pet: false                     // desktop-shell pet mode
+      showBubble: true,              // talk bubbles over the stage (auto-fade)
+      cheat: false                   // 作弊模式：スタミナ無制限・全開放
     },
 
     /* ---- session state ---- */
