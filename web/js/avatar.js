@@ -1480,6 +1480,15 @@
       return sk.findBone(name || ('control_' + (kind === 'aimSlots' ? 'aim_' : 'roll_') + part));
     },
 
+    /* smooth gate for fingerTrack thresholds (see _applyLook) */
+    _ptrRamp: function (n, thr, sc) {
+      var lo = thr * 0.6, hi = thr * 1.4;
+      if (!(hi > lo) || n <= lo) return 0;
+      if (n >= hi) return sc;
+      var u = (n - lo) / (hi - lo);
+      return sc * (u * u * (3 - 2 * u));
+    },
+
     _applyLook: function () {
       var L = Avatar.avatar;
       if (!L || !L.skeleton) return;
@@ -1512,14 +1521,19 @@
           if (n > 1) { dx /= n; dy /= n; n = 1; }
           Avatar._ptrN = n;
           fEyeX = dx; fEyeY = dy;
-          if (n >= (Number(pc.fingerTrackHeadThreshold) || 0.11)) {
-            var hs = Number(pc.fingerTrackHeadScale) || 0.7;
-            fHeadX = dx * hs; fHeadY = dy * hs;
-          }
-          if (n >= (Number(pc.fingerTrackBodyThreshold) || 0.3)) {
-            var bs = Number(pc.fingerTrackBodyScale) || 0.55;
-            fBodyX = dx * bs; fBodyY = dy * bs;
-          }
+          /* fingerTrackHead/BodyThreshold are gates in the data, but a hard
+             0→scale switch snapped the head target ~40 units and the body
+             target ~85 units in one frame whenever the cursor crossed the
+             ring — the reported "特定位置卡模型/重影". Ramp each contribution
+             smoothly across a ±40% window around its threshold instead. */
+          fHeadX = dx * Avatar._ptrRamp(n, Number(pc.fingerTrackHeadThreshold) || 0.11,
+                                        Number(pc.fingerTrackHeadScale) || 0.7);
+          fHeadY = dy * Avatar._ptrRamp(n, Number(pc.fingerTrackHeadThreshold) || 0.11,
+                                        Number(pc.fingerTrackHeadScale) || 0.7);
+          fBodyX = dx * Avatar._ptrRamp(n, Number(pc.fingerTrackBodyThreshold) || 0.3,
+                                        Number(pc.fingerTrackBodyScale) || 0.55);
+          fBodyY = dy * Avatar._ptrRamp(n, Number(pc.fingerTrackBodyThreshold) || 0.3,
+                                        Number(pc.fingerTrackBodyScale) || 0.55);
         }
       }
       var wantPtr = on ? 1 : 0;
@@ -1558,35 +1572,56 @@
       headL = scaleLook(headL, mul);
       bodyL = scaleLook(bodyL, mul);
       neckL = scaleLook(neckL, mul);
-      function nudgeAim(part, y, p, fx, fy) {
-        var b = Avatar._boneOf('aimSlots', part);
-        if (!b) return;
-        b.x += y * unit + fx;
-        b.y += -p * unit * 0.85 + fy;
-      }
-      function nudgeRoll(part, r, scale) {
-        var b = Avatar._boneOf('rollSlots', part);
-        if (!b) return;
-        if (pc.lockSittingAxis && part === 'body2') return;
-        b.rotation += r * 16 * (scale == null ? 1 : scale);
-      }
+
       /* driver:'eye' patterns move the eye targets fully and barely tilt
          the head; driver:'head' patterns lead with head + body followers.
          The authored aim-bone deltas are tiny (±7–20 units), so keep the
          rad→world scale modest. */
       var eyeDrv = !!look.eyeDrv;
-      /* Eye aim bone authored deltas are ~±8–20 world units; head aim ~±25–75.
-         eyeK converts the radian window to those caps (110 = rad→units). */
       var eyeK = eyeDrv ? 0.18 : 0.35;
       var headK = eyeDrv ? 0.18 : 1;
-      nudgeAim('eye', yaw * eyeK, pitch * eyeK, fEyeX, fEyeY);
-      nudgeAim('head', headL.y * headK, headL.p * headK, fHeadX, fHeadY);
-      nudgeAim('body', bodyL.y * bodyScale * headK, bodyL.p * bodyScale * 0.8 * headK, fBodyX, fBodyY);
-      nudgeAim('center', yaw * 0.4 * headK, pitch * 0.4 * headK, fHeadX * 0.5, fHeadY * 0.5);
-      nudgeRoll('head', headL.r * headK, 1);
-      nudgeRoll('neck', neckL.r * neckScale * headK, neckScale);
-      nudgeRoll('body', bodyL.r * bodyScale * headK, bodyScale * 0.6);
-      nudgeRoll('body2', bodyL.r * 0.2 * headK, 0.2);
+
+      /* Targets first, then ONE eased application per bone.
+         Both reported snaps came from transients in the *inputs*:
+         - the eye↔head driver switch changes the gains instantly;
+         - a re-picked driver changes followers[].delay, so _lookAt()
+           jumps to a different history sample (up to ~0.35 s of motion
+           ≈ 48 world units in one frame).
+         Easing the applied contribution (τ=0.12 s) absorbs every source
+         instead of patching them one by one — this is the fix for the
+         "某些角度还是会闪/重影" report. */
+      var tgt = {};
+      tgt.eye = [yaw * eyeK * unit + fEyeX, -pitch * eyeK * unit * 0.85 + fEyeY];
+      tgt.head = [headL.y * headK * unit + fHeadX, -headL.p * headK * unit * 0.85 + fHeadY];
+      tgt.body = [bodyL.y * bodyScale * headK * unit + fBodyX,
+                  -bodyL.p * bodyScale * 0.8 * headK * unit * 0.85 + fBodyY];
+      tgt.center = [yaw * 0.4 * headK * unit + fHeadX * 0.5,
+                    -pitch * 0.4 * headK * unit * 0.85 + fHeadY * 0.5];
+      tgt.r_head = [headL.r * headK * 16, 0];
+      tgt.r_neck = [neckL.r * neckScale * headK * 16 * neckScale, 0];
+      tgt.r_body = [bodyL.r * bodyScale * headK * 16 * bodyScale * 0.6, 0];
+      if (!(pc.lockSittingAxis)) tgt.r_body2 = [bodyL.r * 0.2 * headK * 16 * 0.2, 0];
+
+      if (!Avatar._aimSm) Avatar._aimSm = {};
+      var aK = 1 - Math.exp(-dtL / 0.12);
+      Object.keys(tgt).forEach(function (k) {
+        var t = tgt[k];
+        if (!isFinite(t[0]) || !isFinite(t[1])) return;      /* never poison the smoother */
+        var sm = Avatar._aimSm[k];
+        if (!sm || !isFinite(sm[0]) || !isFinite(sm[1])) {
+          sm = Avatar._aimSm[k] = [t[0], t[1]];
+        } else {
+          sm[0] += (t[0] - sm[0]) * aK;
+          sm[1] += (t[1] - sm[1]) * aK;
+        }
+        if (k.charAt(0) === 'r') {
+          var rb = Avatar._boneOf('rollSlots', k.slice(2));
+          if (rb) rb.rotation += sm[0];
+        } else {
+          var ab = Avatar._boneOf('aimSlots', k);
+          if (ab) { ab.x += sm[0]; ab.y += sm[1]; }
+        }
+      });
     },
 
     _voiceDb: function () {

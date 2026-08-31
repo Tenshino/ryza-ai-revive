@@ -158,6 +158,26 @@
 
 **App 侧连带**：TTS 失败/无音频不再把 `setTalking(true)` 卡死（说话改在音频就绪、`playUrl` 真正开播时才进 strong 档）；序章旁白改走 `App.playFile(src, null, true)`（吃口型 analyser、语音开关不吞序章）。
 
+### 3.8 注视/指尖跟随的瞬变平滑（2026-09-02 已修，不要退回去）
+
+用户报告「某些特定位置卡模型→重影」。扫掠回归定位到**三个单帧瞬变源**，全部收口到一个机制：
+
+1. `fingerTrackHeadThreshold=0.11 / BodyThreshold=0.3` 是硬门：指针距离比跨过
+   门槛的那一帧，head 目标从 0 跳到 `dx*0.7`（≈40 单位）、body 跳 `dx*0.55`
+   （≈85 单位）。→ `Avatar._ptrRamp(n, thr, sc)`：门槛 ±40% 窗口 smoothstep 渐入。
+2. **eye↔head 驱动增益**（`eyeK/headK` 0.18↔1）在 `_pickLook` 换驱动时单帧切换，
+   大 yaw 下头目标跳 ~50 单位。
+3. **followers[].delay 随驱动改变**：`_lookAt(delay)` 采样历史，delay 从 0.4→0
+   等于一次性追认 ~0.35s 的注视运动（≈48 单位/帧）。
+
+修复：`_applyLook` 改为「先算每根骨骼的**目标偏移**（ambient×gain×unit + finger×ramp×_ptrW×mul），
+再经 `Avatar._aimSm` 逐骨骼指数平滑（τ=0.12s）施加」；NaN 目标直接跳过不污染平滑器。
+单点平滑覆盖所有输入瞬变源（含以后新增的），不再逐处打补丁。
+回归：`motion_regression.js` 新增「指针径向扫掠（10s 出+10s 回，越 1.05×maxR 钳位边）
++ 60s 环境驱动重掷」，断言 `_aimSm` 每帧变化 <12u——实测两姿态 10.0/10.3u 通过。
+**注意**：断言对象是 `_aimSm`（注视系统自己的输出），不是骨骼位置（含动画基底，
+idle 重掷本身有合法位移，别改回测骨骼）。
+
 ---
 
 ## 4. 其它模块（对照旧 AUDIT 已修）
@@ -177,6 +197,32 @@
 1. 标题/语音钮是画布演出，不是官方 Lottie 运行时（包内没有运行时）
 2. `spine/objects/` 仍只有图集、没有完整 skel
 3. 闹钟仅前台
+4. ~~鼠标注视特定位置卡模型/重影~~ **【2026-09 已修，见 §3.8】**
+5. **【新·待修】点击反应结束回待机略突兀**（用户报告：状态之间切换可以，
+   退出点击态突兀）。嫌疑点（按优先级）：
+   a. `poke()` 出口：`addEmptyAnimation(6, tapReactionExitMix=0.3, 0)` 之后
+      `_loop` 里 `if (Avatar._addMuted && !Avatar._oneShotBusy()) _muteAdditives(false)`
+      ——一次性动作刚结束的那一帧立刻还原被静音的 8–14 肢体层；若
+      `_muteAdditives(false)` 的 setAnimation mix 太小/为 0，手臂会从
+      反应姿势直接弹回叠加层姿势。查 `_muteAdditives` 的 mix 值，出口应
+      用 `tapReactionExitMix`（0.3）级别的淡入，且最好延迟到 empty 淡出完成。
+   b. track 6 的 empty 淡出与 track 0/1 的交互：反应 clip 幅度大时 0.3s 可能仍短，
+      可叠 `performanceConfig` 的 exit 值（源 tapReactionExitMix 是权威，别乱改大）。
+6. **【新·待修】点击区域判定太粗**（点身体外围也触发）。现状：`hitPartAt`
+   用 `projectConfig.hitPartNames`（BB_head/BB_body/BB_arm_L/BB_arm_R/BB_weast/
+   BB_breast → head/body/arm_l/arm_r/weast/breast），但**只有当槽当前挂着
+   attachment 时才走多边形**，否则退化成骨根半径（head 140 / 其余 **220** 世界单位）
+   ——220 半径基本覆盖半个身体轮廓外沿，这就是误触来源。
+   源 skel 里确认存在 6 个 `BB_*` 包围盒（`strings` 扫 skel 验证），
+   修复方向：从 `skeleton.data` 直接取 BoundingBoxData（spine 4.2 运行时
+   `data.boundingBoxes` 或 skins attachments 里 constructor 名含 BoundingBox），
+   用其 `vertices`（局部坐标）× 槽骨骼世界变换 → 世界多边形 → `_pointInPoly`；
+   多边形全部 miss 时**返回 null**（不再大半径兜底），最多保留 head 一个小半径
+   （≤60）容错。探针写法（无浏览器）：
+   `const spine = eval(fs.readFileSync('web/vendor/spine-webgl.js','utf8') + '\n;spine');`
+   然后 `new spine.SkeletonBinary().readSkeletonData(buf.buffer)` 查
+   `data.boundingBoxes`/slot attachment 类型；把断言并入 motion_regression
+   （角点/体外坐标 → hitPartAt===null；脸中心 → 'head'）。
 
 **明确不做（官方服务端/商业能力）：** 登录/Firebase、订阅付费墙、代币/回合票购买、
 皮肤内购、远程资源门、公告、强制更新、分析、官方 marionette websocket。
@@ -277,4 +323,30 @@
   连续/重复领取、快照往返。
 - `scripts/boot_smoke.js`：真实 `index.html` 的 id 集 + 真模块假 DOM 假 Avatar，
   App.init 全链路 + 渲染面（任务卡/日历/状态/设置表单）不抛错。
-- `scripts/motion_regression.js`：立绘 60s×2 姿态，本轮未动未回归失败。
+- `scripts/motion_regression.js`：立绘 60s×2 姿态 + §3.8 指针扫掠断言。
+
+### 6.9 语言矩阵与内容本地化（2026-09-02）
+
+- **四槽独立**：`app.lang`（界面）/ `voice.lang`（tap_voice/alarm/prologue 目录）/
+  `llm.lang`（回复）/ `tts.lang`（朗读）。`Langs`（i18n.js）统一解析，auto 逐级回落。
+  朗读≠回复时 `Api.translate` 先翻译再合成，显示文字不变。
+- **提示词策略（用户拍板）**：persona 保持原版日文，只追加「## 出力言語（厳守）」段。
+  实测 token-plan qwen 通道：标签行保留、正文按指定语言输出。
+- **TTS 双提供商**：`openai`（MiMo 克隆，实测 200 返回 RIFF wav）；`qwen`
+  （百炼 DashScope `multimodal-generation`，`language_type` 跟随朗读槽，
+  音频 URL 走新增的 `GET /_proxy` 回拉转 blob——口型 analyser 需同源）。
+  声音复刻 `voice-enrollment` 接受 **base64 data URI**（本地莱莎原声直接注册，
+  无需公网托管）→ voice_id 自动填入。
+  **实测边界**：Token Plan 个人版 key 在 dashscope 401（其条款亦禁止 API 调用），
+  token-plan maas 主机无 TTS 模型（404）→ Qwen 槽必须用普通百炼 sk- key。
+- **命名硬规则**：人名/地名/物品名只用**源包内验证过**的官方译名。验证方法：
+  从 APK 提取 `libapp.so`，Dart 双字节字符串是 **UTF-16LE** 存储——按两种对齐
+  扫 CJK 串（`D:\agent\temp\apk-l10n\dump_ordered.py`，temp 会清，方法在案）；
+  英文名直接扫 ASCII 串。已验证并入库：18 个繁中人名（萊莎/卡爾/塔奧/米奧/
+  莫里茨/安佩爾/莉拉/羅密/賽莉/丹尼斯/科洛蒂婭/菲德麗卡/薩維里奧/迪安/多爾特/
+  安娜/沃爾卡/古老）、27 个英文名、地名（庫肯島周邊地區/克萊莉亞地區/王都周邊地區/
+  萊莎家/塔奧家門前/回復藥（草豆））、官方繁中教程句（點一下和萊莎聊天/點一下叫醒萊莎/
+  這裡是萊莎的夢中世界 等）。**未验证的一律保留日文原名**——早期自行发明的
+  尼梅德地方/冥界奥利姆/克劳迪娅 等已全部撤销。
+- 出口收敛：内容文本只经 `I18n.tc/tf`、`World.npcName/placeLabel`、
+  `Quests.titleOf/descOf/goalOf`，语言切换调 `App._relocalize()` 全量重绘。

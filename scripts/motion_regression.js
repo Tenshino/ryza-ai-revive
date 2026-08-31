@@ -165,7 +165,7 @@ function resetAvatar(skin) {
     _poseType: '', _sittingId: skin.sitting,
     _armG: null, _torsoG: null, _legG: null, _legLG: null, _legRG: null,
     _addMuted: false, _mutedSnap: null, _hideChara: false,
-    _lookCyc: null, _ptrW: 0, _ptrN: 0, _dt: 0,
+    _lookCyc: null, _ptrW: 0, _ptrN: 0, _dt: 0, _aimSm: null, _kSm: null,
     _blinkMode: 'blink', _closedDur: 0, _closedHold: 0, _tension: 0,
     _rollSm: 0, _exprBand: '',
     _lookMul: 1, _lipOpen: 0, _lipHold: 0, _lookHist: [], _lookClock: 0
@@ -349,6 +349,66 @@ for (const skin of SKINS) {
   Avatar._pointer.on = false;
   soak(L, label + ' pointer out', 3, function () { if (Avatar._ptrW < 0.05) sawPtrW.down = true; });
   if (!sawPtrW.down) fail(label + ': pointer-follow weight never ramped out');
+
+  /* Radial pointer sweep across the fingerTrack thresholds + a long soak
+     of driver re-picks. Measure the APPLIED aim contributions (Avatar
+     ._aimSm) — the gaze system's own output — so animation/base-pose
+     motion can't mask or fake a snap. The old hard threshold gate and
+     the instant delay/gain switch at driver re-pick both snapped the
+     head/body aim target by 40–85 units in a single frame (the reported
+     "特定角度卡模型/重影"). Everything must now move ≤12 u per frame. */
+  {
+    const sk = L.skeleton;
+    const face = sk.findBone('rig_face') || sk.findBone('head');
+    if (face) {
+      const maxR = 514.7;
+      const v = Avatar._view;
+      Avatar._pointer.on = true;
+      let prev = null, maxJump = 0, where = '';
+      const steps = Math.round(10 / DT);            // 10 s out, 10 s back
+      for (let i = 0; i <= steps * 2; i++) {
+        const phase = i <= steps ? i / steps : (2 * steps - i) / steps;
+        const n = phase * 1.05;
+        const wx = face.worldX + Math.cos(0.6) * n * maxR;
+        const wy = face.worldY + Math.sin(0.6) * n * maxR;
+        Avatar._pointer.x = (wx - v.left) * v.cssW / v.worldW;
+        Avatar._pointer.y = v.cssH - (wy - v.bottom) * v.cssH / v.worldH;
+        stepOnce(L, label + ' ptr sweep');
+        const sm = Avatar._aimSm || {};
+        if (prev) {
+          for (const k of Object.keys(sm)) {
+            if (!prev[k]) continue;
+            const d = Math.hypot(sm[k][0] - prev[k][0], sm[k][1] - prev[k][1]);
+            if (d > maxJump) { maxJump = d; where = k + ' @n=' + n.toFixed(3); }
+          }
+        }
+        prev = {};
+        for (const k of Object.keys(sm)) prev[k] = [sm[k][0], sm[k][1]];
+      }
+      /* plus 60 s of ambient driver re-picks with the pointer parked far
+         out (worst-case delay/gain transients) */
+      soak(L, label + ' ptr sweep ambient', 60, function () {
+        const sm2 = Avatar._aimSm || {};
+        if (prev) {
+          for (const k of Object.keys(sm2)) {
+            if (!prev[k]) continue;
+            const d = Math.hypot(sm2[k][0] - prev[k][0], sm2[k][1] - prev[k][1]);
+            if (d > maxJump) { maxJump = d; where = k + ' ambient'; }
+          }
+        }
+        prev = {};
+        for (const k of Object.keys(sm2)) prev[k] = [sm2[k][0], sm2[k][1]];
+      });
+      Avatar._pointer.on = false;
+      soak(L, label + ' ptr sweep settle', 2);
+      if (!(maxJump < 12)) {
+        fail(label + ': pointer/driver sweep snapped aim contribution ' +
+             maxJump.toFixed(1) + ' units in one frame (' + where +
+             ') — gaze transients not smoothed');
+      }
+      console.log(label + ': gaze sweep max applied step ' + maxJump.toFixed(1) + 'u');
+    }
+  }
 
   let closedSeen = false, eyeModes = {};
   soak(L, label + ' blink soak', 240, function () {
