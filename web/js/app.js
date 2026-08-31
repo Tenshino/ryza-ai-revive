@@ -433,8 +433,10 @@
 
     updateHud: function () {
       var st = Config.section('state');
-      var modes = { chat: '雑談', story: '物語', immersive: '没入', asmr: 'ASMR', text: 'テキスト' };
-      document.getElementById('hud-mode').textContent = modes[st.mode] || st.mode;
+      /* the same localized names the mode sheet shows (source key family
+         conversationMode.*) — this used to be a hardcoded Japanese map, so the
+         HUD chip stayed 雑談/物語 even in an English UI */
+      document.getElementById('hud-mode').textContent = I18n.t('mode.' + st.mode) || st.mode;
       var place = World.find(st.stage);
       document.getElementById('hud-place').textContent =
         place ? World.placeLabel(st.stage, place.stage) : st.stage;

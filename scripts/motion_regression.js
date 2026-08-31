@@ -762,3 +762,145 @@ for (const skin of SKINS) {
 })();
 
 console.log('\n' + passCount + ' skins + 5 invariant checks passed.');
+
+/* ---- posture + camera invariants (the 隠れ家前 regression) -------------
+   Everything here is what the user sees as 「黑边 / 背景跳 / 模型搞反 /
+   切场景后是放大的坐姿」. Scene plates are loaded from the real shipped
+   .skel files with a stub atlas: only geometry matters. */
+(function checkPostureCamera() {
+  const SCENES = JSON.parse(fs.readFileSync(
+    path.join(WEB, 'assets', '_index', 'scenes.json'), 'utf8'));
+  const HIDEOUT = 'stage_01_002_01';        // the only dual-posture stage
+  const HOME = 'stage_01_001_04';           // ライザの家, sitting midground only
+
+  function buildScene(stage, cssW, cssH) {
+    const entry = SCENES[stage].mor;
+    const data = bin.readSkeletonData(
+      new Uint8Array(fs.readFileSync(path.join(WEB, entry.skel))));
+    const skel = new spine.Skeleton(data);
+    const cfg = JSON.parse(fs.readFileSync(path.join(WEB, entry.config), 'utf8'));
+    return {
+      cssW: cssW, cssH: cssH, dpr: 1, ready: true, data: data, skeleton: skel,
+      state: new spine.AnimationState(new spine.AnimationStateData(data)),
+      _cover: null, _coverDone: false, sceneConfig: cfg
+    };
+  }
+  function setup(stage, posturePref, skinId, cssW, cssH) {
+    const skin = SKINS.filter(s => s.id === skinId)[0];
+    const L = resetAvatar(skin);
+    const S = buildScene(stage, cssW, cssH);
+    Avatar.scene = S;
+    Avatar.sceneConfig = S.sceneConfig;
+    Avatar.host = { mvp: { ortho2d() {} }, gl: null,
+                    canvas: { width: 1, height: 1, clientWidth: cssW, clientHeight: cssH } };
+    Config.set('state.posture', posturePref);
+    Config.set('state.mode', 'chat');
+    Avatar._loadedSkelId = skinId;
+    Avatar._measureHeadLocal();
+    Avatar.resize();
+    return { L: L, S: S };
+  }
+  const view = () => ({ b: Avatar._view.bottom, t: Avatar._view.bottom + Avatar._view.worldH,
+                        l: Avatar._view.left, r: Avatar._view.left + Avatar._view.worldW,
+                        h: Avatar._view.worldH });
+
+  /* 1. the skin identity is what the data says, and standing is the default */
+  if (Avatar.postureKey.toString().indexOf('posture_standing') < 0) {
+    fail('postureKey lost its standing default');
+  }
+  const skins = JSON.parse(fs.readFileSync(
+    path.join(WEB, 'assets', '_index', 'skins.json'), 'utf8'));
+  const byId = {};
+  skins.forEach(s => { byId[s.id] = s; });
+  ['crf_skn_002_0001_01', 'crf_skn_002_0001_99'].forEach(id => {
+    const g = JSON.parse(fs.readFileSync(
+      path.join(SKEL_DIR, id, id + '_gesture.json'), 'utf8'));
+    const want = id.endsWith('_99') ? 'posture_standing' : 'posture_sitting';
+    if (g.projectConfig.postureKey !== want) {
+      fail(id + ' gesture says ' + g.projectConfig.postureKey + ', expected ' + want);
+    }
+  });
+  console.log('OK   skin identity: _01=座り/sitting  _99=立ち/standing (gesture projectConfig.postureKey)');
+
+  /* 2. hideout: the background window must not depend on the posture, and
+        must stay inside the painted plate (no black bars) */
+  for (const [w, h] of [[360, 640], [420, 860], [900, 420], [1000, 700], [340, 560]]) {
+    const sit = setup(HIDEOUT, 'posture_sitting', 'crf_skn_002_0001_01', w, h);
+    const sitView = view(), sitHead = Avatar.avatar.skeleton.findBone('head').worldY;
+    const sitCov = Avatar._coverFor(Avatar.scene);
+    setup(HIDEOUT, 'posture_standing', 'crf_skn_002_0001_99', w, h);
+    const stdView = view(), stdHead = Avatar.avatar.skeleton.findBone('head').worldY;
+    for (const k of ['b', 't', 'l', 'r']) {
+      if (Math.abs(sitView[k] - stdView[k]) > 0.5) {
+        fail(`background window moves on posture toggle at ${w}x${h}: ${k} ` +
+             sitView[k].toFixed(1) + ' → ' + stdView[k].toFixed(1));
+      }
+    }
+    if (sitCov && (sitView.b < sitCov.y0 - 0.5 || sitView.t > sitCov.y1 + 0.5 ||
+                   sitView.l < sitCov.x0 - 0.5 || sitView.r > sitCov.x1 + 0.5)) {
+      fail(`camera escapes the painted plate at ${w}x${h}: view ` +
+           JSON.stringify(sitView) + ' plate ' + JSON.stringify(sitCov));
+    }
+    /* eyelines must agree, or the model slides when the posture changes */
+    const frac = y => (y - sitView.b) / sitView.h;
+    if (Math.abs(frac(sitHead) - frac(stdHead)) > 0.03) {
+      fail(`eyeline jumps on posture toggle at ${w}x${h}: ` +
+           frac(sitHead).toFixed(3) + ' vs ' + frac(stdHead).toFixed(3));
+    }
+  }
+  console.log('OK   隠れ家前: plate-fitted camera, posture-independent window, matched eyeline (5 aspects)');
+
+  /* 3. leaving the stage must not carry the sitting skin or its scale */
+  const away = setup(HOME, 'posture_sitting', 'crf_skn_002_0001_01', 420, 860);
+  if (Avatar.postureKey() !== 'posture_standing') {
+    fail('a stale posture_sitting leaks into a single-posture stage: ' + Avatar.postureKey());
+  }
+  /* the camera is solved for the skeleton that is actually loaded, never for
+     the posture that is merely requested (that mismatch was the 1.488×
+     sitting-model flash) */
+  const camForLoaded = Avatar._camParams(Avatar._loadedPosture());
+  if (Math.abs(Avatar.avatar.skeleton.scaleX - camForLoaded.scale * (Avatar._view.worldH / camForLoaded.worldH)) > 1e-6) {
+    fail('character scale does not match the loaded skeleton\'s posture camera');
+  }
+  /* the real index (resetAvatar narrows it to the one loaded skin) */
+  Avatar.skinsIndex = skins;
+  if (Avatar.resolveSkel('crf_skn_002_0001').id !== 'crf_skn_002_0001_99') {
+    fail('resolveSkel still loads the sitting skin off the hideout: ' +
+         Avatar.resolveSkel('crf_skn_002_0001').id);
+  }
+  console.log('OK   leaving 隠れ家前: posture resets to standing, skin + scale follow the loaded skeleton');
+
+  /* 4. ASMR close-up must also stay inside the plate */
+  Config.set('state.mode', 'asmr');
+  setup(HIDEOUT, 'posture_sitting', 'crf_skn_002_0001_01', 420, 860);
+  Config.set('state.mode', 'asmr');
+  Avatar.resize();
+  const av = view(), ac = Avatar._coverFor(Avatar.scene);
+  if (ac && (av.b < ac.y0 - 0.5 || av.t > ac.y1 + 0.5)) {
+    fail('ASMR close-up walks off the plate: ' + JSON.stringify(av) + ' vs ' + JSON.stringify(ac));
+  }
+  console.log('OK   ASMR close-up stays inside the plate');
+
+  /* 5. EVERY shipped scene, both postures, portrait + two landscape shapes:
+        the solved window must never show unpainted art. This is the guard for
+        「黑边」 in general — the hideout was only the loudest case. */
+  Config.set('state.mode', 'chat');
+  let plates = 0;
+  for (const stage of Object.keys(SCENES)) {
+    for (const [w, h] of [[420, 860], [900, 420], [1400, 380]]) {
+      for (const skin of ['crf_skn_002_0001_99', 'crf_skn_002_0001_01']) {
+        setup(stage, skin.endsWith('_99') ? 'posture_standing' : 'posture_sitting', skin, w, h);
+        const v = view(), c = Avatar._coverFor(Avatar.scene);
+        if (!c) { fail(stage + ' ' + w + 'x' + h + ': plate measured empty'); }
+        plates++;
+        if (v.b < c.y0 - 0.5 || v.t > c.y1 + 0.5 || v.l < c.x0 - 0.5 || v.r > c.x1 + 0.5) {
+          fail(`unpainted area exposed at ${stage} ${w}x${h} (${skin}): view ` +
+               JSON.stringify({ b: Math.round(v.b), t: Math.round(v.t), l: Math.round(v.l), r: Math.round(v.r) }) +
+               ' plate ' + JSON.stringify({ y0: Math.round(c.y0), y1: Math.round(c.y1),
+                                            x0: Math.round(c.x0), x1: Math.round(c.x1) }));
+        }
+      }
+    }
+  }
+  console.log('OK   ' + plates + ' scene × viewport × posture camera solves all stay inside the plate');
+})();

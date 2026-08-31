@@ -4,15 +4,18 @@
    (ManagedWebGLRenderingContext + explicit Matrix4 MVP + PolygonBatcher +
    SkeletonRenderer). SceneRenderer's OrthoCamera is not used.
 
-   Camera: scene and character share one orthographic view taken from
-   posture_camera.json (world units, 1 CSS pixel = 1/zoom world units).
-   Character offset/scale also come from that file. ASMR uses the closer
-   zoom; its panY is out of skeleton range so the look-at stays on the
-   face instead of the raw pan.
+   Camera: scene and character share one orthographic window (Avatar._view).
+   posture_camera.json gives the authored window per posture (sitting 1.93,
+   standing 1.45) and a closer ASMR pair; _applyCamera shrinks and shifts that
+   window until it fits inside the scene plate's painted box, so no viewport
+   aspect can expose unpainted art. The character is mapped through the same
+   window, which keeps her authored on-screen framing regardless of what the
+   plate forced on the camera — see the camera section for the full reasoning.
 
    Emotion comes from gesture.json EmotionProfilesV4:
    - idle: intensityProfiles.*.basePoses, mixed with mixDurationMin/Max
-   - face: expressionSets + mixDurationEye/Eyebrow
+   - face: expressionSets (absent weight = 1, explicit 0 = author-disabled),
+     re-rolled on the pose-reroll tick while she is not talking
    - FX: intensityProfiles.*.effectSets → fxOnAnimNames / fxOffAnimNames
      (setup-pose cheek/nose_hi stay on until the OFF clip + slot hide)
    - gaze/finger: DriverDefs + lookAtBoneHierarchy + fingerTrack* / aim·roll */
@@ -163,7 +166,6 @@
     _lookMul: 1,
     /* frozen pointer reference during one-shots (see _applyLook) */
     _faceRef: null,
-    _fxNames: null,
     /* FX pick memo (emotion|band) so one reply does not re-roll blush twice */
     _fxPick: null,
     /* gaze driver cycle: { band, spec, left } honours ambientBindings
@@ -248,39 +250,62 @@
     },
 
     /* --------------------------------------------------- posture (source) */
-    /* Which skeleton the current scene wants. The scene JSON is the only
-       authority: `midgroundPostures` names the postures its midground was
-       authored for (196 of the 200 shipped scene/time combinations list
-       posture_sitting only; 隠れ家前 / stage_01_002_01 lists both).
-       The gesture files confirm the identity from the other side:
-         crf_skn_002_0001_01 → name 座りライザ（普通座り）, postureKey sitting
-         crf_skn_002_0001_99 → name ライザ(3の通常)_立ち,  postureKey standing
-       so sitting ⇒ _01 and standing ⇒ _99 (never the reverse).
-       On the dual-posture stage the player chooses, and the default is
-       STANDING — that is the only place a choice exists at all. */
+    /* Which skeleton to show.
+       The gesture files are the authority on what each skin IS:
+         crf_skn_002_0001_01 → name 座りライザ（普通座り）, projectConfig
+                               .postureKey = posture_sitting (barefoot, vest +
+                               shorts, folded leg chain)
+         crf_skn_002_0001_99 → name ライザ(3の通常)_立ち,  projectConfig
+                               .postureKey = posture_standing (jacket, long
+                               socks, boots, straight 1704u leg chain)
+       so sitting ⇒ _01 and standing ⇒ _99, and the DEFAULT is standing — the
+       original starts on her feet, which is the whole reason the reversed
+       default read as "the models are swapped from the start".
+       The scene's `midgroundPostures` is NOT a constraint on that: 196 of the
+       200 shipped scene/time combinations list posture_sitting only (the
+       midground furniture — sofa_root etc. — was authored for her seated), and
+       gating the skin on it would make sitting unavoidable everywhere. It
+       decides only where the sit/stand toggle is OFFERED, i.e. where a
+       midground exists for both. */
     _scenePostures: function () {
       var cfg = Avatar.sceneConfig && Avatar.sceneConfig.config;
       return (cfg && cfg.midgroundPostures) || [];
     },
 
     postureKey: function () {
-      var m = Avatar._scenePostures();
-      if (m.length > 1) {
-        try {
-          var want = Config.section('state').posture;
-          if (want === 'posture_standing' || want === 'posture_sitting') return want;
-        } catch (e) { /* Config not ready */ }
-        return 'posture_standing';
-      }
-      return m[0] || 'posture_standing';
+      /* The stored choice is honoured ONLY where the scene has a midground for
+         both postures. Everywhere else the default (standing) applies — and it
+         must be the scene that decides, not the saved value: reading a stale
+         posture_sitting after leaving 隠れ家前 used to render the sitting skin
+         (at the sitting camera) on the next stage until the stage after that. */
+      if (!Avatar.supportsBothPostures()) return 'posture_standing';
+      try {
+        var want = Config.section('state').posture;
+        if (want === 'posture_standing' || want === 'posture_sitting') return want;
+      } catch (e) { /* Config not ready */ }
+      return 'posture_standing';
     },
 
+    /* Which posture the skeleton ACTUALLY on screen represents. During a
+       posture or stage swap the requested posture and the loaded skin disagree
+       for a moment (loadScene re-solves the camera before loadSkin has swapped
+       the skeleton) — placing the old skeleton with the new posture's camera
+       flashed a 1.488× sitting model on the next stage. */
+    _loadedPosture: function () {
+      var id = Avatar._loadedSkelId || '';
+      var m = /_(01|99)$/.exec(id);
+      return m ? (m[1] === '99' ? 'posture_standing' : 'posture_sitting')
+               : Avatar.postureKey();
+    },
+
+    /* True only on stages whose scene lists both postures — in the shipped
+       pack that is 隠れ家前 / stage_01_002_01, at every time of day. */
     supportsBothPostures: function () {
       return Avatar._scenePostures().length > 1;
     },
 
-    /* The posture a scene asks for first — used for the (posture-independent)
-       background window, see _solveView. */
+    /* The posture a scene's midground was drawn for first — used for the
+       posture-independent background window, see _applyCamera. */
     _primaryPosture: function () {
       var m = Avatar._scenePostures();
       return m[0] || 'posture_standing';
@@ -294,8 +319,12 @@
       var skins = Avatar.skinsIndex || [];
       var outfit = Avatar.outfitOf(outfitId);
       var wantSuf = Avatar.postureKey() === 'posture_standing' ? '99' : '01';
-      var order = [outfit + '_' + wantSuf, outfit + '_01', outfit + '_99',
-                   'crf_skn_002_0001_' + wantSuf, 'crf_skn_002_0001_01'];
+      var otherSuf = wantSuf === '99' ? '01' : '99';
+      /* Only 0001 ships skeletons (0002/0003/0004 are preview-only), so the
+         wanted posture usually falls back to the same outfit's other skin
+         before it falls back to a different outfit at all. */
+      var order = [outfit + '_' + wantSuf, outfit + '_' + otherSuf,
+                   'crf_skn_002_0001_' + wantSuf, 'crf_skn_002_0001_' + otherSuf];
       var i, id, hit;
       for (i = 0; i < order.length; i++) {
         id = order[i];
@@ -363,7 +392,28 @@
           if (verts[j + 1] < y0) y0 = verts[j + 1];
           if (verts[j + 1] > y1) y1 = verts[j + 1];
         }
-        if (!(x1 > x0) || !(y1 > y0)) continue;
+        if (!(x1 > x0) || !(y1 > y0)) {
+          /* A RegionAttachment keeps its four corners in an `offset` cache
+             filled by updateRegion(); that cache can still be empty the first
+             time we look (scene load happens before the first draw, and a
+             headless harness has no real atlas). Derive the same box from the
+             attachment size and the bone matrix rather than reporting "no
+             plate" — a missed cover means a missed clamp means black bars. */
+          if (!(att instanceof spine.RegionAttachment) || !att.width || !att.height ||
+              !isFinite(slot.bone.a)) continue;
+          var hw = att.width / 2, hh = att.height / 2, bn = slot.bone;
+          var corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]];
+          x0 = y0 = 1e9; x1 = y1 = -1e9;
+          for (j = 0; j < 4; j++) {
+            var px = corners[j][0] * bn.a + corners[j][1] * bn.b + bn.worldX;
+            var py = corners[j][0] * bn.c + corners[j][1] * bn.d + bn.worldY;
+            if (px < x0) x0 = px;
+            if (px > x1) x1 = px;
+            if (py < y0) y0 = py;
+            if (py > y1) y1 = py;
+          }
+          if (!(x1 > x0) || !(y1 > y0)) continue;
+        }
         /* The LARGEST quad, not the union: a far-away foreground strip would
            otherwise pretend the gap under the backdrop is covered. */
         if (!best || (x1 - x0) * (y1 - y0) > best.w * best.h) {
@@ -413,7 +463,7 @@
     _applyCamera: function () {
       var host = Avatar.host, L = Avatar.scene || Avatar.avatar;
       if (!host || !L || !L.cssW || !L.cssH) return;
-      var active = Avatar._camParams(Avatar.postureKey());
+      var active = Avatar._camParams(Avatar._loadedPosture());
       /* The background is framed by the scene's own posture, not the player's
          choice, so toggling sit/stand cannot move it. On single-posture scenes
          the two are the same window anyway. */
@@ -464,7 +514,7 @@
     _placeCharacter: function () {
       var L = Avatar.avatar, S = Avatar.scene;
       if (!L || !L.skeleton) return;
-      var cam = Avatar._camParams(Avatar.postureKey());
+      var cam = Avatar._camParams(Avatar._loadedPosture());
       var x = cam.offsetX, y = cam.offsetY;
       if (S && S.skeleton) {
         var bone = S.skeleton.findBone('chara_root');
@@ -475,20 +525,20 @@
       var sx = (v && a) ? v.left + (x - a.left) * k : x;
       var sy = (v && a) ? v.bottom + (y - a.bottom) * k : y;
       var sc = cam.scale * k;
-      /* Eyeline alignment — dual-posture stages only.
+      /* Eyeline correction for framings the data cannot support.
          posture_camera.json frames the SITTING head at 0.70 of the window
-         (upper third, the framing every other stage uses) but the STANDING
-         head at 0.37, and the ASMR close-up at 0.49 sitting vs 0.10 standing:
-         the standing pair was authored against art taller than the plate that
-         ships here, so on screen she sank to the bottom of the frame and the
-         surplus camera fell off the plate as a black bar. Her authored SIZE
-         (scale/zoom) is kept; only the vertical placement is moved onto the
-         same eyeline for both postures — so toggling sit/stand cannot slide
-         her up or down either. Other scenes never enter this branch. */
-      if (Avatar.supportsBothPostures() && Avatar._headLocal != null &&
-          v && v.worldH && v.worldH > 0) {
+         (upper third, the framing every home scene is composed around) but the
+         STANDING head at 0.37, and the ASMR close-up at 0.49 sitting vs 0.10
+         standing: the standing pair was authored against art taller than the
+         plate that ships here, so on screen she sank to the bottom of the
+         frame and the surplus camera fell off the plate as a black bar. Only
+         framings more than a tenth of the screen off the line are moved, so a
+         scene whose authored pan deliberately sits her lower or higher keeps
+         its composition. Her authored SIZE (scale × zoom) is never touched. */
+      if (Avatar._headLocal != null && v && v.worldH > 0) {
         var target = Avatar._asmrOn() ? 0.50 : 0.68;
-        sy += (v.bottom + target * v.worldH) - (sy + Avatar._headLocal * sc);
+        var frac = (sy + Avatar._headLocal * sc - v.bottom) / v.worldH;
+        if (Math.abs(frac - target) > 0.10) sy += (target - frac) * v.worldH;
       }
       L.skeleton.x = sx;
       L.skeleton.y = sy;
@@ -887,7 +937,7 @@
     },
 
     _sittingFromPosture: function () {
-      var p = Avatar.postureKey() || '';
+      var p = Avatar._loadedPosture() || '';
       if (/agura/i.test(p)) return 'sitting_agura';
       if (/stand/i.test(p)) return 'standing';
       return 'sitting_normal';
@@ -1023,6 +1073,10 @@
       return '';
     },
 
+    /* Lookup by GroupId. The runtime reaches groups through _pickLayerGroup
+       (weighted, posture/pose filtered); this direct lookup exists for
+       scripts/motion_regression.js, which asserts the occupancy-letter → track
+       mapping straight from the data. */
     _findGroup: function (id) {
       if (!id) return null;
       var list = Avatar._motionGroups(), i;
@@ -1428,7 +1482,6 @@
       var key = names.slice().sort().join(',');
       if (key === Avatar._fxKey && !immediate) return;
       Avatar._fxKey = key;
-      Avatar._fxNames = names;
       var pc = Avatar._pc();
       var onMap = pc.fxOnAnimNames || {};
       var offMap = pc.fxOffAnimNames || {};

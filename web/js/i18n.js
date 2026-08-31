@@ -109,7 +109,9 @@
       'slot.title': '存档槽', 'slot.empty': '空槽', 'slot.save': '保存到此槽',
       'slot.load': '读取', 'vol.bgm': 'BGM', 'vol.ambient': '环境音',
       'vol.voice': '语音', 'vol.se': '音效',
-      'mode.sheet': '对话模式',
+      'mode.sheet': '对话模式', 'mode.chat': '闲聊', 'mode.story': '故事', 'mode.immersive': '沉浸',
+      'mode.asmr': 'ASMR', 'mode.text': '文字',
+      'style.voice': '🔊 语音', 'style.text': '📝 文字',
       'nav.daily': '每日登录', 'dl.title': '每日登录',
       'quest.no': '主线', 'quest.side': '支线', 'quest.goal': '目标',
       'quest.cost': '体力', 'quest.history': '已完成的委托', 'quest.newOk': '新委托：',
@@ -265,7 +267,9 @@
       'slot.title': 'セーブスロット', 'slot.empty': '空き', 'slot.save': 'ここへ保存',
       'slot.load': '読み込む', 'vol.bgm': 'BGM', 'vol.ambient': '環境音',
       'vol.voice': 'ボイス', 'vol.se': 'SE',
-      'mode.sheet': '会話モード',
+      'mode.sheet': '会話モード', 'mode.chat': '雑談', 'mode.story': '物語', 'mode.immersive': '没入',
+      'mode.asmr': 'ASMR', 'mode.text': 'テキスト',
+      'style.voice': '🔊 音声', 'style.text': '📝 文字',
       'nav.daily': '毎日ログイン',
       'quest.no': 'メイン', 'quest.side': 'サブ', 'quest.goal': '目標',
       'quest.cost': 'スタミナ', 'quest.history': 'クリア済み', 'quest.newOk': '新しいクエスト：',
@@ -421,7 +425,9 @@
       'slot.title': 'Save slots', 'slot.empty': 'Empty', 'slot.save': 'Save here',
       'slot.load': 'Load', 'vol.bgm': 'BGM', 'vol.ambient': 'Ambient',
       'vol.voice': 'Voice', 'vol.se': 'SE',
-      'mode.sheet': 'Talk mode',
+      'mode.sheet': 'Talk mode', 'mode.chat': 'Chat', 'mode.story': 'Story', 'mode.immersive': 'Immersive',
+      'mode.asmr': 'ASMR', 'mode.text': 'Text',
+      'style.voice': '🔊 Voice', 'style.text': '📝 Text',
       'nav.daily': 'Daily login', 'dl.title': 'Daily login',
       'quest.no': 'Main', 'quest.side': 'Side quest', 'quest.goal': 'Goal',
       'quest.cost': 'stamina', 'quest.history': 'Cleared', 'quest.newOk': 'New quest: ',
@@ -503,7 +509,9 @@
     'onb.next': '下一步', 'onb.finish': '完成問卷', 'onb.skip': '跳過',
     'wm.title': '歡迎任務',
     'inv.title': '道具', 'inv.empty': '口袋是空的。',
-    'mode.sheet': '對話模式',
+    'mode.sheet': '對話模式', 'mode.chat': '閒聊', 'mode.story': '故事', 'mode.immersive': '沉浸',
+    'mode.asmr': 'ASMR', 'mode.text': '文字',
+    'style.voice': '🔊 語音', 'style.text': '📝 文字',
     'nav.daily': '每日登入', 'dl.title': '每日登入',
     'dl.subtitle': '每天回來跟萊莎打個招呼，連續登入有獎勵。',
     'dl.progress': '連續 {n} 天', 'dl.next': '下一站：{r}',
@@ -541,7 +549,8 @@
     'nav.fullscreen': 'पूर्ण स्क्रीन', 'nav.newTalk': 'नई बात',
     'nav.welcome': 'स्वागत', 'nav.profile': 'प्रोफ़ाइल',
     'talk.resetTitle': 'नई बात शुरू करें?',
-    'title.start': 'शुरू', 'mode.sheet': 'बात मोड'
+    'title.start': 'शुरू', 'mode.sheet': 'बात मोड' , 'mode.chat': 'चैट', 'mode.story': 'कहानी', 'mode.immersive': 'इमर्सिव',
+    'mode.asmr': 'ASMR', 'mode.text': 'टेक्स्ट', 'style.voice': '🔊 वॉइस', 'style.text': '📝 टेक्स्ट'
   });
 
   T.id = inherit(T.en, {
@@ -555,7 +564,8 @@
     'nav.fullscreen': 'Layar penuh', 'nav.newTalk': 'Obrolan baru',
     'nav.welcome': 'Misi selamat datang', 'nav.profile': 'Profil',
     'talk.resetTitle': 'Mulai obrolan baru?',
-    'title.start': 'Mulai', 'mode.sheet': 'Mode obrolan'
+    'title.start': 'Mulai', 'mode.sheet': 'Mode obrolan' , 'mode.chat': 'Obrolan', 'mode.story': 'Cerita', 'mode.immersive': 'Imersif',
+    'mode.asmr': 'ASMR', 'mode.text': 'Teks', 'style.voice': '🔊 Suara', 'style.text': '📝 Teks'
   });
 
   T['pt-br'] = inherit(T.en, {
@@ -569,7 +579,8 @@
     'nav.fullscreen': 'Tela cheia', 'nav.newTalk': 'Nova conversa',
     'nav.welcome': 'Boas-vindas', 'nav.profile': 'Perfil',
     'talk.resetTitle': 'Começar uma nova conversa?',
-    'title.start': 'Começar', 'mode.sheet': 'Modo de conversa'
+    'title.start': 'Começar', 'mode.sheet': 'Modo de conversa' , 'mode.chat': 'Bate-papo', 'mode.story': 'História', 'mode.immersive': 'Imersivo',
+    'mode.asmr': 'ASMR', 'mode.text': 'Texto', 'style.voice': '🔊 Voz', 'style.text': '📝 Texto'
   });
 
   /* =====================================================================
