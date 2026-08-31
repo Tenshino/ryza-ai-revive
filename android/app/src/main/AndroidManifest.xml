@@ -16,7 +16,13 @@
             android:exported="true"
             android:configChanges="orientation|screenSize|keyboardHidden|uiMode"
             android:windowSoftInputMode="adjustResize"
+            android:windowLayoutInDisplayCutoutMode="shortEdges"
             android:theme="@android:style/Theme.Black.NoTitleBar.Fullscreen">
+            <!-- shortEdges (API 27+, ignored below): without it Android
+                 letterboxes the cutout region with BLACK bars on notched
+                 phones — half of the reported phone letterboxing. The web
+                 layer already pads the top bar with env(safe-area-inset-top)
+                 and the viewport meta ships viewport-fit=cover. -->
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

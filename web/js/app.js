@@ -64,6 +64,31 @@
 
     esc: function (s) { return String(s == null ? '' : s); },
 
+    /* Desktop UI zoom. #phone now fills the window (no more letterbox), so a
+       small window must scale the fixed-px chrome instead of letting it
+       crowd/overflow. CSS zoom scales the whole layout as one; pointer math
+       divides it back out via Avatar._cssZoom, and the canvas backing store
+       multiplies dpr by it (see avatar.js). Electron-only: phones keep zoom
+       1 and rely on the fluid full-viewport layout. */
+    _fitUi: function () {
+      var el = document.getElementById('phone');
+      if (!el) return;
+      if (!window.ryzaShell) { el.style.zoom = ''; return; }
+      /* MUST use innerWidth/innerHeight, never #phone.clientWidth: clientWidth
+         is already divided by the active zoom, which feeds back and
+         oscillates the scale between zoomed and 1.0 on every check. */
+      var w = window.innerWidth || el.clientWidth;
+      var h = window.innerHeight || el.clientHeight;
+      if (!w || !h) return;
+      var z = Math.min(w / 420, h / 860);
+      z = Math.max(0.8, Math.min(1.25, z));
+      if (Math.abs(z - (App._uiZoom || 1)) > 0.02) {
+        App._uiZoom = z;
+        el.style.zoom = String(z);
+        if (window.Avatar && Avatar.resize) Avatar.resize();
+      }
+    },
+
     /* -------------------------------------------------------------- boot */
     init: function () {
       I18n.setLang(Config.section('app').lang || 'zh');
@@ -108,6 +133,8 @@
         App.renderMemory();
         Welcome.render(document.getElementById('welcome-body'));
         if (window.Fx) Fx.init();
+        App._fitUi();
+        window.addEventListener('resize', App._fitUi);
 
         Onboarding.showTitle(function () {
           if (!Onboarding.isDone()) {
@@ -520,7 +547,10 @@
       document.getElementById('avatar-hit').onclick = function (ev) {
         if (App._inTutorial) { Onboarding.tutorialAdvance(); return; }
         var rect = ev.target.getBoundingClientRect();
-        var x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+        /* rect is in viewport px; layout px need the zoom divided out
+           (identity when zoom is 1 — phones/browser). */
+        var z = (window.Avatar && Avatar._cssZoom) ? Avatar._cssZoom(ev.target) : 1;
+        var x = (ev.clientX - rect.left) / z, y = (ev.clientY - rect.top) / z;
         var part = Avatar.hitPartAt(x, y);
         if (!part) return;   /* miss = no ripple, no SE, no reaction */
         App._ripple(x, y);
@@ -906,7 +936,8 @@
         App.playUrl(url);
       }).catch(function (e) {
         App.toast(e.message === 'NO_KEY' ? I18n.t('toast.needKey')
-                                         : I18n.t('toast.ttsFail') + e.message, true);
+              : e.message === 'NO_MODEL' ? I18n.t('toast.needModel')
+              : I18n.t('toast.ttsFail') + e.message, true);
       });
     },
 
@@ -1401,10 +1432,16 @@
         { v: 'off', t: T('settings.ttsMode.off') }
       ], function (v) { Config.set('tts.mode', v); App.buildSettings(); });
       if (Config.section('tts').mode === 'clone') {
+        App._field(w, T('settings.model'), Config.section('tts').modelClone,
+          function (v) { Config.set('tts.modelClone', v); },
+          { hint: '克隆通道使用的模型 id（服务端提供，如 MiMo 的声音克隆模型）' });
         App._field(w, T('settings.refAudio'), Config.section('tts').reference,
           function (v) { Config.set('tts.reference', v); },
           { hint: '必须是 wav 或 mp3；APK 里的原声是 m4a，需先转码' });
       } else if (Config.section('tts').mode === 'preset') {
+        App._field(w, T('settings.model'), Config.section('tts').modelPreset,
+          function (v) { Config.set('tts.modelPreset', v); },
+          { hint: '预设音色通道使用的模型 id（服务端提供）' });
         App._field(w, T('settings.presetVoice'), Config.section('tts').presetVoice,
           function (v) { Config.set('tts.presetVoice', v); });
       }
@@ -1588,6 +1625,11 @@
       var tts = Config.section('tts');
       var key = (tts.provider === 'qwen') ? tts.qwenApiKey : tts.apiKey;
       if (!key) { App.toast(I18n.t('toast.needKey'), true); return; }
+      var model = (tts.provider === 'qwen') ? (tts.qwenModel || 'qwen3-tts-flash')
+                : (tts.mode === 'clone' ? tts.modelClone : tts.modelPreset);
+      if (!model || model === 'tts-model' || model === 'voice-clone-model') {
+        App.toast(I18n.t('toast.needModel'), true); return;
+      }
       App.toast('合成中…');
       Api.speak('やあ、聞こえてる？').then(function (url) {
         if (!url) { App.toast('语音已关闭'); return; }

@@ -197,10 +197,23 @@
       }).catch(function () { onReady && onReady(); });
     },
 
+    /* Layout-px → viewport-px scale for an element inside #phone (Electron
+       UI zoom, see App._fitUi). Self-measured so it is correct under BOTH
+       zoom conventions: standardised Chrome ≥128 reports the rect in
+       viewport px (ratio = zoom), older WebViews report it in layout px
+       (ratio = 1 — and they never get zoomed anyway, the gate is Electron).
+       Every clientX/Y→layout conversion divides by this; the canvas backing
+       store multiplies its dpr by it. */
+    _cssZoom: function (el) {
+      if (!el || !el.clientWidth || !el.getBoundingClientRect) return 1;
+      var w = el.getBoundingClientRect().width;
+      return (w > 0 && w / el.clientWidth) || 1;
+    },
+
     resize: function () {
       var host = Avatar.host;
       if (!host) return;
-      var dpr = Math.max(1, window.devicePixelRatio || 1);
+      var dpr = Math.max(1, window.devicePixelRatio || 1) * Avatar._cssZoom(host.canvas);
       var w = Math.max(1, Math.floor(host.canvas.clientWidth));
       var h = Math.max(1, Math.floor(host.canvas.clientHeight));
       var bw = Math.max(1, Math.floor(w * dpr));
@@ -1418,8 +1431,9 @@
       hit._lookBound = true;
       var on = function (ev) {
         var rect = hit.getBoundingClientRect();
-        Avatar._pointer.x = ev.clientX - rect.left;
-        Avatar._pointer.y = ev.clientY - rect.top;
+        var z = Avatar._cssZoom(hit);
+        Avatar._pointer.x = (ev.clientX - rect.left) / z;
+        Avatar._pointer.y = (ev.clientY - rect.top) / z;
         Avatar._pointer.on = true;
       };
       hit.addEventListener('pointerdown', on);
@@ -2021,7 +2035,7 @@
       if (host && Avatar.scene) {
         var cw = Math.max(1, Math.floor(host.canvas.clientWidth));
         var ch = Math.max(1, Math.floor(host.canvas.clientHeight));
-        var cdpr = Math.max(1, window.devicePixelRatio || 1);
+        var cdpr = Math.max(1, window.devicePixelRatio || 1) * Avatar._cssZoom(host.canvas);
         if (cw !== Avatar.scene.cssW || ch !== Avatar.scene.cssH || cdpr !== Avatar.scene.dpr) {
           Avatar.resize();
         }

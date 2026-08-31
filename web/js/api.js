@@ -7,6 +7,14 @@
                   'cuddle', 'sad', 'crying', 'angry'];
   var ATTITUDES = ['agree', 'deny', 'question'];
 
+  /* Shipped DEFAULTS placeholders — never send these upstream (the server
+     answers with a bare "unsupported model tts-model"); speak() rejects
+     with NO_MODEL so the app can show a translated hint instead. */
+  var PLACEHOLDER_MODELS = {
+    'tts-model': 1, 'voice-clone-model': 1,
+    'your-clone-model': 1, 'your-preset-model': 1
+  };
+
   /* Genuine in-game phrasing recovered from the AOT snapshot — this anchors
      the speaking style far better than any paraphrase. */
   var STYLE_SAMPLES = [
@@ -264,6 +272,12 @@
       }
 
       var model = tts.mode === 'clone' ? tts.modelClone : tts.modelPreset;
+      /* The shipped defaults are placeholders; sending them yields the
+         server's confusing "unsupported model tts-model". Fail locally with
+         a clear, translated toast instead. */
+      if (!model || PLACEHOLDER_MODELS[model]) {
+        return Promise.reject(new Error('NO_MODEL'));
+      }
       var styleHint = tts.styleHint || '';
 
       function send(voiceField) {

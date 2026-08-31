@@ -23,15 +23,13 @@
     var h = window.innerHeight;
     var open = full && h < full - 40;          /* same width, shorter => IME up */
     if (open) {
-      /* #phone width uses calc(100vh*9/19.5); vh shrinks with the keyboard,
-         so pin both dimensions against the pre-keyboard full height. */
+      /* #phone now fills the viewport (no vh-driven width formula left to
+         pin), so only the height has to hold against the IME resize. */
       phone.style.height = full + 'px';
-      phone.style.width = Math.min(window.innerWidth, Math.round(full * 9 / 19.5)) + 'px';
       phone.style.top = 'auto';
       phone.style.bottom = '0';
     } else {
       phone.style.height = '';
-      phone.style.width = '';
       phone.style.top = '';
       phone.style.bottom = '';
     }

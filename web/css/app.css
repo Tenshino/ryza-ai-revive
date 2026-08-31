@@ -13,10 +13,14 @@ html,body{margin:0;height:100%;overflow:hidden;background:#07050a;color:var(--in
   font-family:"Noto Sans JP","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
   font-size:15px;user-select:none}
 
-/* Portrait column so a desktop window matches the original phone layout. */
-#phone{position:fixed;top:0;bottom:0;left:50%;transform:translateX(-50%);
-  width:min(100vw, calc(100vh * 9 / 19.5));height:100%;overflow:hidden;
-  background:var(--bg);box-shadow:0 0 80px rgba(0,0,0,.65)}
+/* Full viewport on every shell (2026-09-03). The old 9:19.5 phone column
+   letterboxed wide desktop windows AND phones whose ratio differs — the
+   reported black bars. The Spine camera adapts the world to the canvas
+   aspect (worldW = worldH * cssW/cssH), so scene art fills any ratio; the
+   UI chrome instead scales with the window (App._fitUi sets #phone's zoom
+   on desktop; pointer/canvas math divides it back out via Avatar._cssZoom). */
+#phone{position:fixed;inset:0;width:100%;height:100%;overflow:hidden;
+  background:var(--bg)}
 button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 input,select,textarea{font:inherit;color:inherit}
 .hidden{display:none !important}
@@ -286,6 +290,7 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .hud-chip{cursor:pointer}
 
 .sheet{position:absolute;left:0;right:0;bottom:0;z-index:170;background:var(--panel-2);
+  margin:0 auto;max-width:min(600px,100%);   /* stay readable on a wide desktop window */
   border-top:1px solid var(--line);border-radius:18px 18px 0 0;padding:8px 14px calc(16px + var(--safe-b));
   box-shadow:0 -12px 40px rgba(0,0,0,.45);animation:pop .2s ease;max-height:70%;overflow:auto}
 .sheet.hidden{display:none}
