@@ -4,16 +4,24 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-09-04）：**布局自适应完成**——`#phone` 占满视口（黑边根除），
+状态（2026-09-05）：**模式化 TTS + 气泡自动淡出**——每个聊天模式有自己的
+TTS 语音指导（`MODE_TTS` 叠加在 `tts.styleHint` 基底上，`tts.modeHints`
+可逐模式整段覆盖；openai 路径走风格消息、qwen 路径仅 instruct 模型加
+`input.instructions`、播放层 `MODE_PLAY_FX` 给 ASMR/没入 0.93×/0.97× 速率
++ 0.82×/0.95× 音量保底，AUDIT §8.1——ASMR 想听出效果 Qwen 槽选
+`qwen3-tts-instruct-flash`）；回复气泡半透明（alpha .52 + text-shadow）
+且读完自动淡出（`_bubbleHold/_bubbleKeep`，语音期间钉住，AUDIT §8.2）；
+轻量整理=占位符检查收口 / `App.esc` 真转义 / 零引用死代码清除（§8.3）。
+此前（09-04）：布局自适应——`#phone` 占满视口（黑边根除），
 桌面窗按宽高等比缩放 UI（仅 Electron，坐标换算经 `Avatar._cssZoom`），
 Android 补刘海 shortEdges；**TTS 模型名可在设置填**（手机端
 「unsupported model」根因是 openai 区块缺模型输入框，已补 + 本地占位符拦截，
-见 AUDIT §7）。此前：点击交互精修（热区=BB 多边形∩可见轮廓，退出单次收敛，
+见 AUDIT §7）。再前：点击交互精修（热区=BB 多边形∩可见轮廓，退出单次收敛，
 连点交叉淡化，AUDIT §3.9）；RPG 层已按源数据补全（游戏状态/主线 8 段/
 `<state>` 协议/每日登录/体力/作弊模式）。
 桌面壳是 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK
-统一重出 **1.2.4**（`output/desktop/RyzaChat-Setup-1.2.4.exe`、
-`output/android/RyzaChat-1.2.4.apk`）。
+统一重出 **1.2.5**（`output/desktop/RyzaChat-Setup-1.2.5.exe`、
+`output/android/RyzaChat-1.2.5.apk`）。
 立绘动作与音景维持 2026-09-01 的修复结论（见 `docs/AUDIT.md` §3.7）。
 
 本目录已 `git init`，作为防错改快照。`config/providers.json` **不要提交**（含 API Key）；模板是 `config/providers.example.json`。
@@ -138,6 +146,14 @@ localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日�
     发 `voice-enrollment`（接口接受 data URI，无需公网托管），返回 voice_id 自动填入设置。
     参考 wav 随 exe/APK 打包且 git 跟踪，三端（serve.py/Electron/AssetServer）
     同源相对路径解析已核（AUDIT §6.9）。
+- **模式化 TTS 提示词**（AUDIT §8.1）：`Api.speak(text, lang, mode)` 第三参=
+  聊天模式（缺省读 `state.mode`）。`MODE_TTS` 每模式一段日文「怎么说」指导，
+  叠加在 `tts.styleHint`（「谁在说话」基底）上；`tts.modeHints[mode]` 可整段
+  覆盖某模式。通道映射：openai=并进风格消息发 user 角色；qwen=**仅 instruct
+  模型**加 `input.instructions`（flash/vc 不接）。`Api.MODE_PLAY_FX` 播放整形
+  （asmr 0.93×速/0.82×音量、immersive 0.97×/0.95×）由 `App.playUrl(url, fx)`
+  应用——端点不吃指导时的 ASMR 保底。**ASMR 要听出效果：Qwen 选
+  `qwen3-tts-instruct-flash`。**
 - `Api.translate(text, toLang)`：朗读语言 ≠ 回复语言时的翻译通道（同一 LLM，低温、
   只输出译文；失败原样返回）。显示文字不受影响。
 
@@ -185,6 +201,10 @@ Occupancy/rim 全部见 AUDIT §3.7；**点击热区（BB 多边形∩轮廓）�
 - 顶栏两行：`#topbar`（菜单/地点/时段/语音/设置）+ `#subbar`（模式/坐站 +
   苹果条/金币/等级）；HUD 三枚 chip 点开 `#sheet-status`（冒险状态面板）。
 - 视图规则：`#view-talk` 透明叠在立绘上，其余视图自带暗底（源各 screen 独立页）。
+- 气泡生命周期（AUDIT §8.2）：`showBubble/typeBubble/showTyping` 经
+  `_bubbleReveal` 显示、`_bubbleHold(ms)` 定时淡出（`.fade-out`→520ms→`.hidden`）、
+  `_bubbleKeep` 在语音播放期间钉住；背景半透明 alpha .52 + text-shadow，
+  读完自动让位给立绘。`#bubble-wrap` 仍 `pointer-events:none`。
 - toast 在顶部（源 `top_toast.dart`）；标题页 `body.boot` 隐藏全部 chrome，
   但 Electron 的窗口控制钮 `#winctl` 保留。
 - 存档槽 3 格：settings + history + memory + **game + daily** + alarms。
@@ -262,7 +282,7 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 | `chara` + `save_slot` | 角色卡、存档槽 | 设定表单 + 3 槽（含游戏态） |
 | `skin` | 5 预览、2 可穿、veil | 有；3 套无骨骼只有预览图，作弊也穿不了（数据缺失） |
 | `i18n` | UI 多语言 | 7 语（新系统全量 zh/ja/en） |
-| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.4）**，见 §5 条 5 |
+| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.5）**，见 §5 条 5 |
 
 素材在包里、代码**故意未用或做不到**的：
 
@@ -281,7 +301,7 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 - 世界钉子图 + NPC 全字段调度 + 人物面板；闹钟响铃/贪睡/env；音景；5 槽换装+veil；
   欢迎任务；存档槽；双背包+扩容；每日登录；作弊模式；数据抹除
 - LLM 经 `/_proxy`（serve.py / Electron / AssetServer 三处同契约）；TTS 克隆
-- 桌面：无边框 Electron 窗（置顶/最小化/关闭/拖拽）+ NSIS 安装包（612MB，含全部素材）
+- 桌面：无边框 Electron 窗（置顶/最小化/关闭/拖拽）+ NSIS 安装包（~612MB，含全部素材）
 - 无头测试三件套全绿：`motion_regression.js`（立绘 60s×2 姿态）、
   `game_logic_regression.js`（数值/任务链/每日登录/ reducer 钳位）、
   `boot_smoke.js`（App.init 用真实 index.html 的 id 集跑通）
@@ -297,9 +317,10 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 3. 主线 8 段的具体文案是**按源素材文案重建**，不是官方任务表（表在服务器，包里只有键名）。
 4. 等级曲线（`1+√(exp/30)`）、体力价目、背包容量档位是本地定的——源值在服务器。
 5. APK：`scripts/build_apk.ps1` 需要装了便携 JDK+SDK 的机器（`setup_android_tools.ps1` 一次性装到 D:\agent\tools）。
-   **当前产物已出**：`output/desktop/RyzaChat-Setup-1.2.4.exe`（612MB，NSIS 正常安装/卸载，
-   存档在 %AppData%\RyzaChat 卸载默认保留）与 `output/android/RyzaChat-1.2.4.apk`
-   （559MB，自签，正常安装/卸载）。两包均不含 providers.json/个人端点（AUDIT §6.7）。
+   **当前产物已出（1.2.5）**：`output/desktop/RyzaChat-Setup-1.2.5.exe`（NSIS 正常
+   安装/卸载，存档在 %AppData%\RyzaChat 卸载默认保留）与
+   `output/android/RyzaChat-1.2.5.apk`（559MB，自签，正常安装/卸载）。
+   两包均不含 providers.json/个人端点（AUDIT §6.7；1.2.5 出厂前逐包扫描零命中）。
 6. 标题/语音钮/彩纸是画布按 Lottie JSON 帧率播，不是 Lottie 运行时。
 7. `spine/objects/` 仍只有图集、没有完整 skel，无法加载。
 8. 安装包未做代码签名（SmartScreen 会警告「未知发布者」，自用无碍）。

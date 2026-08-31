@@ -7,6 +7,7 @@
 增补：2026-09-03（**点击退出平滑 + 热区精确化**：§3.9；死代码清理；
 exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 增补：2026-09-04（**全视口布局 + 桌面等比缩放 + TTS 模型字段**：§7，重出 1.2.4）
+增补：2026-09-05（**模式化 TTS 提示词 + 气泡自动淡出**：§8，重出 1.2.5）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -441,3 +442,62 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   接口地址=你的小米端点、API Key、模式（克隆/预设）下把**服务端给的模型 id**
   填进新出现的「模型名」框；参考音频默认指向包内
   `assets/voice/ryza_wav/`（wav 已在 APK/exe 内，无需公网）。
+
+---
+
+## 8. 模式化 TTS 提示词 + 气泡自动淡出 + 轻量整理（2026-09-05，不要退回去）
+
+用户三连：①ASMR 模式的 TTS 没有 ASMR 感——所有模式共用一条 `tts.styleHint`，
+LLM 的模式提示词（MODES）只进了文字生成，TTS 引擎根本看不到；②顶部回复气泡
+显示后永不消失、背景近不透明，挡住身后的莱莎；③要求高内聚低耦合轻量整理。
+
+### 8.1 模式化 TTS 语音指导（api.js）
+
+修复=三层机制：
+
+1. **`MODE_TTS`**（api.js，与 MODES 并列、故意分开）：每模式一段日文
+   「怎么说」指导（story=讲书人节奏、immersive=耳边低语留白、
+   asmr=耳语/低速/气声/长停顿）。`ttsStyleFor(mode, tts)` = 用户的
+   `styleHint`（「谁在说话」）+ 模式层；`tts.modeHints[mode]` 可整段覆盖
+   某模式（设置→导入/导出 JSON 里填，UI 不占格子）。
+2. **通道映射**：openai/MiMo 路径=合成后的风格串发给 user 角色消息；
+   qwen 路径=仅 `qwen3-tts-instruct-*` 模型加 `input.instructions`
+   （官方文档：flash/vc 不接指令，`/instruct/i` 判定后才加。
+   参考 help.aliyun.com/zh/model-studio/qwen-tts-api 的 input.instructions）。
+3. **`MODE_PLAY_FX` 播放整形**：端点不吃指导时（flash/vc/未知 MiMo 行为）
+   ASMR 仍有保底=播放 0.93× 速 + 0.82× 音量，沉浸 0.97×/0.95×。
+   `App.playUrl(url, fx)` 带可选 fx，onended 复位 playbackRate。
+
+`Api.speak(text, lang, mode)`：mode 缺省读 `state.mode`；App 侧 `speakThen`
+显式传模式。**ASMR 想要明显效果：Qwen 槽选 `qwen3-tts-instruct-flash`。**
+回归：boot_smoke 新增 7 断言（chat=纯基底、asmr 叠加耳语层、modeHints 覆盖、
+播放整形存在、占位符检查收口、气泡定时器装填/取消）。
+
+### 8.2 气泡生命周期（app.js + css）
+
+- `App._bubbleHold(ms)` 装填淡出定时器 → `.fade-out`（CSS opacity/transform
+  .45s）→ 520ms 后补 `.hidden`；`_bubbleKeep()` 取消（说话期间钉住）；
+  `_bubbleReveal()` 复位显示。
+- 时机表：打字完成后——无语音路线 5.2s 淡出；有语音路线由 `playUrl` 接管
+  （开播 Keep、onended 1.6s 后 Hold），另加 12s 兜底（TTS 永不回包时）；
+  `showBubble`（问候/任务台词/闹钟）6.5s。
+- 透明度：背景 alpha .9→.52 + `text-shadow` 保可读；blur 12→10px。
+- **没动的**：`#bubble-wrap` 依旧 `pointer-events:none`（立绘热区依赖它，
+  HANDOFF 坑 12）；`app.showBubble` 开关依旧一票否决；淡出只作用在
+  `#bubble` 本体。截图验证：出图 shots/bubble-shown.png / bubble-faded.png。
+
+### 8.3 轻量整理（配合「以后加内容」的边界）
+
+- **收口重复**：占位符模型检查手写两处（api.speak / _testTts）→
+  `Api.isPlaceholderModel()` 唯一出口。
+- **修不合理**：`App.esc` 名为转义实为 `String()`，任务标题（LLM 生成）
+  经它进 innerHTML → 改成真 HTML 转义（& < > " '）。
+- **删零引用死代码**（全仓 grep 核过）：`Avatar._aimRest`、
+  `Onboarding._qs` 导出、`app.pet` 配置键、`.caret` CSS + 其 keyframes。
+  其余「疑似零引用」全部核实为动态取用（`Quests['act_'+type]`）、
+  内部局部名引用（REWARDS/CHAIN/BAGS）或对象表键名误报——**没删**。
+- DOM id 交叉核对：JS 引用的 id 除 onboarding 动态生成的 6 个（自建自取）
+  外全部存在于 index.html；index.html 无未引用孤儿 id。
+
+产物：exe/APK 统一重出 **1.2.5**（版本号三处同步：desktop/package.json、
+build_apk.ps1 `$Ver/$VC=8`、android Gradle）。

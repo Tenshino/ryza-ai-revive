@@ -2,7 +2,17 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
-【当前状态（2026-09-04）】
+【当前状态（2026-09-05）】
+模式化 TTS + 气泡自动淡出已完成（AUDIT §8，不要退回去）：每个聊天模式有自己的
+TTS 语音指导（api.js MODE_TTS 叠加在 tts.styleHint 基底上；tts.modeHints[mode]
+可整段覆盖；openai=风格消息、qwen=仅 instruct 模型加 input.instructions、
+flash/vc 不接指令别硬加）；Api.speak 第三参=模式（App.speakThen 显式传）；
+MODE_PLAY_FX 播放整形（asmr 0.93×速/0.82×音）由 App.playUrl(url, fx) 应用。
+气泡：_bubbleHold/_bubbleKeep/_bubbleReveal 生命周期，读完自动淡出，
+背景 alpha .52 半透明；boot_smoke 有 7 条守门断言。整理：占位符检查收口
+Api.isPlaceholderModel；App.esc 改为真 HTML 转义（LLM 生成标题进过 innerHTML）；
+删 Avatar._aimRest / Onboarding._qs / app.pet / .caret CSS（均零引用）。
+exe/APK 重出 1.2.5。此前（09-04）：
 布局自适应已完成（AUDIT §7，不要退回去）：#phone 占满视口（黑边根除，Spine
 相机自适应任意宽高比）；桌面窗 App._fitUi 给 #phone 设 CSS zoom 等比缩 UI
 （仅 Electron，必须用 innerWidth/Height 不能用 clientWidth——会反馈震荡）；
@@ -31,6 +41,35 @@ Android 键盘不再压扁画面（web/js/kbd.js）。
 注视跟随的三处单帧瞬变（阈值硬门/eye-head 增益/followers delay 跳档）已统一收口为
 _aimSm 逐骨骼平滑施加（AUDIT §3.8），指针扫掠回归守门。
 先读 docs/AUDIT.md §3.9 与 §6（本轮改动），不要重复实现、不要退回去。
+
+【2026-09-05 站坐姿/背景黑边调查结论】（**只调查，未实施**——当时代码被改乱后已回退到
+45cb88d；以下全部是核实过的事实，新对话直接从这里继续，不要重新发明）
+
+1. **皮肤映射没搞反**：`_01`=座りライザ（源包 gesture 文件自带命名；赤脚、背心+短裤、
+   腿骨链短且折叠=坐姿家居服）；`_99`=…_立ち（黄色小外套+长袜+靴、腿骨 1704u 直筒=站姿）。
+   用户翻贴图与原版启动观察均一致。现码 `resolveSkel` 的 standing→_99 正确。
+2. **原版初始=_99 站姿**（用户实测原版）。我们 `config.js state.posture` 默认
+   `posture_sitting` + `postureKey()` 对单姿态场景取 m[0] → 进游戏是坐姿。**待改**：
+   默认站姿（含旧存档一次性迁移），坐姿仅在塔奥家门前（唯一双姿态场景，chip 也只在那
+   出现）可选，**离开该场景必须自动还原站姿**（postureKey 里 gate 住 supportsBoth）。
+3. **chip 标签是状态语义不是动作语义**（站着显示「立つ」）→ 用户读成「按站立却变坐」。
+   **待改**：站着显示「座る」（点击=坐下），反之亦然。
+4. **黑边根因（实测）**：场景美术不是一张全覆盖图——塔奥家门前 = far_bg（世界 Y
+   628..2701）+ floor（-2701..-1064），**中间 1692u 是空的**。站姿相机窗口
+   （worldH=1720/(zoom/1.93)=2289，center panY 1087 → -57..2232）底边探进空窗 →
+   底部黑带；坐姿窗口 358..2079 也越界 270（被输入条遮住才没被发现）。
+   切换姿态两窗口中心不同 → 背景像被挪位。**修复方案（验证过可行，未提交）**：
+   场景加载后测最大背景 quad 的 Y 范围（`_sceneCover`，region/mesh 用
+   computeWorldVertices，按 S.data 缓存），`_applyCamera` 把窗口底边钳到 quad 底、
+   窗口高于美术则收缩，同时把位移量 `_camDy` 补偿给 `_placeCharacter` 的角色 Y
+   （角色屏幕位置不动、背景底边两姿态同线）。实测数值：站 camDy=686 视图
+   629..2701，坐 camDy=270 视图 629..2349，黑边消失。
+5. **表情周期重掷缺失**：源包 AOT 有 `IntensitySettings.ExpressionRerollMin` 符号，
+   我们只在 setEmotion/带切换时重掷 → ASMR weak 档独有口型（010/015「鸡嘴」）几乎
+   不触发。修法：`_rerollIdle`（5–8s 姿势重掷 tick）里 `!_talking` 时顺带
+   `_applyFace(false)`。
+6. 回归脚本 `motion_regression.js` 顶部 SKINS 表的 posture 标注与上述一致，不用动。
+   站姿 offsetY/scale(-346/1.488) 是 posture_camera.json 源值，保留。
 
 【一比一（强制）】
 源 APK：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（v1.0.2）。
@@ -195,6 +234,20 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
       viewport-fit=cover + env(safe-area) 三件套，缺一有黑边。
     - 手机端 TTS 必须能在设置里填模型名（providers.json 打包不存在）；
       Api.speak 的占位符模型拦截（NO_MODEL）别删。
+
+17. 【模式化 TTS + 气泡生命周期（AUDIT §8，2026-09-05）不要退回去】
+    - TTS 语音指导= `ttsStyleFor(mode)` 两层：`tts.styleHint`（基底，用户可改）
+      + `MODE_TTS[mode]`（模式层，`tts.modeHints` 可覆盖）。别退回「所有模式
+      共用一条 styleHint」——那正是「ASMR 听起来不像 ASMR」的根因。
+    - `input.instructions` 只在模型名含 instruct 时加（flash/vc 不接指令）。
+      `MODE_PLAY_FX`（App.playUrl(url, fx)）是端点不吃指导时的 ASMR 保底，
+      onended 必须复位 playbackRate——否则闹钟/点击语音也跟着变调。
+    - 气泡淡出三件套：`_bubbleHold/_bubbleKeep/_bubbleReveal`。说话期间必须
+      Keep（playUrl 开播取消、onended 重排 1.6s）；打字完成后无语音路线
+      5.2s、有语音路线 12s 兜底。别把 `.fade-out` 的 520ms 与 JS 定时器改掉。
+    - `#bubble-wrap` 依旧 `pointer-events:none`（立绘热区靠它透下去）；
+      淡出只动 `#bubble` 本体。占位符模型检查走 `Api.isPlaceholderModel()`
+      唯一出口；`App.esc` 是真转义（任务标题进过 innerHTML），别退回 String()。
 
 【三条必须知道的技术约束】
 1. Spine 4.2：skeleton.updateWorldTransform(spine.Physics.update) 必须传枚举；
