@@ -70,6 +70,16 @@ input,select,textarea{font:inherit;color:inherit}
 .hud-chip.shrink{flex:0 1 auto;min-width:0}
 
 /* ----------------------------------------------------------- drawer */
+/* Electron frameless shell: drag the window by the HUD strip; every
+   interactive thing stays clickable. Controls injected by shell.js. */
+body.shell-electron #topbar{-webkit-app-region:drag}
+body.shell-electron #topbar button,
+body.shell-electron #topbar .hud-chip{-webkit-app-region:no-drag}
+#winctl{display:flex;gap:5px;align-items:center;flex:0 0 auto}
+.win-btn{width:32px;height:32px;font-size:13px;color:var(--dim);border-radius:9px}
+#win-pin.on{background:rgba(232,180,92,.28);border-color:var(--gold);color:var(--gold)}
+#win-close:hover{background:rgba(220,90,70,.3);color:#ffb0a0}
+
 #drawer{position:absolute;top:0;bottom:0;left:0;width:270px;max-width:82%;z-index:60;
   background:var(--panel);backdrop-filter:blur(16px);border-right:1px solid var(--line);
   transform:translateX(-100%);transition:transform .22s ease;display:flex;flex-direction:column}
@@ -92,6 +102,11 @@ input,select,textarea{font:inherit;color:inherit}
 /* Title screen shows only the stage + title card (source title_screen). */
 body.boot #topbar,body.boot #subbar,body.boot #talk-menu,
 body.boot #input-bar,body.boot #retry-bar,body.boot .view.active{display:none}
+/* …but the frameless window keeps its controls (pin/min/close) on top. */
+body.boot #topbar{display:flex;background:none;pointer-events:none}
+body.boot #topbar > *{display:none}
+body.boot #topbar > #winctl{display:flex;pointer-events:auto;
+  margin-left:auto;opacity:.55}
 
 /* ------------------------------------------------------------- views */
 .view{position:absolute;inset:0;z-index:20;display:none;flex-direction:column;
@@ -125,7 +140,7 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .mode-pill.active{background:rgba(232,180,92,.22);border-color:var(--gold);color:var(--gold);font-weight:600}
 .mode-sep{width:1px;background:var(--line);margin:4px 3px;flex:0 0 auto}
 #bubble-wrap{flex:1;display:flex;align-items:flex-start;justify-content:center;
-  padding:0 16px;margin-top:6px}
+  padding:0 16px;margin-top:6px;pointer-events:none}
 #bubble{max-width:min(680px,94%);background:rgba(24,17,21,.9);border:1px solid var(--line);
   border-radius:var(--radius);padding:14px 17px;line-height:1.75;font-size:16px;
   backdrop-filter:blur(12px);box-shadow:0 10px 34px rgba(0,0,0,.5);animation:pop .22s ease}

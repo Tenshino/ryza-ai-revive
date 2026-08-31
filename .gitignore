@@ -9,15 +9,18 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Desktop / Android build junk
+# Desktop (Electron) build junk — desktop/build/icon.png IS tracked
+desktop/node_modules/
 desktop/dist/
-desktop/build/
-desktop/*.spec.bak
+output/
+
+# Android build junk
 android/.gradle/
 android/**/build/
 android/local.properties
 android/.idea/
 *.iml
+android/keystore/
 
 # OS / editor
 .DS_Store

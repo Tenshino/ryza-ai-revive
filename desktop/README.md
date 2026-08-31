@@ -1,18 +1,44 @@
-# Desktop (Windows)
+# Desktop (Windows) — Electron frameless shell
 
-From the project root (`projects/ryza-ai-revive/`):
+The app itself is the static web build in `../web`; this shell only provides:
+
+- a **borderless window** (`frame:false`) — no title bar, no edges, so the
+  phone column reads as one object;
+- **always-on-top toggle**, minimize and close buttons (top-right, shown only
+  inside Electron — the browser build never sees `window.ryzaShell`);
+- a private `127.0.0.1` HTTP server for `web/` plus `POST /_proxy`
+  (CORS-free LLM/TTS), same contract as `scripts/serve.py`;
+- drag-the-window-by-the-HUD (`-webkit-app-region`), single-instance lock.
+
+## Run from source
 
 ```powershell
-pip install -r desktop/requirements.txt
-python desktop/app.py
+cd desktop
+npm install            # first time; scripts/build_desktop.ps1 sets mirror env
+npx electron .
 ```
 
-This starts a local HTTP server on `127.0.0.1` (Spine cannot load from `file://`) and opens a 420×860 pywebview window.
-
-Build an exe (onedir, assets stay next to the exe — do not use onefile, `web/` is ~572 MB):
+## Build the installer
 
 ```powershell
 powershell -File scripts/build_desktop.ps1
 ```
 
-Output: `output/desktop/RyzaChat/RyzaChat.exe`
+Output: `output/desktop/RyzaChat-Setup-<version>.exe` (NSIS).
+Standard install/uninstall: the installer creates Start-Menu/desktop shortcuts
+and an entry in "Apps & features"; uninstalling removes the program but keeps
+save data in `%AppData%\RyzaChat` (localStorage: settings, conversations,
+quests) — delete that folder to wipe everything, or use Settings →
+"抹除全部本地数据" inside the app.
+
+## Privacy notes (what ships)
+
+- `config/providers.json` is **not** part of the package (it lives outside
+  `web/` and is gitignored); API keys are entered in Settings and stay in
+  the local user profile.
+- No analytics, no crash reporting, no official backend calls.
+
+## Dev self-check
+
+`$env:RYZA_SHOT='C:\path\out.png'; npx electron .` captures the window 9 s
+after load and exits — used by the screenshot workflow.
