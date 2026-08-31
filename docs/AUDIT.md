@@ -8,6 +8,7 @@
 exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 增补：2026-09-04（**全视口布局 + 桌面等比缩放 + TTS 模型字段**：§7，重出 1.2.4）
 增补：2026-09-05（**模式化 TTS 提示词 + 气泡自动淡出**：§8，重出 1.2.5）
+增补：2026-09-06（**姿态/相机/表情补全**：§9，重出 1.2.6；§3.2 的镜头行已改写）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -94,7 +95,7 @@ exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 | `MixDurationPoses` | APK 用骨骼距离算 mix | skel hash 有符号两半已被 `Util.hashHex` 正确解析，sourceHash 坐/站都精确命中 → 距离 mix 走正路；同类型短混合作下限 |
 | 强度档 | `normal` / `strong` / `weak` 整套 profile | 说话时用 `strong`，否则 `normal` |
 | Driver 跟随 delay | `followers[].delay` | 注视历史队列按 delay 取样 |
-| 镜头高度 | JSON 的 zoom/pan | 视野高度仍是 `1720 / (zoom/1.93)`；ASMR panY 会略抬以对着脸（zoom 3.5 特写是表里的） |
+| 镜头高度 | JSON 的 zoom/pan | 视野高度先按 `1720 / (zoom/1.93)` 取**表里的**值，再被 `_coverFor` 钳进场景美术的绘制框（§9.2）；ASMR panY 仍按表抬向脸部，双姿态舞台再对齐视线 |
 | `light.rim*` | rimEnabled / opacity / glow | 角色画到默认 FB；FBO 只加算轮廓（不是源 shader 像素级拷贝） |
 | `spine/objects/` | 3 个物件骨骼 | 场景 JSON 未引用，代码未加载 |
 | Lottie | `assets/animations/` | 画布按 JSON `fr`/`op` 播语音钮/标题火/委托彩纸；未引入 Lottie 运行时 |
@@ -241,6 +242,12 @@ settle`（淡出 70% 处肢体已还原且 `_aimSm` 每帧 <25u）、`tap chaini
 6. ~~【新·待修】点击区域判定太粗~~ **【2026-09-03 已修，见 §3.9】**
    （BB_\* 多边形 ∩ 可见轮廓，miss→null，半径兜底已删；
    `poke(null)` 不再兜底放随机反应；App 只在命中时出波纹/SE）
+
+7. ~~【新·待修】塔奥家门前（stage_01_002_01）黑边 / 切换姿态背景跳位 / 默认姿态错~~
+   **【2026-09-06 已修，见 §9】**（板内钳制相机 + 姿态无关的背景窗口 + 视线对齐；
+   `motion_regression` 有 300 组「舞台×视口×姿态」钳制断言守门）
+8. ~~【新·待修】ASMR 档独有表情几乎不触发~~ **【2026-09-06 已修，见 §9.4】**
+   （周期性表情重掷 + `expression_coverage.js` 全量核对）
 
 **明确不做（官方服务端/商业能力）：** 登录/Firebase、订阅付费墙、代币/回合票购买、
 皮肤内购、远程资源门、公告、强制更新、分析、官方 marionette websocket。
@@ -501,3 +508,189 @@ LLM 的模式提示词（MODES）只进了文字生成，TTS 引擎根本看不�
 
 产物：exe/APK 统一重出 **1.2.5**（版本号三处同步：desktop/package.json、
 build_apk.ps1 `$Ver/$VC=8`、android Gradle）。
+
+---
+
+## 9. 姿态 / 相机 / 表情（2026-09-06，本轮，不要退回去）
+
+用户报的三件事——塔奥家门前能切坐站但**有黑边**、**切换后背景换位置**、
+**默认站立和坐立模型搞反**——加上后续实测的「换场景后出现放大的坐姿模型」
+「横屏任何模型都有黑边」，根因全部实测定位。§HANDOFF 里那份「只调查未实施」
+的结论有两条是错的，下面以**原始数据 + 浏览器实测**为准。
+
+### 9.1 皮肤↔姿态：数据是清楚的，错的是默认值和标签
+
+`crf_skn_002_0001_01/crf_skn_002_0001_01_gesture.json` 与 `_99` 各自带
+`projectConfig.postureKey`，这是权威：
+
+| 皮肤 | `name` | `projectConfig.postureKey` | 观感 |
+|---|---|---|---|
+| `_01` | 座りライザ（普通座り） | `posture_sitting` | 赤脚、背心+短裤、腿骨折叠 |
+| `_99` | ライザ(3の通常)_立ち | `posture_standing` | 黄外套+长袜+靴、腿骨直筒 |
+
+所以 `resolveSkel` 的 standing→`_99` **从来就没反**。真正反的是三处：
+
+1. `config.js` 的 `state.posture` 默认 `posture_sitting` → 原版开局是站姿，我们开局是坐姿。
+   **已改**：默认 `posture_standing` + 旧存档一次性迁移（`state.postureMigrated`）。
+2. 姿态 chip 用的是**状态语义**（站着显示「立つ」），玩家读成「按下去才站」→
+   按了变坐，就成了「模型搞反」。
+   **已改**：`app.js` 用**动作语义**——站着显示 `posture.sit`（座る/坐下），坐着显示 `posture.stand`。
+3. `postureKey()` 旧逻辑「场景只列一个姿态就取 m[0]」，而 200 组场景里
+   **196 组只列 `posture_sitting`**（`sofa_root` 那类中景家具是按坐着画的）。
+   拿它当皮肤约束，等于全游戏永远穿 `_01`——这就是「改了默认还是坐着」的直接原因。
+   **已改**：`midgroundPostures` 只决定**哪里提供切换**（`supportsBothPostures()`），
+   不再决定穿哪套；其余场景走默认站姿。
+
+补充（用户复现的第二轮）：离开塔奥家门前**换场景先出现坐姿、再换一次才恢复站立**。
+两个独立成因，都已修：
+
+* `App._loadSceneFor` 的姿态复位跑在 `loadScene` 回调里，而皮肤在回调之前就已经按
+  `postureKey()` 解析完了 → 复位晚了一整个场景。现在 `postureKey()` 自己 gate
+  （非双姿态场景直接返回 standing），复位只负责把存档值写干净。
+* `loadScene` 会先 `resize()` 重算相机、**之后**才 `loadSkin()` 换骨骼，中间那一帧
+  用「新姿态的相机」摆「旧皮肤」→ 坐着的网格被按 `_99` 的 `scale 1.488` 放大，
+  就是用户看到的「放大的坐着」。现在 `_placeCharacter`/`_applyCamera` 一律按
+  **屏幕上实际是哪套皮肤**（`_loadedPosture()`，从 `_loadedSkelId` 读）取相机参数。
+
+### 9.2 黑边与背景跳位：把相机钳进美术的绘制框
+
+实测（真浏览器、真图集，420×860）：
+
+| | 站姿 | 坐姿 |
+|---|---|---|
+| 相机窗口（世界 Y） | −57 … 2232（高 2289） | 359 … 2079（高 1720） |
+| `far_bg` 绘制区 | 629 … 2701（高 2072） | 同左 |
+| `floor` 绘制区 | −2701 … −1064 | 同左 |
+| 露出的未绘制带 | **底部 686u（屏高 30%）** | 底部 270u（被输入条挡住） |
+
+关键事实：塔奥家门前的美术**不是一张全覆盖图**——`far_bg`（屋内石墙/炉子/大锅）
+和 `floor`（前景木地板）之间 **1693u 是空的**；而且站姿窗口高 2289 **比整块
+`far_bg`（2072）还高**，所以「往哪挪都不黑」在这个舞台是不可能的，只能收缩窗口。
+横屏是同一个洞的另一半：`worldW = worldH × 画布宽高比`，视口一宽就走出美术左右边界。
+
+修法（`avatar.js`，一处收口，不给每个舞台打补丁）：
+
+* `_coverFor(L)`：**最大**绘制 quad 的世界框（不是并集——并集会把 `floor` 拉进来，
+  假装中间那条空带是画了的），按骨架缓存，`_loadSpine` 时失效。
+  * 忽略 `slot.color.a`：场景唯一的动画就是淡入，淡入中途量一次会把整块美术判空。
+  * `RegionAttachment` 的四角缓存在**首帧绘制前**可能是空的（headless 下一定是空的），
+    所以加了「附件尺寸 × 骨骼矩阵」的兜底框；没有这条，49 个单 region 场景永远测不出
+    美术框，钳制对它们形同不存在。
+* `_applyCamera()`：背景窗口取**场景自身姿态**（`_primaryPosture()`）的表内窗口，
+  **只缩不涨**地塞进 `_coverFor`（`h = min(表内h, min(板高, 板宽/宽高比))`），
+  再把上下左右钳进板内。窗口与玩家选的姿态无关 ⇒ **切坐/站背景一动不动**。
+* `_placeCharacter()`：角色按 `k = 解出窗口高 / 表内窗口高` 映射进同一个窗口，
+  所以她的**屏幕大小与屏幕位置仍是表里那套**，钳相机不会把她缩掉。
+
+实测结果（同 420×860）：站/坐窗口都是 `629…2349`（完全一致），露出区 0；
+900×420 横屏同样 0；`motion_regression.js` 里 **50 舞台 × 3 视口 × 2 姿态 = 300 组
+解算全部落在绘制框内**，这是「黑边」的总闸门。
+
+### 9.3 视线对齐（站立相机数据与 shipped 美术不匹配）
+
+`posture_camera.json` 把**坐着**的头画在窗口 0.70 处（所有家的场景都按这个构图），
+却把**站着**的头放在 0.37（ASMR：坐 0.49 / 站 0.10）——站姿那组是照更高的一块底板调的，
+配这块美术就变成「人沉在画面底部 + 底下全黑」。所以：
+
+* 只挪**垂直位置**，`scale`/`zoom`（她和房间的相对大小）一个数字都不改；
+* 目标线：普通镜头 0.68、ASMR 特写 0.50；
+* **偏差超过 0.10 才动**，所以 196 个单姿态场景的既有构图原样保留；
+* 头的局部高度从骨架 setup pose 现算（`_measureHeadLocal`），不按舞台写死。
+
+实测：塔奥家门前站 268px / 坐 270px（同一视线），切姿态不再上下滑；
+轮廓顶端两姿态都是 −55px（和原来坐着的取景一致，不是新引入的裁切）。
+
+### 9.4 表情：把被当成 bug 删掉的 ASMR 触发找回来
+
+先说结论：**9 情绪 × 3 态度 × 3 强度档全部可达**，`scripts/expression_coverage.js`
+（本轮新增，第四套回归）逐条核对：
+
+| 皮肤 | expressionSets | 作者显式 `weight:0`（=关掉） | 每档有效 set |
+|---|---|---|---|
+| `_01` | 1646 | 0 | normal 622 / strong 622 / weak 402 |
+| `_99` | 322 | **30**（全在 happy/weak 18、tease/weak 12） | 108 / 108 / 76 |
+
+* `weight` 是**可选**字段：不写=1，写 0=作者禁用。旧 `_pickExpr` 的兜底
+  `live.length ? live : sets` 在「整档都被禁用」时会把禁用过的脸放出来；
+  现在返回 `null`，由 `_applyFace` 退回该档的 `eyeBase/eyebrowBase/mouthBase`。
+* 用户说的「不小心把 ASMR 的一个表情当 bug 删了」= AUDIT §3.7 第 10 条
+  「说话不再重摇表情」的副作用：`_intensityBand()` 在 ASMR 下只在**不说话的间隙**
+  才是 `weak`，而 `weak` 独有的口型（`facial_mouth_010` / `_015`，即 HANDOFF 说的
+  「鸡嘴」）只有换表情时才可能出现，于是几乎永远看不到。
+  源包 AOT 里有 `IntensitySettings.ExpressionRerollMin` 和
+  `expressionRerollIntervalMin/Max` 这两个字段名，但 JSON 里**没有值**
+  → 按「源里有就用源的、没有就按常理」：在姿势重掷的同一 tick（5–8s）
+  `_rerollIdle` 顺带 `_applyFace(false)`，且**只在没说话时**（不打断口型）。
+  实测（坐姿皮肤、ASMR、各 300 次重掷）：neutral 出现 015、laughing 出现 010+015、
+  tease 出现 010/011/012/015。
+* 骨架里存在但数据不引用的只有 `_scrub_01` 口型变体（`_01` 3 个、`_99` 2 个
+  `_scrub_02`）——源数据每情绪只指一个 `lipSyncScrubClip`，不是我们的漏接。
+
+### 9.5 移植完整性：逐目录核对与「故意不用」的素材
+
+按 `docs/dart_source_tree.txt` 的 22 个 `features/*` 目录（423 个 .dart 名）和
+`docs/reference/apk_asset_inventory.txt` 的图片清单过了一遍。玩家侧可落地的
+都已在 §2/§3/§6 判定为「对」；本轮补/查清的点：
+
+* **序章背景**：包里 `images/onboarding_prologue_bg.png`（黄昏山坡海景）一直没被引用，
+  我们的序章屏是自己编的径向渐变 + 一个占位圆圈。已改用真素材 + 压暗层，占位圆圈删掉。
+* **模式名本地化**：源包有 `conversationMode.{chat,story,asmr,text,…}` 这套键，
+  而 HUD 那颗 chip 之前是 `app.js` 里写死的 `{chat:'雑談',…}` → 英文界面也显示日文。
+  已补 `mode.*` / `style.*` 七语键，模式 sheet 的按钮文字包进 `<span data-i18n>`
+  （以前直接 `data-i18n` 会把图标 `<img>` 吃掉）。
+* **闹钟**：`day_selector`（每周重复）、`speech_style_picker`（normal/whisper）、
+  `volume_vibration_row`、`snooze_settings`、`alarm_time_picker`、`alarm_type_picker`
+  在 `app.js _alarmForm` + `alarm.js` 里都已落地。
+* **音量**：`volume_settings_dialog`（bgm/ambient/voice/se 四路）在设置页有。
+* **故意不用**（下一轮别再当漏做去补）：
+  | 素材 | 源里的用途 | 为什么不接 |
+  |---|---|---|
+  | `images/onboarding/roulette_*`（5 张）+ `_RouletteWheel` + 「ルーレットを回して」 | 付费墙前的**折扣转盘**（「最大59%の割引を永久にゲット」「ラッキー割引のチャンス」） | 订阅/付费，明确不做 |
+  | `images/login_background_*.jpg`（6 语） | `features/auth` 登录页背景 | 登录不做 |
+  | `paywall_banner*.png`、`special_offer_sparkles.svg`、`subscription.svg`、`tokushoho/tos/privacypolicy.svg`、`voicetoken_*`、`logout/link/report*` | 付费墙/法务/账号 | 同上 |
+  | `images/talk_background.png`（虚化工坊） | 对话页底图 | 我们的对话页底是**每舞台的 spine 实景**，比一张虚化图更贴源；这张留着当备用 |
+  | `nospine_chat_background.png` | spine 加载失败的兜底底图 | 失败走 toast；真要做兜底再接 |
+  | `spine/objects/`（3 个物件） | 只有图集没有 skel | 加载不了（§3.2） |
+  | `SittingSets` 里的 `sitting_agura` | 盘腿坐 | 权重 99999/0：**作者自己关了**，不是漏接 |
+
+### 9.6 顺手修掉的真问题
+
+* `audio.js fadeVolume`：rAF 回调给的是**帧起始时间戳**，可能早于取 `t0` 的
+  `performance.now()` → `u` 变成小负数 → `el.volume = -0.002` 抛 `IndexSizeError`，
+  淡入淡出循环当场死掉（环境音可能就此静音）。现在 `u` 和音量都钳到 [0,1]。
+* `Quests.advance()` 是个没人调的死别名，注释还写着「reducer 用它」——reducer 入口
+  是 `onQuestDelta`。删。
+* `Avatar._fxNames` 只写不读，删；`poke()` 里绕过 `_pc()` 直接读 `projectConfig` 改成走 `_pc()`。
+* `Avatar._findGroup()` 保留，但注释写明它是给 `motion_regression` 核对
+  occupancy 字母↔轨道用的，运行时的选组入口是 `_pickLayerGroup`。
+* `config.js` 头注释里写了原厂的接口域名，改成中性描述（`privacy_check.py`
+  现在会因此把构建拦下来，注释里也说明了这点）。
+
+### 9.7 打包：版本单一来源 + 隐私闸门
+
+* `config/version.json`（`{"version":"1.2.6","code":9}`）是**唯一**版本源；
+  `scripts/stamp_version.js` 把它盖进 `desktop/package.json` 与
+  `android/app/build.gradle`，两个 build 脚本都调用它。以前是三处手改（AUDIT §8 末），
+  最容易出「exe 和 APK 版本不一致」。
+* `scripts/privacy_check.py` 是**构建闸门不是报告**：命中即非 0 退出，构建中止。
+  查两类东西——① 路径名（`providers.json`、`*.keystore`、`*.pem`…）
+  ② 文本内容（`bmh05`、`d:\agent`、`c:\users`、`token-plan`、`xiaomimimo`、
+  `gospiral`、`api.craft.spiral`，外加 `sk-[A-Za-z0-9]{16,}` / JWT / Bearer 三个形状）。
+  二进制扩展名只查名字不查内容，所以 570MB 素材树秒级过。
+  调用点：`build_desktop.ps1`（暂存前 + `win-unpacked` 暂存包）、
+  `build_apk.ps1`（打包前 + 签名后的 APK，按 zip 成员逐个查）。
+* 卸载语义：NSIS `deleteAppDataOnUninstall:false`（存档留在 `%AppData%\RyzaChat`，
+  要彻底清就用设置页的「抹除全部本地数据」）；APK 侧新增
+  `android:hasFragileUserData="true"`（API29+ 卸载时询问是否保留数据），
+  并且 keystore 必须复用——换 key 就不能原地升级，只能先卸载（丢存档）。
+
+### 9.8 回归
+
+四套，全绿才算改完：
+
+```
+node scripts/motion_regression.js      # + §9.1/9.2/9.3 的姿态·相机断言（含 300 组钳制）
+node scripts/game_logic_regression.js
+node scripts/boot_smoke.js
+node scripts/expression_coverage.js    # 新增：表情/动作可达性与引用解析全量核对
+```

@@ -1,10 +1,12 @@
 /* Settings store. Everything lives in localStorage; there is no server.
-   The official backend (api.craft.spiral-ai-app.com) and Firebase/Google
-   sign-in are intentionally absent — the app boots straight into the game.
+   The original app's account/subscription backend and its Firebase sign-in
+   are intentionally absent — this build boots straight into the game and never
+   calls anything but the endpoints the player types into Settings.
 
    Defaults are neutral on purpose: this file ships inside the desktop/
    Android packages, so no personal endpoint belongs here. Fill yours via
-   Settings, or via an uncommitted config/providers.json (dev server). */
+   Settings, or via an uncommitted config/providers.json (dev server only —
+   scripts/privacy_check.py fails the build if it ever reaches a package). */
 (function (global) {
   'use strict';
 

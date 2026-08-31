@@ -4,24 +4,30 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-09-05）：**模式化 TTS + 气泡自动淡出**——每个聊天模式有自己的
-TTS 语音指导（`MODE_TTS` 叠加在 `tts.styleHint` 基底上，`tts.modeHints`
-可逐模式整段覆盖；openai 路径走风格消息、qwen 路径仅 instruct 模型加
-`input.instructions`、播放层 `MODE_PLAY_FX` 给 ASMR/没入 0.93×/0.97× 速率
-+ 0.82×/0.95× 音量保底，AUDIT §8.1——ASMR 想听出效果 Qwen 槽选
-`qwen3-tts-instruct-flash`）；回复气泡半透明（alpha .52 + text-shadow）
-且读完自动淡出（`_bubbleHold/_bubbleKeep`，语音期间钉住，AUDIT §8.2）；
-轻量整理=占位符检查收口 / `App.esc` 真转义 / 零引用死代码清除（§8.3）。
-此前（09-04）：布局自适应——`#phone` 占满视口（黑边根除），
-桌面窗按宽高等比缩放 UI（仅 Electron，坐标换算经 `Avatar._cssZoom`），
-Android 补刘海 shortEdges；**TTS 模型名可在设置填**（手机端
-「unsupported model」根因是 openai 区块缺模型输入框，已补 + 本地占位符拦截，
-见 AUDIT §7）。再前：点击交互精修（热区=BB 多边形∩可见轮廓，退出单次收敛，
-连点交叉淡化，AUDIT §3.9）；RPG 层已按源数据补全（游戏状态/主线 8 段/
-`<state>` 协议/每日登录/体力/作弊模式）。
+状态（2026-09-06）：**姿态/相机/表情补全**（AUDIT §9）——塔奥家门前
+（`stage_01_002_01`，包里唯一同时给坐、站两套中景的舞台）的四个症状一次修完：
+默认开局改成**站姿 `_99`**（旧存档一次性迁移）、姿态 chip 换成**动作语义**
+（站着显示「坐下」）、黑边与切换时背景跳位由**板内钳制相机**根除
+（`_coverFor` 量最大绘制 quad 的世界框，背景窗口只缩不涨地塞进去，角色按
+`k` 映射保住原取景），站立模型「沉在画面底部」由**视线对齐**修好
+（数据把坐着的头放在窗口 0.70、站着的放在 0.37，只挪垂直位置不动 scale）。
+顺带：`midgroundPostures` 不再当皮肤约束（196/200 组场景只列 sitting，
+拿它约束＝全游戏永远坐着＝用户说的「改了默认还是坐着」）；换场景时
+「先放大的坐姿、再换一次才站」两处成因（姿态复位晚一帧 + 相机按请求姿态
+摆旧皮肤）都修了；被当成 bug 删掉的 **ASMR 表情重掷**按源包符号
+`IntensitySettings.ExpressionRerollMin` 恢复（weak 档独有口型 010/015 回来了）；
+序章屏换上包里一直躺着没被引用的 `onboarding_prologue_bg.png`；模式名补 7 语 i18n
+（HUD 之前写死 `{chat:'雑談'}`）。
+新增第四套回归 `scripts/expression_coverage.js`；`motion_regression.js` 加了
+50 舞台 × 3 视口 × 2 姿态 = **300 组相机解算必须落在绘制框内**的黑边总闸门。
+版本单一来源 `config/version.json` + `scripts/stamp_version.js`；
+打包隐私闸门 `scripts/privacy_check.py`（命中私人标识直接中止构建）。
 桌面壳是 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK
-统一重出 **1.2.5**（`output/desktop/RyzaChat-Setup-1.2.5.exe`、
-`output/android/RyzaChat-1.2.5.apk`）。
+统一重出 **1.2.6**（`output/desktop/RyzaChat-Setup-1.2.6.exe`、
+`output/android/RyzaChat-1.2.6.apk`，两包出厂前都过了隐私闸门；
+win-unpacked 自检截图=标题页正常渲染）。
+此前（09-05）：模式化 TTS + 气泡自动淡出（AUDIT §8）；（09-04）全视口布局 +
+桌面等比缩放（§7）；再前：点击交互精修（§3.9）、RPG 层按源数据补全（§6）。
 立绘动作与音景维持 2026-09-01 的修复结论（见 `docs/AUDIT.md` §3.7）。
 
 本目录已 `git init`，作为防错改快照。`config/providers.json` **不要提交**（含 API Key）；模板是 `config/providers.example.json`。
@@ -45,12 +51,16 @@ projects/ryza-ai-revive/
 ├── scripts/
 │   ├── serve.py            # 静态站 + LLM/TTS CORS 代理（日常开发用）
 │   ├── build_indexes.py    # 素材 → web/assets/_index/*.json
-│   ├── motion_regression.js    # 立绘动作离线回归（node）
+│   ├── motion_regression.js    # 立绘动作离线回归（node）+ 姿态/相机 300 组钳制断言
 │   ├── game_logic_regression.js# 游戏系统离线回归（node，桩 DOM）
+│   ├── expression_coverage.js # 表情/动作可达性全量核对（第四套，见 AUDIT §9.4）
+│   ├── privacy_check.py # 打包隐私闸门：命中私人标识即非 0 退出、构建中止
+│   ├── stamp_version.js # config/version.json → package.json + build.gradle
 │   ├── boot_smoke.js       # App.init 全接线冒烟（真实 index.html 的 id 集）
-│   ├── build_desktop.ps1   # Electron → NSIS 安装包
+│   ├── build_desktop.ps1   # Electron → NSIS 安装包（前后各一次隐私闸门）
 │   ├── build_apk.ps1       # aapt2/javac/d8/zipalign/apksigner 直打 APK（无 Gradle）
 │   └── setup_android_tools.ps1 # 便携 JDK17 + Android SDK 装到 D:\agent\tools
+├── config/version.json     # 唯一版本源（version + versionCode），两个 build 脚本都读
 ├── config/providers.json   # 开发水合用（gitignore）；模板 providers.example.json
 ├── data/                   # 源包抽取产物（libapp_strings_*.txt）
 └── docs/                   # 本文件、HANDOFF.md、AUDIT.md、reference/
@@ -183,9 +193,13 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 
 路径：`ManagedWebGLRenderingContext` + 自建 `Matrix4` MVP + `PolygonBatcher` +
 `SkeletonRenderer`。单画布 `#scene-canvas`，点击层 `#avatar-hit`。
-坐/站随场景 `midgroundPostures`；`fixedBasePoseMode`；注视/张力/指尖/口型/
-Occupancy/rim 全部见 AUDIT §3.7；**点击热区（BB 多边形∩轮廓）与退出平滑
-（位移缩放淡出 + 重叠还原 + 连点交叉）见 AUDIT §3.9**。
+`fixedBasePoseMode`；注视/张力/指尖/口型/Occupancy/rim 见 AUDIT §3.7；
+**点击热区（BB 多边形∩轮廓）与退出平滑见 AUDIT §3.9**；
+**相机/姿态/表情重掷见 AUDIT §9**（本轮重写的那一块）：
+`postureKey()` 决定穿 `_01` 还是 `_99`（默认站姿，`midgroundPostures` 只决定
+哪里允许切换），`_coverFor()` 量场景美术的绘制框，`_applyCamera()` 把背景窗口
+只缩不涨地钳进去（⇒ 任意视口无黑边、切姿态背景不动），
+`_placeCharacter()` 按 `k=解出高/表内高` 映射角色（保住表内取景）并做视线对齐。
 **不要退回旧坑**（HANDOFF 的坑清单）。
 
 #### `web/js/app.js` — 主控制器（只编排，不存状态）
@@ -200,6 +214,11 @@ Occupancy/rim 全部见 AUDIT §3.7；**点击热区（BB 多边形∩轮廓）�
   （头像/名字/注记/位置；没见过的名字带「？」）。
 - 顶栏两行：`#topbar`（菜单/地点/时段/语音/设置）+ `#subbar`（模式/坐站 +
   苹果条/金币/等级）；HUD 三枚 chip 点开 `#sheet-status`（冒险状态面板）。
+- 坐/站：`App.setPosture()` 是唯一写入口（存值 + `skin_change` SE + veil +
+  `loadSkin` → `resize` 重算相机）；chip 文字是**动作语义**（站着→「坐下」）；
+  `_loadSceneFor` 回调把离开双姿态舞台后的存档值复位成站姿。
+- 模式名走 `mode.*` i18n 键（源包键族 `conversationMode.*`），HUD chip 与
+  模式 sheet 同一套，不再写死日文。
 - 视图规则：`#view-talk` 透明叠在立绘上，其余视图自带暗底（源各 screen 独立页）。
 - 气泡生命周期（AUDIT §8.2）：`showBubble/typeBubble/showTyping` 经
   `_bubbleReveal` 显示、`_bubbleHold(ms)` 定时淡出（`.fade-out`→520ms→`.hidden`）、
@@ -276,20 +295,28 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 | **背包** | `inventory_sheet`、you/ryza 两包、四档容量 | **已实现**（双 tab + 金币扩容） |
 | **NPC** | 地图在场、`met_charas` 进状态、`area_bottom_sheet` | **已实现**（人物面板 + 提示词注入 + 状态页名单） |
 | 付费墙/代币/订阅 | — | 不做；**作弊模式**替代（设置→游戏性） |
-| `spine_avatar` | 情绪/表情/眨眼/分部位点击/注视/物理/站坐/ASMR/视差/rim | 已接（AUDIT §3；点击热区与退出平滑精修见 §3.9） |
+| `spine_avatar` | 情绪/表情/眨眼/分部位点击/注视/物理/站坐/ASMR/视差/rim | 已接（AUDIT §3；点击热区与退出平滑 §3.9；**姿态/相机/表情重掷 §9**，9 情绪×3 态度×3 强度档全可达，`expression_coverage.js` 核对） |
 | `audio` | 标题 opening BGM；对话 ambient；地图 world BGM；SE；tap_voice | `audio.js`（不变，对话无 BGM 是源设计） |
 | `alarm` | 列表+编辑、贪睡、响铃全屏、env 口型 | 有；仅前台 |
 | `chara` + `save_slot` | 角色卡、存档槽 | 设定表单 + 3 槽（含游戏态） |
 | `skin` | 5 预览、2 可穿、veil | 有；3 套无骨骼只有预览图，作弊也穿不了（数据缺失） |
 | `i18n` | UI 多语言 | 7 语（新系统全量 zh/ja/en） |
-| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.5）**，见 §5 条 5 |
+| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.6）**，见 §5 条 5 |
+| `onboarding` 序章背景 | `onboarding_prologue_bg.png` 作为序章底图 | **本轮接上**（之前是自己编的渐变 + 占位圆圈） |
+| `RouletteWheel`（折扣转盘） | 「ルーレットを回して」抽订阅折扣 | **不做**：属于付费墙/订阅，见下方「故意不用」表 |
 
-素材在包里、代码**故意未用或做不到**的：
+素材在包里、代码**故意未用或做不到**的（2026-09-06 逐张核对过，别再当漏做去补）：
 
 - `web/assets/animations/`：标题火/语音钮/彩纸用画布按 JSON 帧率播（无 Lottie 运行时）
 - `web/assets/spine/objects/`（场景 JSON 未引用，只有图集没有完整 skel）
 - `paywall_*.svg`、`subscription.svg`、`tokushoho/tos/privacypolicy.svg`、
   `voicetoken_*.svg`、`logout/link/report*` 等：付费/法务/账号图标，本地版无对应流程
+- `images/onboarding/roulette_*`（5 张）+ AOT 里的 `_RouletteWheel`／「ルーレットを回して」／
+  「最大59%の割引を永久にゲット」：源里是**订阅折扣转盘**，属付费墙，不做
+- `images/login_background_*.jpg`（6 语）：`features/auth` 登录页背景，登录不做
+- `images/talk_background.png`（虚化工坊）/ `nospine_chat_background.png`：源里是对话页底图与
+  spine 加载失败兜底；我们的对话页底是**每舞台的 spine 实景**，更贴源，这两张留作备用
+- `SittingSets` 里的 `sitting_agura`（盘腿坐）：权重 99999/0，**作者自己关了**，不是漏接
 
 ---
 
@@ -316,11 +343,16 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 2. 参考音频只接受 wav/mp3；克隆用 `web/assets/voice/ryza_wav/`。
 3. 主线 8 段的具体文案是**按源素材文案重建**，不是官方任务表（表在服务器，包里只有键名）。
 4. 等级曲线（`1+√(exp/30)`）、体力价目、背包容量档位是本地定的——源值在服务器。
-5. APK：`scripts/build_apk.ps1` 需要装了便携 JDK+SDK 的机器（`setup_android_tools.ps1` 一次性装到 D:\agent\tools）。
-   **当前产物已出（1.2.5）**：`output/desktop/RyzaChat-Setup-1.2.5.exe`（NSIS 正常
-   安装/卸载，存档在 %AppData%\RyzaChat 卸载默认保留）与
-   `output/android/RyzaChat-1.2.5.apk`（559MB，自签，正常安装/卸载）。
-   两包均不含 providers.json/个人端点（AUDIT §6.7；1.2.5 出厂前逐包扫描零命中）。
+5. 安装包：`scripts/build_apk.ps1` 需要装了便携 JDK+SDK 的机器（`setup_android_tools.ps1`
+   一次性装到 D:\agent\tools）。**当前产物已出（1.2.6，版本单一来源 `config/version.json`）**：
+   - `output/desktop/RyzaChat-Setup-1.2.6.exe`（612MB，NSIS 走「应用和功能」正常安装/卸载；
+     `deleteAppDataOnUninstall:false` ⇒ 存档留在 %AppData%\RyzaChat，要彻底清就用设置页
+     「抹除全部本地数据」；win-unpacked 自检截图已核）
+   - `output/android/RyzaChat-1.2.6.apk`（559MB，自签，正常安装/卸载；新增
+     `android:hasFragileUserData` ⇒ API29+ 卸载时询问是否保留数据）
+   - 两包都由 `scripts/privacy_check.py` 在**暂存前 + 成品**各扫一遍（私人标识、密钥形状、
+     providers.json、keystore 命中即构建失败）；1.2.6 出厂扫描零命中。
+   - ⚠ 换签名的 keystore 就不能原地升级（必须先卸载），`android/keystore/` 要留着别丢。
 6. 标题/语音钮/彩纸是画布按 Lottie JSON 帧率播，不是 Lottie 运行时。
 7. `spine/objects/` 仍只有图集、没有完整 skel，无法加载。
 8. 安装包未做代码签名（SmartScreen 会警告「未知发布者」，自用无碍）。

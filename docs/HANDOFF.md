@@ -2,7 +2,26 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
-【当前状态（2026-09-05）】
+【当前状态（2026-09-06）】
+姿态/相机/表情补全已完成（AUDIT §9，不要退回去）：默认开局**站姿 `_99`**
+（旧存档一次性迁移 `state.postureMigrated`）；姿态 chip 改**动作语义**（站着显示
+「坐下」）；`midgroundPostures` 不再当皮肤约束（196/200 组场景只列 sitting），
+只决定哪里出切换 chip；黑边与切姿态背景跳位由**板内钳制相机**根除
+（`_coverFor` 量最大绘制 quad 世界框 → `_applyCamera` 背景窗口只缩不涨地钳进去，
+与玩家选的姿态无关 ⇒ 切坐/站背景一动不动；横屏黑边是同一个洞的另一半，一并没了）；
+`_placeCharacter` 按 `k=解出高/表内高` 保住表内取景，并做**视线对齐**修掉站立
+「人沉在画面底部」（表里坐 0.70 / 站 0.37，那组相机数据是照更高底板调的）；
+换场景「先是放大的坐姿、再换一次才站」两处成因修掉（`postureKey` 自己 gate +
+相机按 `_loadedPosture()` 而非请求姿态取参数）；被当 bug 删掉的 **ASMR 表情重掷**
+按源包符号 `IntensitySettings.ExpressionRerollMin` 恢复（`weak` 独有口型 010/015 回来）；
+`weight` 钉成「不写=1、写 0=作者禁用」；序章屏用回包里的
+`onboarding_prologue_bg.png`；模式名补 7 语 i18n（HUD 之前写死 `{chat:'雑談'}`）；
+`fadeVolume` 补钳制（rAF 时间戳可早于 `performance.now()` ⇒ `volume=-0.002` 抛
+`IndexSizeError` 把淡入淡出打死）。新增第四套回归 `expression_coverage.js`；
+`motion_regression.js` 加 50 舞台×3 视口×2 姿态=300 组「相机必须落在绘制框内」断言。
+版本单一来源 `config/version.json` + `scripts/stamp_version.js`；打包双闸门
+`scripts/privacy_check.py`（暂存前 + 成品，命中私人标识直接中止构建）。exe/APK 重出 **1.2.6**。
+此前（09-05）：
 模式化 TTS + 气泡自动淡出已完成（AUDIT §8，不要退回去）：每个聊天模式有自己的
 TTS 语音指导（api.js MODE_TTS 叠加在 tts.styleHint 基底上；tts.modeHints[mode]
 可整段覆盖；openai=风格消息、qwen=仅 instruct 模型加 input.instructions、
@@ -42,34 +61,51 @@ Android 键盘不再压扁画面（web/js/kbd.js）。
 _aimSm 逐骨骼平滑施加（AUDIT §3.8），指针扫掠回归守门。
 先读 docs/AUDIT.md §3.9 与 §6（本轮改动），不要重复实现、不要退回去。
 
-【2026-09-05 站坐姿/背景黑边调查结论】（**只调查，未实施**——当时代码被改乱后已回退到
-45cb88d；以下全部是核实过的事实，新对话直接从这里继续，不要重新发明）
+【2026-09-06 站坐姿 / 背景黑边 / 表情：已实施（AUDIT §9，不要退回去）】
+上一轮那份「只调查未实施」的结论有两条是错的，先记下，别照它再改一遍：
 
-1. **皮肤映射没搞反**：`_01`=座りライザ（源包 gesture 文件自带命名；赤脚、背心+短裤、
-   腿骨链短且折叠=坐姿家居服）；`_99`=…_立ち（黄色小外套+长袜+靴、腿骨 1704u 直筒=站姿）。
-   用户翻贴图与原版启动观察均一致。现码 `resolveSkel` 的 standing→_99 正确。
-2. **原版初始=_99 站姿**（用户实测原版）。我们 `config.js state.posture` 默认
-   `posture_sitting` + `postureKey()` 对单姿态场景取 m[0] → 进游戏是坐姿。**待改**：
-   默认站姿（含旧存档一次性迁移），坐姿仅在塔奥家门前（唯一双姿态场景，chip 也只在那
-   出现）可选，**离开该场景必须自动还原站姿**（postureKey 里 gate 住 supportsBoth）。
-3. **chip 标签是状态语义不是动作语义**（站着显示「立つ」）→ 用户读成「按站立却变坐」。
-   **待改**：站着显示「座る」（点击=坐下），反之亦然。
-4. **黑边根因（实测）**：场景美术不是一张全覆盖图——塔奥家门前 = far_bg（世界 Y
-   628..2701）+ floor（-2701..-1064），**中间 1692u 是空的**。站姿相机窗口
-   （worldH=1720/(zoom/1.93)=2289，center panY 1087 → -57..2232）底边探进空窗 →
-   底部黑带；坐姿窗口 358..2079 也越界 270（被输入条遮住才没被发现）。
-   切换姿态两窗口中心不同 → 背景像被挪位。**修复方案（验证过可行，未提交）**：
-   场景加载后测最大背景 quad 的 Y 范围（`_sceneCover`，region/mesh 用
-   computeWorldVertices，按 S.data 缓存），`_applyCamera` 把窗口底边钳到 quad 底、
-   窗口高于美术则收缩，同时把位移量 `_camDy` 补偿给 `_placeCharacter` 的角色 Y
-   （角色屏幕位置不动、背景底边两姿态同线）。实测数值：站 camDy=686 视图
-   629..2701，坐 camDy=270 视图 629..2349，黑边消失。
-5. **表情周期重掷缺失**：源包 AOT 有 `IntensitySettings.ExpressionRerollMin` 符号，
-   我们只在 setEmotion/带切换时重掷 → ASMR weak 档独有口型（010/015「鸡嘴」）几乎
-   不触发。修法：`_rerollIdle`（5–8s 姿势重掷 tick）里 `!_talking` 时顺带
-   `_applyFace(false)`。
-6. 回归脚本 `motion_regression.js` 顶部 SKINS 表的 posture 标注与上述一致，不用动。
-   站姿 offsetY/scale(-346/1.488) 是 posture_camera.json 源值，保留。
+* 错①：「坐姿仅在塔奥家门前可选，其余场景由 midgroundPostures 决定」。
+  实测包里 200 组场景时间组合，**196 组只列 posture_sitting**（中景沙发是按坐着画的）。
+  拿它当皮肤约束 = 全游戏永远穿 `_01`，玩家看到的还是「默认坐着」——
+  这就是改完默认值用户仍然说「进游戏还是坐着的」的原因。
+  现在：`postureKey()` 默认站姿；`midgroundPostures` **只决定哪里出现切换 chip**
+  （`supportsBothPostures()`，全包只有 `stage_01_002_01` 四时段）。
+* 错②：「`resolveSkel` 的 standing→`_99` 正确，皮肤没搞反」这句结论**对**，
+  但理由要用数据说：两份 gesture 各自的 `projectConfig.postureKey` 就是权威
+  （`_01`=座りライザ（普通座り）/posture_sitting，`_99`=ライザ(3の通常)_立ち/posture_standing）。
+  真反的是三处：默认值（已改站姿 + `state.postureMigrated` 一次性迁移）、
+  chip 标签（状态语义→**动作语义**：站着显示「座る/坐下」）、场景约束（见错①）。
+
+黑边与背景跳位（实测数字，420×860，`stage_01_002_01`）：站姿窗口 −57…2232（高 2289）、
+坐姿 359…2079（高 1720），而 `far_bg` 只画了 629…2701（高 2072），`floor` 在 −2701…−1064，
+**中间 1693u 是空的**；站姿窗口比整块 `far_bg` 还高 217u ⇒ 光靠平移不可能不黑，
+必须缩。横屏是同一个洞的另一半（`worldW = worldH × 宽高比`，一宽就走出美术左右边界）。
+修法（`avatar.js` 一处收口，不给单舞台打补丁）：
+`_coverFor()` 取**最大**绘制 quad 的世界框（不是并集，并集会把空带算成已覆盖）→
+`_applyCamera()` 背景窗口取**场景自身姿态**的表内窗口，只缩不涨地钳进板内
+（⇒ 切坐/站背景一动不动、任意视口无黑边）→ `_placeCharacter()` 用
+`k = 解出窗口高 / 表内窗口高` 把角色映射进去（她的屏幕大小/位置仍是表里那套）。
+站立「人沉在画面底部」：表里坐着的头在窗口 0.70、站着的在 0.37（ASMR 0.49/0.10），
+是照更高的一块底板调的 ⇒ **视线对齐**（普通 0.68、ASMR 0.50，偏差 >0.10 才动，
+头的局部高度从骨架 setup pose 现算，不按舞台写死）。实测站 268px / 坐 270px 同一视线。
+
+换场景「先是放大的坐姿、再换一次才站」两个成因（都已修，别退回）：
+① 姿态复位写在 `loadScene` 回调里，比皮肤解析晚一整个场景 ⇒ `postureKey()` 自己 gate；
+② `loadScene` 先 `resize()` 后 `loadSkin()`，中间那一帧用新姿态的相机摆旧皮肤
+（坐着的网格被 `_99` 的 `scale 1.488` 放大）⇒ 相机/摆位一律按
+**屏幕上实际是哪套皮肤**（`_loadedPosture()` 读 `_loadedSkelId`）取参数。
+
+表情（用户：「之前不小心把 asmr 模式的一个表情当 bug 移除了」）：
+被 §3.7 第 10 条「说话不再重摇表情」连带削掉的是**重掷时机**，不是某个 set。
+源包 AOT 有 `IntensitySettings.ExpressionRerollMin` / `expressionRerollIntervalMin/Max`
+这两个字段名但 JSON 没给值 ⇒ 按「源里有就用源的、没有按常理」：姿势重掷 tick
+（5–8s）里没说话时顺带 `_applyFace(false)`。实测（坐姿皮肤 ASMR 300 次重掷）
+`weak` 档独有口型 `facial_mouth_010/015` 回来了。
+`weight` 语义也钉住了：**不写=1，写 0=作者禁用**（`_99` 的 happy/weak 30 个里 18 个、
+tease/weak 24 个里 12 个是显式 0）；整档被禁用时返回 null 退回该档 base，
+不许再兜底把禁用的脸放出来。
+新增第四套回归 `scripts/expression_coverage.js`：逐条核对引用能否解析、
+每个 set 是否可达、哪些 facial clip 没人引用（只剩 `_scrub_01` 变体，源数据就没指）。
 
 【一比一（强制）】
 源 APK：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（v1.0.2）。
@@ -80,7 +116,10 @@ _aimSm 逐骨骼平滑施加（AUDIT §3.8），指针扫掠回归守门。
 本地定值必须列在 AUDIT §6.3，不许当成官方数值传。
 没有 Dart 源码可抄。官方登录/订阅/代币购买本身仍不做（见「明确不要做」）。
 
-已核对记录：`docs/AUDIT.md`（2026-08-31 基线；09-01 动作修复 §3.7；09-02 游戏系统 §6）。
+已核对记录：`docs/AUDIT.md`（2026-08-31 基线；09-01 动作修复 §3.7；09-02 游戏系统 §6；
+09-03 点击精修 §3.9；09-04 布局 §7；09-05 模式化 TTS §8；09-06 姿态/相机/表情 §9）。
+注意：AUDIT/HANDOFF 是**上一轮当时**的判断，不是事实源。本轮就发现旧文里两条结论是错的
+（见下面 §9 那段的「错①/错②」）。冲突时以 `web/assets/` 里的原始 JSON + 真机实测为准。
 音景与源包一致：**对话页没有 BGM**（包里只有 `bgm_opening` / `bgm_world_map` 两首），对话页播地点 ambient；进地图才切 `bgm_world_map`。不要把「地图才出 BGM」当成漏做。腮红 overlay 按 Normal。角色 Physics **每帧只 update 一次**。
 `config/providers.json` 含水合用的 API Key，**不要进 git、不要打进任何安装包**；复制 `config/providers.example.json` 再填。
 不要把 AUDIT 旧段落里的「NPC 调度错、FX_BY_EMOTION、循环 fade_in、sourceHash 对不上」当成还没修——那些已经改过。先读 AUDIT 全文再动手。
@@ -142,11 +181,18 @@ PROJECT.md 第 7 节列出了所有解包产物的路径。其中这些是**原�
 安装包：powershell -File scripts/build_desktop.ps1
 APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk17 + android-sdk），
       再 scripts/build_apk.ps1
+      两个脚本都会：从 config/version.json 盖版本号（stamp_version.js）→ 暂存前跑
+      privacy_check.py → 出成品后再跑一遍（APK 按 zip 成员逐个查）。命中即中止构建。
+      APK 侧 android:hasFragileUserData=true（API29+ 卸载时问是否保留数据）；
+      NSIS 侧 deleteAppDataOnUninstall=false（存档留在 %AppData%，彻底清用设置页）。
+      ⚠ android/keystore 必须复用同一把 key，换 key 就不能原地升级。
 
 【测试（改完必须全绿）】
-  node scripts/motion_regression.js       # 立绘 60s×2 姿态
+  node scripts/motion_regression.js       # 立绘 60s×2 姿态 + 姿态/相机 300 组钳制断言
   node scripts/game_logic_regression.js   # 数值/任务链 1→8 通关/每日登录/reducer 钳位
   node scripts/boot_smoke.js              # App.init 用真实 index.html id 集全链路
+  node scripts/expression_coverage.js     # 表情/动作可达性 + 引用解析全量核对
+  python scripts/privacy_check.py web     # 打包前隐私自查（构建脚本已自动跑）
 截图走查（UI 改动必做）：外部工具在 D:\agent\temp\ryza-shot（puppeteer-core + 本机 Edge），
   node shot.js title talk quest daily world people settings inv status faint tap
   出图在 shots/*.png，用 read 工具看图核对。Electron 窗口自检：
@@ -235,6 +281,20 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
     - 手机端 TTS 必须能在设置里填模型名（providers.json 打包不存在）；
       Api.speak 的占位符模型拦截（NO_MODEL）别删。
 
+18. 【姿态与相机（AUDIT §9，2026-09-06）不要退回去】
+    - 皮肤↔姿态的权威是两份 gesture 各自的 `projectConfig.postureKey`
+      （`_01`=sitting、`_99`=standing）；**默认站姿**。
+    - `midgroundPostures` 只决定「哪里允许切换」（`supportsBothPostures()`），
+      **不要**再拿它当皮肤约束——196/200 组场景只列 sitting，那样全游戏永远坐着。
+    - 背景窗口必须与玩家选的姿态无关（按 `_primaryPosture()` 解算），否则切坐/站跳位；
+      钳制只允许「缩」不允许「涨」，涨了就出黑边。
+    - `_placeCharacter`/`_applyCamera` 取相机参数一律用 `_loadedPosture()`
+      （屏幕上实际是哪套皮肤）；用 `postureKey()`（请求值）就会在换场景那一帧
+      把旧皮肤按新 `scale` 摆出来＝用户报的「放大的坐姿」。
+    - 视线对齐只在偏差 >0.10 时生效，别改成无条件强推——那会毁掉 196 个场景的既有构图。
+    - `_coverFor` 取**最大** quad 而不是并集（并集把 `floor` 拉进来，假装空带被画了）；
+      量时忽略 `slot.color.a`（淡入中途会判空）；`RegionAttachment` 的四角缓存
+      首帧前可能是空的，那个「尺寸×骨骼矩阵」的兜底框别删。
 17. 【模式化 TTS + 气泡生命周期（AUDIT §8，2026-09-05）不要退回去】
     - TTS 语音指导= `ttsStyleFor(mode)` 两层：`tts.styleHint`（基底，用户可改）
       + `MODE_TTS[mode]`（模式层，`tts.modeHints` 可覆盖）。别退回「所有模式
