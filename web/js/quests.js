@@ -213,10 +213,6 @@
       return q;
     },
 
-    advance: function (by) {                 /* legacy name kept for reducer */
-      return Quests.progressEvent('talk', by || 1);
-    },
-
     /* Reducer entry: a `<state>` quest block from the LLM. */
     onQuestDelta: function (d, origin) {
       if (!d || typeof d !== 'object') return null;

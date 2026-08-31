@@ -2217,7 +2217,7 @@
       var pick = list[Math.floor(Math.random() * list.length)];
       var anim = pickAnim(L.data, pick.OverlayID);
       if (!anim) return null;
-      var pc = Avatar.gesture.projectConfig || {};
+      var pc = Avatar._pc();
       var enter = Number(pc.tapReactionEnterMix);
       if (!(enter >= 0)) enter = 0.2;
       /* The source's enter mix is 0: a poke from rest cuts straight in. But

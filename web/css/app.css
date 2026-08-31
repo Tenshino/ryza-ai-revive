@@ -320,9 +320,13 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .onb-progress{font-size:12px;color:var(--gold);letter-spacing:.08em;margin-bottom:8px}
 .onb-card h2{margin:0 0 6px;font-size:18px}
 .onb-sub{color:var(--dim);font-size:13px;line-height:1.6;margin:0 0 14px}
-#overlay-prologue{background:radial-gradient(ellipse at 50% 70%,#2a1a22,rgba(6,4,8,.96))}
-.pro-sleep{width:120px;height:120px;border-radius:50%;background:rgba(232,180,92,.12);
-  border:1px solid var(--line);margin-bottom:18px}
+/* The prologue narration screen ships its own art in the pack
+   (images/onboarding_prologue_bg.png — the dusk hillside over the island).
+   A scrim keeps the step counter readable over it. This used to be a made-up
+   radial gradient plus a placeholder circle. */
+#overlay-prologue{background:
+  linear-gradient(180deg,rgba(6,4,8,.62),rgba(6,4,8,.86)),
+  url('../assets/images/onboarding_prologue_bg.png') center/cover no-repeat #060408}
 #overlay-alarm{background:rgba(10,6,8,.88);z-index:240}
 .ring-card{background:var(--panel-2);border:1px solid var(--gold);border-radius:18px;padding:28px 22px;min-width:240px}
 .ring-time{font-size:42px;font-weight:700;letter-spacing:.06em}
