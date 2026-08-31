@@ -6,6 +6,7 @@
 上下文；桌面壳换 Electron 无边框；点击热区修复。见 §6；§5 的「不做」清单已改）
 增补：2026-09-03（**点击退出平滑 + 热区精确化**：§3.9；死代码清理；
 exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
+增补：2026-09-04（**全视口布局 + 桌面等比缩放 + TTS 模型字段**：§7，重出 1.2.4）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -334,13 +335,13 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
 
 - 桌面：Electron `frame:false` + `setAlwaysOnTop('screen-saver')` 开关 + 顶栏拖拽；
   NSIS 安装/卸载走系统「应用和功能」，存档在 `%AppData%\RyzaChat`（卸载默认保留）。
-  产物 `output/desktop/RyzaChat-Setup-1.2.3.exe`（612MB，含全部素材；
+  产物 `output/desktop/RyzaChat-Setup-1.2.4.exe`（612MB，含全部素材；
   win-unpacked 自检截图=标题页正常渲染）。
 - 安卓：`AssetServer` 补 `/_proxy`（缺它手机端对话必 CORS 挂）、`config/*` 一律 404；
   去 androidx；`scripts/build_apk.ps1` 无 Gradle 直出签名 APK；正常安装/卸载。
 - 隐私：包内**无** `providers.json`；`config.js` 默认端点中立化（不再内置个人地址）；
   `src/` 原型、`data/*.wav` 测试音频、`output/*.png` 截图已从仓库删除；
-  keystore 目录 gitignore。1.2.3 产物内嵌文件逐包扫描：**零** `bmh05/token-plan/
+  keystore 目录 gitignore。1.2.4 产物内嵌文件逐包扫描：**零** `bmh05/token-plan/
   xiaomimimo/sk-*/D:\agent` 私人标识（`api.js` 内置的 `dashscope.aliyuncs.com` 是
   百炼**公共**默认端点，等同 api.openai.com，属功能必需，不是私人信息）。
 
@@ -393,3 +394,50 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   尼梅德地方/冥界奥利姆/克劳迪娅 等已全部撤销。
 - 出口收敛：内容文本只经 `I18n.tc/tf`、`World.npcName/placeLabel`、
   `Quests.titleOf/descOf/goalOf`，语言切换调 `App._relocalize()` 全量重绘。
+
+---
+
+## 7. 全视口布局 + 桌面缩放 + TTS 模型字段（2026-09-04，不要退回去）
+
+用户报告三连：①桌面缩小窗口后固定像素 UI 挤压/字溢出；②背景不铺满——
+桌面宽窗口和手机异形屏都出黑边；③手机上把小米端点填进去报
+「unsupported model tts-model」。
+
+### 7.1 黑边与缩放的根因与修法
+
+- 根因：`#phone{width:min(100vw, 100vh*9/19.5)}` 强制竖屏列，比例不是
+  19.5:9 时两侧漏出 body 底色；UI 全固定 px，窗口变小不会缩。
+- **`#phone` 现在占满视口**（`position:fixed;inset:0`）。Spine 相机本来就按
+  画布宽高推导 world 宽（`worldW = worldH × cssW/cssH`），场景美术覆盖任意
+  比例（340×560 / 393×851 / 900×380 / 1000×700 截图验证无黑边）。
+- **桌面等比缩放**：`App._fitUi`（仅 Electron，`window.ryzaShell` 门控）设
+  `#phone` 的 CSS `zoom = clamp(min(vw/420, vh/860), 0.8, 1.25)`。
+  ⚠ 必须用 `innerWidth/innerHeight`，**不能**用 `#phone.clientWidth`——
+  clientWidth 被 zoom 除过，会形成反馈在 z 与 1.0 之间来回震荡。
+- **坐标换算**：`Avatar._cssZoom(el) = rect.width/clientWidth`（自测量，
+  对新旧 zoom 语义都成立；Edge 实测 0.814/0.800 与设定值精确一致）。
+  所有 `clientX-rect.left` → 布局 px 的换算（注视指针 `_bindPointer`、
+  点击 `hitPartAt`/波纹）一律除以它；画布 backing store 的 dpr 乘它。
+  Android/浏览器 zoom 恒 1，走流式布局。
+- kbd.js 删掉 9/19.5 宽度钉（公式已不存在）；`.sheet` 加
+  `max-width:min(600px,100%);margin:0 auto`（宽窗口可读性）。
+- **Android 刘海**：manifest activity 补
+  `android:windowLayoutInDisplayCutoutMode="shortEdges"`（API27+，旧系统忽略）。
+  没有它，刘海机型在 NoTitleBar.Fullscreen 下被系统垫黑边——与 web 布局无关，
+  是黑边问题在手机端的另一半。viewport-fit=cover + env(safe-area) 顶栏内边距
+  此前已就位。
+
+### 7.2 手机端 TTS「unsupported model tts-model」
+
+- 根因：**设置页 openai TTS 区块没有模型名输入框**。`modelClone/modelPreset`
+  平时靠 `config/providers.json` 水合填真值，但打包壳里 config/* 一律 404
+  （隐私设计），手机端永远停在占位符 `'tts-model'/'voice-clone-model'`，
+  原样发给小米端点 → 服务端回「unsupported model」。
+- 修复：clone/preset 两模式各加一个「模型名」输入框（绑
+  `tts.modelClone`/`tts.modelPreset`）；`Api.speak` 对空/占位符模型本地拦截，
+  抛 `NO_MODEL` → 走 `toast.needModel`（「请先在设置里填写 TTS 模型名」，
+  zh/zh-tw/ja/en 有词条，其余语言按 `I18n.t` 回落 en）。
+- **手机端 TTS 可用配置**（小米 MiMo 为例）：提供商=OpenAI 兼容、
+  接口地址=你的小米端点、API Key、模式（克隆/预设）下把**服务端给的模型 id**
+  填进新出现的「模型名」框；参考音频默认指向包内
+  `assets/voice/ryza_wav/`（wav 已在 APK/exe 内，无需公网）。

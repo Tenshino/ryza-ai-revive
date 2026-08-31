@@ -23,7 +23,7 @@ $And = Join-Path $Root "android"
 $Web = Join-Path $Root "web"
 $Work = Join-Path $Root "output\apk-work"
 $Out = Join-Path $Root "output\android"
-$Ver = "1.2.3"; $VC = 6
+$Ver = "1.2.4"; $VC = 7
 
 Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $Work, $Out | Out-Null

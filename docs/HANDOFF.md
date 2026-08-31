@@ -2,7 +2,16 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
-【当前状态（2026-09-03）】
+【当前状态（2026-09-04）】
+布局自适应已完成（AUDIT §7，不要退回去）：#phone 占满视口（黑边根除，Spine
+相机自适应任意宽高比）；桌面窗 App._fitUi 给 #phone 设 CSS zoom 等比缩 UI
+（仅 Electron，必须用 innerWidth/Height 不能用 clientWidth——会反馈震荡）；
+一切 clientX→布局 px 换算经 Avatar._cssZoom 除回（注视/点击/画布 dpr 三处）；
+Android manifest 补 windowLayoutInDisplayCutoutMode=shortEdges（否则刘海机黑边）。
+TTS：openai 区块补了模型名输入框（手机端「unsupported model tts-model」根因＝
+没有该输入框、占位符直接发给端点；providers.json 只在开发水合，打包 404）；
+Api.speak 对空/占位符模型抛 NO_MODEL→toast.needModel；端点/密钥两端已分离
+（qwenBaseUrl/qwenApiKey vs baseUrl/apiKey，见 §6.9）。exe/APK 重出 1.2.4。
 AUDIT §5 条 5/6 的两个交互问题已全部修复（机制与回归断言见 AUDIT §3.9，不要退回去）：
 点击热区 = BB_* 多边形 ∩ 可见轮廓（miss→null，半径兜底已删；poke(null) 不再兜底
 放随机反应；App 只在命中时出波纹/SE/语音）；退出点击态 = 淡出时长按反应 clip
@@ -175,6 +184,17 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
       音色本来就分离（`qwenVoice` vs `presetVoice`/`reference`）。别把 qwen 路径
       改回读共享字段——那正是「切端点后 401/404」的根源（AUDIT §6.9）。
       参考 wav（assets/voice/ryza_wav/，git 跟踪）三端相对路径解析已核，随包分发。
+
+16. 【布局自适应（AUDIT §7，2026-09-04）不要退回去】
+    - `#phone` 占满视口（fixed;inset:0），**别再引入 9:19.5 之类比例列**——黑边就是这么来的。
+    - 桌面缩放=`App._fitUi` 设 `#phone` CSS zoom（ryzaShell 门控，手机/浏览器恒 1）；
+      比例计算只能用 innerWidth/innerHeight，**用 clientWidth 会反馈震荡**。
+    - 任何 `clientX - rect.left`→布局 px 的新代码，一律除以 `Avatar._cssZoom(el)`；
+      画布 backing store 的 dpr 乘它。漏一处=点击偏或画面糊。
+    - Android 刘海靠 manifest `windowLayoutInDisplayCutoutMode=shortEdges` +
+      viewport-fit=cover + env(safe-area) 三件套，缺一有黑边。
+    - 手机端 TTS 必须能在设置里填模型名（providers.json 打包不存在）；
+      Api.speak 的占位符模型拦截（NO_MODEL）别删。
 
 【三条必须知道的技术约束】
 1. Spine 4.2：skeleton.updateWorldTransform(spine.Physics.update) 必须传枚举；
