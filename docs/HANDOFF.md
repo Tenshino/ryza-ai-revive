@@ -2,19 +2,26 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
-【当前状态（2026-09-02）】
+【当前状态（2026-09-03）】
+AUDIT §5 条 5/6 的两个交互问题已全部修复（机制与回归断言见 AUDIT §3.9，不要退回去）：
+点击热区 = BB_* 多边形 ∩ 可见轮廓（miss→null，半径兜底已删；poke(null) 不再兜底
+放随机反应；App 只在命中时出波纹/SE/语音）；退出点击态 = 淡出时长按反应 clip
+末帧位移放大（源 0.3s 为下限）、肢体层与 _lookMul 在淡出 60% 处重叠还原、
+一次性动作期间指针参考冻结（_faceRef）；连续点击 = 首发保留源瞬切（enter 0）、
+重叠时 0.15s 交叉淡化。死代码已清（见 AUDIT §6.2 末段），TTS 语言映射收口
+Langs.ttsLangType。exe/APK 已统一重出 1.2.2。
 RPG 游戏系统已按源包数据补全：GameState（体力苹果/经验等级/金币/双背包/相遇名单/记忆）、
 主线 8 段任务（终点造船出海→解锁世界地图 area_02–05）、对话驱动 <state> 数值协议、
 每日登录（5 日连续里程碑）、体力耗尽与睡觉恢复、作弊模式（设置→游戏性，一键解除限制）。
 语言矩阵四槽独立（界面/自带语音/回复/朗读，朗读≠回复时先翻译再合成）；
 TTS 双提供商（MiMo OpenAI 兼容 + Qwen 百炼，含莱莎原声复刻入口）；
 物品/任务/人名/地名内容本地化，人名只用源包验证过的官方译名（AUDIT §6.9）。
-桌面壳 = Electron 无边框窗（置顶/最小化/关闭/顶栏拖拽），NSIS 安装包已产出；
+桌面壳 = Electron 无边框窗（置顶/最小化/关闭/顶栏拖拽），NSIS 安装包；
 安卓壳 = 纯 Activity + AssetServer（含 POST+GET /_proxy），scripts/build_apk.ps1 无 Gradle 直出 APK；
 Android 键盘不再压扁画面（web/js/kbd.js）。
 注视跟随的三处单帧瞬变（阈值硬门/eye-head 增益/followers delay 跳档）已统一收口为
 _aimSm 逐骨骼平滑施加（AUDIT §3.8），指针扫掠回归守门。
-先读 docs/AUDIT.md §6 与 §5 条 5/6（两个待修交互问题），不要重复实现、不要退回去。
+先读 docs/AUDIT.md §3.9 与 §6（本轮改动），不要重复实现、不要退回去。
 
 【一比一（强制）】
 源 APK：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（v1.0.2）。
@@ -100,7 +107,8 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
 【已经跑通的部分】
 标题页（隐藏全部 chrome）、onboarding 问卷/序章/教程（教程台词用源包挖回的原文）、
 单 WebGL 画布立绘+场景、坐/站随 midgroundPostures、gesture 全套、注视/张力/指尖/口型、
-分部位点击（波纹环+反应动作+tap_voice，热区已不被气泡遮挡）、
+分部位点击（波纹环+反应动作+tap_voice；热区=BB 多边形∩可见轮廓，
+退出平滑、连点交叉，AUDIT §3.9）、
 世界钉子图 + NPC 全字段调度 + 人物面板（area_bottom_sheet）、出航前 area_02–05 上锁、
 游戏系统全链路（见上）、双背包+金币扩容、状态面板、音景、闹钟、5 槽换装+veil、
 欢迎任务、存档槽（含游戏态）、LLM 经代理 + providers.json 水合、TTS 克隆、
@@ -140,7 +148,17 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
     别把 eyeK/headK 或 followers delay 改回单帧切换——那会复活
     「特定角度卡模型/重影」。motion_regression 的指针扫掠断言（_aimSm
     每帧 <12u）就是守这条的，改注视相关代码后必跑。
-14. 【语言与命名（2026-09-02）】
+14. 【点击交互（AUDIT §3.9，2026-09-03）不要退回去】
+    - hitPartAt = BB_* 多边形 ∩ `_onCharacter` 可见轮廓，miss→null；
+      骨根半径兜底和 `poke(null)→随机反应` 都已删，别加回来。
+      App 的波纹/SE/tap_voice 只在命中时触发。
+    - 退出淡出 = `_pokeExitMix`（源 0.3s 下限、按末帧位移放大到 ≤0.65s）；
+      肢体层与 `_lookMul` 在淡出 60% 处重叠还原（`_pokeUnmuteReady`，
+      avatar.js `_loop` 和 motion_regression `stepOnce` 共用这一个出口条件）。
+    - 一次性动作期间 `_faceRef` 冻结指针参考；`_lookMul` 回升 τ=0.3s。
+    - 连点：首发瞬切（enter=0 是源值），`_trackBusy(6)` 时 0.15s 交叉。
+    - 回归里 `_aimSm` 每帧 <25u 的断言只在 poke 退出窗口测；扫掠断言仍是 <12u。
+15. 【语言与命名（2026-09-02）】
     - 语言矩阵四槽：app.lang / voice.lang / llm.lang / tts.lang（Langs 助手在 i18n.js）。
       tts.lang ≠ llm.lang 时 Api.translate 先翻译再合成；显示文字永远是 llm.lang。
     - 人格提示词保持原版日文，只加「## 出力言語（厳守）」段。别把 persona 翻成中文。
@@ -170,21 +188,13 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
 但玩家看见的流程要跟源模块一致。
 
 【还剩的、能做的】
-  ★ 本轮未修的两个交互问题（用户实测报告，细节在 AUDIT §5 条 5/6）：
-    1) 点击反应→待机的退出略突兀：查 poke() 出口 addEmptyAnimation 与
-       _muteAdditives(false) 的还原时机/mix 值（反应 clip 大的时候 0.3s 偏短，
-       肢体层不要在退出当帧弹回）。
-    2) 点击区域太粗：hitPartAt 在无 attachment 时退化到骨根半径 140/220，
-       身体外围全误触。源 skel 有 6 个 BB_* 包围盒，改为直接读
-       BoundingBoxData 顶点×骨骼世界变换做多边形判定，miss 就返回 null。
-       无浏览器探针写法在 AUDIT §5 条 6；断言并入 motion_regression。
-  ★ 代码自 7b05c55 后有改动（语言矩阵/Qwen TTS/注视平滑）：output/ 里的
-    exe 安装包与 APK 是旧的，改完上面两条后跑 scripts/build_desktop.ps1
-    和 scripts/build_apk.ps1 重出包。
   - 闹钟后台化（Web 层做不到，可考虑桌面壳加系统级排程）
   - 标题/语音钮按 Lottie JSON 帧率画，不是 Lottie 运行时（源包未带运行时，不引 CDN）
   - spine/objects/ 只有图集没有 skel，加载不了
   - 安装包代码签名（自用可跳过）
+  - 用户计划以后把「游戏完整版」下载下来后继续加内容——保持模块边界
+    （game/quests/daily 只经 Game.applyDelta 写；UI 只读；见 AUDIT §6.2），
+    新数值/曲线类数据一律「形制照抄、本地定值」并登记在 AUDIT §6.3。
 
 【明确不要做】（官方服务端/商业能力）
 登录 / Firebase、订阅付费墙、代币与回合票购买、皮肤内购、远程资源下载门、

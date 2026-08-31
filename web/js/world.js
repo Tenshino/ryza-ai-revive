@@ -87,21 +87,8 @@
       return hit ? hit.field.stages.slice() : [];
     },
 
-    stagesInArea: function (areaId) {
-      var out = [];
-      World.fields(areaId).forEach(function (f) {
-        f.stages.forEach(function (s) { out.push(s); });
-      });
-      return out;
-    },
-
     backgroundFor: function (stageId) {
       return World.stageMap ? (World.stageMap[stageId] || stageId) : stageId;
-    },
-
-    hasScene: function (stageId, tod) {
-      var bg = World.backgroundFor(stageId);
-      return !!(World.scenes && World.scenes[bg] && World.scenes[bg][tod || 'aft']);
     },
 
     todLabel: function (tod) { return I18n.t('tod.' + tod); },

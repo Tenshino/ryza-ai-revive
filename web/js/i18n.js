@@ -914,7 +914,6 @@
   var I18n = {
     lang: 'zh',
     LANG_NAMES: LANG_NAMES,
-    TTS_LANGS: TTS_LANGS,
     LANGS: [
       { id: 'zh', label: '简体中文' },
       { id: 'zh-tw', label: '繁體中文' },

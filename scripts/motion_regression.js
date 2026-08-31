@@ -168,7 +168,8 @@ function resetAvatar(skin) {
     _lookCyc: null, _ptrW: 0, _ptrN: 0, _dt: 0, _aimSm: null, _kSm: null,
     _blinkMode: 'blink', _closedDur: 0, _closedHold: 0, _tension: 0,
     _rollSm: 0, _exprBand: '',
-    _lookMul: 1, _lipOpen: 0, _lipHold: 0, _lookHist: [], _lookClock: 0
+    _lookMul: 1, _lipOpen: 0, _lipHold: 0, _lookHist: [], _lookClock: 0,
+    _faceRef: null, _exitMixCache: null
   });
   Avatar._look = { yaw: 0, pitch: 0, roll: 0, ty: 0, tp: 0, tr: 0,
                    hold: 2, trans: 0.8, t: 0 };
@@ -205,7 +206,7 @@ function stepOnce(L, label) {
   Avatar._idleTimer += DT;
   if (Avatar._idleTimer > Avatar._idleGap) Avatar._rerollIdle();
 
-  if (Avatar._addMuted && !Avatar._oneShotBusy()) Avatar._muteAdditives(false);
+  if (Avatar._addMuted && Avatar._pokeUnmuteReady()) Avatar._muteAdditives(false);
 
   if (Avatar._closedHold > 0) Avatar._closedHold -= DT;
   Avatar._blinkTimer -= DT;
@@ -556,6 +557,149 @@ for (const skin of SKINS) {
     }
   }
   console.log('OK   blends: wind=add, occupancy=replace');
+})();
+
+/* ---- tap hit-test precision (AUDIT §5.6): only inside the author's BB_*
+   polygons AND on the visible silhouette; misses must return null (the old
+   220u bone-radius fallback was the "点其他地方也触发" misfire). ---- */
+(function checkHitParts() {
+  for (const skin of SKINS) {
+    const L = resetAvatar(skin);
+    Avatar.setEmotion('neutral', 'agree', true);
+    for (let i = 0; i < 60; i++) stepOnce(L, 'hit settle');
+    /* Wide synthetic view so world→css keeps every body part on-canvas. */
+    Avatar._view = { left: -10000, bottom: -10000, worldW: 20000, worldH: 20000,
+                     cssW: 1000, cssH: 1000 };
+    const toCss = function (wx, wy) {
+      const v = Avatar._view;
+      return [(wx - v.left) * v.cssW / v.worldW,
+              v.cssH - (wy - v.bottom) * v.cssH / v.worldH];
+    };
+    const map = Avatar._pc().hitPartNames;
+    let hits = 0, total = 0;
+    for (const slotName in map) {
+      total++;
+      const poly = Avatar._bbPoly(slotName);
+      if (!poly) fail(skin.id + ': no live BB poly for ' + slotName);
+      let cx = 0, cy = 0;
+      for (let i = 0; i < poly.length / 2; i++) { cx += poly[i * 2]; cy += poly[i * 2 + 1]; }
+      cx /= poly.length / 2; cy /= poly.length / 2;
+      const c = toCss(cx, cy);
+      const r = Avatar.hitPartAt(c[0], c[1]);
+      const onSil = Avatar._onCharacter(cx, cy);
+      if (onSil && !r) fail(skin.id + ': ' + slotName + ' centroid on silhouette but hitPartAt=null');
+      if (!onSil && r) fail(skin.id + ': ' + slotName + ' centroid off silhouette but hitPartAt=' + r);
+      if (r) {
+        hits++;
+        const rSlot = Object.keys(map).find(k => map[k] === r);
+        const rPoly = Avatar._bbPoly(rSlot);
+        if (!rPoly || !Avatar._pointInPoly(cx, cy, rPoly)) {
+          fail(skin.id + ': ' + slotName + ' centroid → ' + r + ' whose poly misses the point');
+        }
+      }
+      /* The head centroid is dead on the drawn face in both skins. */
+      if (map[slotName] === 'head' && r !== 'head') {
+        fail(skin.id + ': face centre → ' + String(r) + ', expected head');
+      }
+      if (Avatar.hitPartAt(1, 1) !== null || Avatar.hitPartAt(998, 998) !== null) {
+        fail(skin.id + ': off-body view corner still triggers a part');
+      }
+    }
+    if (hits < 2) fail(skin.id + ': only ' + hits + '/' + total + ' centroids hit');
+    console.log('OK   ' + skin.id + ': tap hit-test — ' + hits + '/' + total +
+                ' part centroids hit, silhouette gate + misses → null');
+  }
+
+  /* ---- poke exit: limb layers must re-blend while the exit fade still runs
+     (one continuous settle, not reaction→bare idle→limbs-pop-back). ---- */
+  const skin = SKINS[0];
+  const L = resetAvatar(skin);
+  Avatar.setEmotion('neutral', 'agree', true);
+  for (let i = 0; i < 60; i++) stepOnce(L, 'poke settle');
+  if (!Avatar._armG) fail('poke exit check: boot produced no arm layer to restore');
+  if (!Avatar.poke('head')) fail('poke(head) returned no reaction overlay');
+  /* Chained taps: from rest the source cut-in (enter=0) must hold, but a
+     reaction overlapping one still playing/fading must cross-fade — the
+     hard cut was the reported 「两个连续点击之间衔接不流畅」. */
+  let tr6 = L.state.getCurrent(6);
+  if (!(tr6 && tr6.mixDuration === 0)) {
+    fail('first poke lost the source cut-in: mixDuration=' + (tr6 && tr6.mixDuration));
+  }
+  if (!Avatar.poke('body')) fail('chained poke(body) returned no reaction');
+  tr6 = L.state.getCurrent(6);
+  if (!(tr6 && tr6.mixDuration >= 0.1)) {
+    fail('chained poke hard-cut: mixDuration=' + (tr6 && tr6.mixDuration));
+  }
+  console.log('OK   tap chaining: rest→cut-in, overlap→' + tr6.mixDuration.toFixed(2) + 's crossfade');
+  /* Exit fade must scale with the clip's end displacement (the touch clips
+     end mid-gesture; a flat 0.3 s whips the arm — user report 2026-09). */
+  const big = L.data.findAnimation('motion_touch_A_005_active');
+  const small = L.data.findAnimation('motion_touch_A_001_active');
+  const mixBig = Avatar._pokeExitMix(big), mixSmall = Avatar._pokeExitMix(small);
+  const floor = Number(Avatar._pc().tapReactionExitMix) || 0.3;
+  if (!(mixBig >= floor && mixBig <= 0.65)) fail('exit mix out of range: ' + mixBig);
+  if (!(mixBig > mixSmall)) fail('exit mix does not scale with displacement (' +
+                                 mixBig + ' vs ' + mixSmall + ')');
+  console.log('OK   tap exit mix scales: 001=' + mixSmall.toFixed(2) + 's 005=' + mixBig.toFixed(2) + 's');
+  /* Park the pointer off-face at full finger-track strength: the exit must
+     re-aim inside the fade as ONE settle, not a late cursor-chase swoop. */
+  const pv = Avatar._view;
+  const pb = L.skeleton.findBone('head');
+  Avatar._pointer.on = true;
+  Avatar._pointer.x = (pb.worldX + 300 - pv.left) * pv.cssW / pv.worldW;
+  Avatar._pointer.y = pv.cssH - (pb.worldY - 200 - pv.bottom) * pv.cssH / pv.worldH;
+  let guard = 0;
+  /* Watch _aimSm per-frame movement continuously through the whole exit
+     (fade start → drain + 1 s): the pointer re-aim must ride inside the
+     fade as one settle, not a late swoop (AUDIT §5.5). Sampling must not
+     skip frames or the guard measures elapsed-time drift as one frame. */
+  let prevAim = null, maxAimJump = 0, where = '', exitStarted = false,
+      overlapBusy = false;
+  function sampleAim(label) {
+    if (!exitStarted) return;
+    const sm = Avatar._aimSm || {};
+    for (const k of Object.keys(sm)) {
+      if (!prevAim || !prevAim[k]) continue;
+      const d = Math.hypot(sm[k][0] - prevAim[k][0], sm[k][1] - prevAim[k][1]);
+      if (d > maxAimJump) { maxAimJump = d; where = k + ' ' + label; }
+    }
+    prevAim = {};
+    for (const k of Object.keys(sm)) prevAim[k] = [sm[k][0], sm[k][1]];
+  }
+  function stepMeasured(label) { stepOnce(L, label); sampleAim(label); }
+  for (;;) {
+    const tr6 = L.state.getCurrent(6);
+    const inFade = tr6 && /<empty>/i.test((tr6.animation && tr6.animation.name) || '') &&
+                   tr6.mixingFrom;
+    if (inFade) exitStarted = true;
+    if (inFade && tr6.mixTime / Math.max(1e-6, tr6.mixDuration) >= 0.7) {
+      overlapBusy = Avatar._oneShotBusy();
+      break;
+    }
+    if (++guard > 60 * 10) fail('poke exit check: track 6 never entered the exit fade');
+    stepMeasured('poke exit');
+  }
+  if (Avatar._addMuted) {
+    fail('poke exit: limbs still muted at 70% of the exit fade (the two-phase bounce is back)');
+  }
+  if (!overlapBusy) {
+    fail('poke exit: reaction had already drained at 70% of the fade (overlap untestable)');
+  }
+  for (let i = 0; i < 90; i++) stepMeasured('poke drain');
+  if (Avatar._addMuted) fail('poke exit: mute never lifted after the fade drained');
+  if (!Avatar._armG) fail('poke exit: arm layer not restored after the reaction');
+  if (!(Avatar._lookMul > 0.9)) fail('poke exit: _lookMul stuck at ' + Avatar._lookMul.toFixed(2));
+  for (let i = 0; i < 60; i++) stepMeasured('poke after');
+  /* The overlapped ramp (mul τ=0.3 inside the fade) moves the aim ~15-20u/f
+     at full pointer strength by design; the guard is against the old
+     single-frame re-aim which snapped ~300u at pointer strength. */
+  if (!(maxAimJump < 25)) {
+    fail('poke exit: aim contribution moved ' + maxAimJump.toFixed(1) +
+         'u in one frame (' + where + ') — pointer/gaze re-aim is not smoothed');
+  }
+  assertTrack0IsBaseIdle(L, 'poke exit');
+  console.log('OK   poke exit: single settle (limbs+_lookMul overlapped, aim max ' +
+              maxAimJump.toFixed(1) + 'u/f)');
 })();
 
 /* ---- every animation named in the gesture table exists in the .skel */

@@ -593,9 +593,6 @@
     done: function (id) {
       return !!(Config.section('state').welcome && Config.section('state').welcome[id]);
     },
-    allDone: function () {
-      return WELCOME_STEPS.every(function (s) { return Welcome.done(s.id); });
-    },
     render: function (root) {
       root.innerHTML = '';
       var hero = document.createElement('div');

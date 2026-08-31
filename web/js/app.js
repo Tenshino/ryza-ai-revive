@@ -521,8 +521,9 @@
         if (App._inTutorial) { Onboarding.tutorialAdvance(); return; }
         var rect = ev.target.getBoundingClientRect();
         var x = ev.clientX - rect.left, y = ev.clientY - rect.top;
-        App._ripple(x, y);
         var part = Avatar.hitPartAt(x, y);
+        if (!part) return;   /* miss = no ripple, no SE, no reaction */
+        App._ripple(x, y);
         var overlay = Avatar.poke(part);
         App.buzz();
         if (window.Sound) {

@@ -130,11 +130,6 @@
     _fft: null,
     _poseType: '',
     _sittingId: 'sitting_normal',
-    _addGroup: '',
-    _torsoGroup: '',
-    _legGroup: '',
-    _legLGroup: '',
-    _legRGroup: '',
     _armG: null,
     _torsoG: null,
     _legG: null,
@@ -154,6 +149,8 @@
     _quadBuf: null,
     _typeMap: null,
     _lookMul: 1,
+    /* frozen pointer reference during one-shots (see _applyLook) */
+    _faceRef: null,
     _fxNames: null,
     /* FX pick memo (emotion|band) so one reply does not re-roll blush twice */
     _fxPick: null,
@@ -336,43 +333,87 @@
       return inside;
     },
 
-    /* hitPartNames: BB_head → head, etc. Prefer bounding-box poly, else bone radius. */
+    /* Part priority when several BB_* boxes overlap (they do — the author's
+       boxes are generous rectangles). Specific parts win, body is the catch-all. */
+    _PART_PRIORITY: ['head', 'breast', 'weast', 'arm_l', 'arm_r', 'body'],
+
+    _bbMap: function () {
+      return (Avatar.gesture && Avatar.gesture.projectConfig &&
+              Avatar.gesture.projectConfig.hitPartNames) || {
+        BB_head: 'head', BB_body: 'body', BB_arm_L: 'arm_l', BB_arm_R: 'arm_r',
+        BB_weast: 'weast', BB_breast: 'breast'
+      };
+    },
+
+    /* World-space polygon of a slot's bounding-box attachment, or null. */
+    _bbPoly: function (slotName) {
+      var L = Avatar.avatar;
+      if (!L || !L.skeleton) return null;
+      var slot = L.skeleton.findSlot(slotName);
+      if (!slot || !slot.bone || !slot.bone.active) return null;
+      var att = slot.getAttachment && slot.getAttachment();
+      if (!att || !att.worldVerticesLength || !att.computeWorldVertices) return null;
+      var verts = [];
+      try {
+        att.computeWorldVertices(slot, 0, att.worldVerticesLength, verts, 0, 2);
+      } catch (e) { return null; }
+      return verts.length >= 6 ? verts : null;
+    },
+
+    /* Is the world point on a *visible* part of the character? The BB_* boxes
+       reach far outside the drawn silhouette, so a bare box test lets clicks
+       in empty space next to her trigger reactions. Any rendered region/mesh
+       covering the point counts (setup-hidden FX/BB/clip slots don't). */
+    _onCharacter: function (x, y) {
+      var L = Avatar.avatar;
+      if (!L || !L.skeleton) return false;
+      var slots = L.skeleton.slots, i, slot, att, verts, n;
+      for (i = 0; i < slots.length; i++) {
+        slot = slots[i];
+        if (!slot.bone.active || !slot.data.visible) continue;
+        if (slot.color.a < 0.05) continue;
+        att = slot.getAttachment && slot.getAttachment();
+        if (!att) continue;
+        if (att instanceof spine.BoundingBoxAttachment ||
+            att instanceof spine.ClippingAttachment ||
+            att instanceof spine.PathAttachment ||
+            att instanceof spine.PointAttachment) continue;
+        verts = [];
+        try {
+          if (att instanceof spine.RegionAttachment) {
+            att.computeWorldVertices(slot, verts, 0, 2);
+          } else if (att.worldVerticesLength) {
+            att.computeWorldVertices(slot, 0, att.worldVerticesLength, verts, 0, 2);
+          } else {
+            continue;
+          }
+        } catch (e) { continue; }
+        n = verts.length;
+        if (n >= 6 && Avatar._pointInPoly(x, y, verts)) return true;
+      }
+      return false;
+    },
+
+    /* Exact tap-to-part mapping: inside the highest-priority BB_* polygon
+       AND on the visible silhouette. Anything else returns null — there is
+       deliberately no bone-radius fallback anymore (the old 220u circle
+       swallowed half the background and was the misfire source). */
     hitPartAt: function (cssX, cssY) {
       var L = Avatar.avatar;
       if (!L || !L.ready || !L.skeleton) return null;
       var w = Avatar.screenToWorld(cssX, cssY);
-      var map = (Avatar.gesture && Avatar.gesture.projectConfig &&
-                 Avatar.gesture.projectConfig.hitPartNames) || {
-        BB_head: 'head', BB_body: 'body', BB_arm_L: 'arm_l', BB_arm_R: 'arm_r',
-        BB_weast: 'weast', BB_breast: 'breast'
-      };
-      var best = null, bestD = 1e15, slotName, slot, att, verts, hit, d, rad;
+      if (!Avatar._onCharacter(w.x, w.y)) return null;
+      var map = Avatar._bbMap();
+      var byPart = {}, slotName;
       for (slotName in map) {
         if (!Object.prototype.hasOwnProperty.call(map, slotName)) continue;
-        slot = L.skeleton.findSlot(slotName);
-        if (!slot || !slot.bone) continue;
-        att = slot.getAttachment && slot.getAttachment();
-        verts = [];
-        try {
-          if (att && att.computeWorldVertices) {
-            if (att.worldVerticesLength) {
-              att.computeWorldVertices(slot, 0, att.worldVerticesLength, verts, 0, 2);
-            } else {
-              att.computeWorldVertices(slot.bone, verts, 0, 2);
-            }
-          }
-        } catch (e) { verts = []; }
-        hit = false; d = 0;
-        if (verts.length >= 6) {
-          hit = Avatar._pointInPoly(w.x, w.y, verts);
-        } else {
-          d = Math.pow(w.x - slot.bone.worldX, 2) + Math.pow(w.y - slot.bone.worldY, 2);
-          rad = /head/i.test(slotName) ? 140 : 220;
-          hit = d < rad * rad;
-        }
-        if (hit && d <= bestD) { bestD = d; best = map[slotName]; }
+        var poly = Avatar._bbPoly(slotName);
+        if (poly && Avatar._pointInPoly(w.x, w.y, poly)) byPart[map[slotName]] = true;
       }
-      return best;
+      for (var i = 0; i < Avatar._PART_PRIORITY.length; i++) {
+        if (byPart[Avatar._PART_PRIORITY[i]]) return Avatar._PART_PRIORITY[i];
+      }
+      return null;
     },
 
     _placeCharacter: function () {
@@ -387,14 +428,6 @@
       L.skeleton.x = x;
       L.skeleton.y = y;
       L.skeleton.scaleX = L.skeleton.scaleY = cam.scale;
-    },
-
-    _measure: function (L) {
-      if (!L || !L.skeleton) return;
-      var off = new spine.Vector2(), size = new spine.Vector2();
-      L.skeleton.updateWorldTransform(spine.Physics.pose);
-      L.skeleton.getBounds(off, size, []);
-      L.bounds = { offset: { x: off.x, y: off.y }, size: { x: size.x, y: size.y } };
     },
 
     /* ------------------------------------------------------- asset loading */
@@ -459,11 +492,8 @@
             Avatar._drivers = null;
             Avatar._fxOn = false;
             Avatar._poseType = '';
-            Avatar._addGroup = '';
-            Avatar._torsoGroup = '';
-            Avatar._legGroup = '';
-            Avatar._legLGroup = '';
-            Avatar._legRGroup = '';
+            Avatar._faceRef = null;
+            Avatar._exitMixCache = null;
             Avatar._armG = null;
             Avatar._torsoG = null;
             Avatar._legG = null;
@@ -585,13 +615,7 @@
       return { min: a, max: b };
     },
 
-    _mixFor: function (emotion) {
-      var r = Avatar._mixRange(emotion);
-      return r.min + Math.random() * (r.max - r.min);
-    },
-
-    /* Idle↔idle. Distance mix only when MixDurationPoses.sourceHash matches
-       the live skeleton hash; otherwise same-type short mix / cross-type random. */
+    /* The MixDurationPoses table (distance mix data) */
     _mixBag: function () {
       return Avatar.gesture && Avatar.gesture.emotionalGesture &&
              Avatar.gesture.emotionalGesture.MixDurationPoses;
@@ -634,6 +658,8 @@
       return n ? sum / n : 0;
     },
 
+    /* Idle↔idle. Distance mix only when MixDurationPoses.sourceHash matches
+       the live skeleton hash; otherwise same-type short mix / cross-type random. */
     _mixBetween: function (fromName, toName, emotion) {
       var r = Avatar._mixRange(emotion);
       var sat = Number(Avatar._pc().mixDurationSaturationRatio);
@@ -783,10 +809,6 @@
         var hit = pickAnim(data, n);
         return hit ? { name: hit, w: 1 } : null;
       }).filter(Boolean);
-    },
-
-    _idles: function (data) {
-      return Avatar._idlesForType(data, Avatar._poseType);
     },
 
     _ioClip: function (data, activeName, phase) {
@@ -1428,8 +1450,17 @@
       while (Avatar._lookHist.length > 1 && Avatar._lookHist[0].t < Avatar._lookClock - 2.8) {
         Avatar._lookHist.shift();
       }
-      var wantMul = Avatar._oneShotBusy() ? 0.15 : 1;
-      Avatar._lookMul += (wantMul - Avatar._lookMul) * (1 - Math.exp(-dt / 0.18));
+      /* wantMul: suppress the look system while a one-shot owns the aim
+         bones. Two exits used to be visibly separate beats: the 0.15→1.0
+         recovery started only after the reaction had fully drained, and its
+         tau was shorter than everything else's — so after the 0.3 s exit
+         fade had already settled, the head chased the (still hovering)
+         cursor ONE MORE TIME. Now it starts at the same 60 % point of the
+         exit fade as the limb un-mute, and recovers slower (0.3 s), so all
+         exit quantities converge as a single motion. */
+      var wantMul = (Avatar._oneShotBusy() && !Avatar._pokeUnmuteReady()) ? 0.15 : 1;
+      var mulTau = wantMul > Avatar._lookMul ? 0.3 : 0.18;
+      Avatar._lookMul += (wantMul - Avatar._lookMul) * (1 - Math.exp(-dt / mulTau));
 
       var pc = Avatar._pc();
       var w = Avatar.screenToWorld(Avatar._pointer.x, Avatar._pointer.y);
@@ -1514,8 +1545,23 @@
         var face = L.skeleton.findBone(pc.fingerTrackCenterBone || 'rig_face') ||
                    L.skeleton.findBone('head');
         if (face) {
-          var dx = Avatar._ptrSm.x - face.worldX;
-          var dy = Avatar._ptrSm.y - face.worldY;
+          /* While a one-shot owns the head, the face bone is dragged far from
+             idle by the reaction clip. Measuring the cursor against that
+             moving bone made the pointer offset swing with the gesture and
+             snap back at the end — a second bounce riding on top of the exit
+             fade (the "点击反应↔注视打架" suspect). Freeze the reference at
+             the last pre-gesture position; after the drain, live tracking
+             resumes within a few units of the same point. */
+          var fx, fy;
+          if (Avatar._oneShotBusy()) {
+            if (!Avatar._faceRef) Avatar._faceRef = { x: face.worldX, y: face.worldY };
+            fx = Avatar._faceRef.x; fy = Avatar._faceRef.y;
+          } else {
+            Avatar._faceRef = { x: face.worldX, y: face.worldY };
+            fx = face.worldX; fy = face.worldY;
+          }
+          var dx = Avatar._ptrSm.x - fx;
+          var dy = Avatar._ptrSm.y - fy;
           var dist = Math.sqrt(dx * dx + dy * dy);
           var n = maxR > 0 ? dist / maxR : 0;
           if (n > 1) { dx /= n; dy /= n; n = 1; }
@@ -1877,23 +1923,93 @@
       }
     },
 
+    /* Exit fade for tap reactions. The source's tapReactionExitMix (0.3 s)
+       is the FLOOR, not the value: the shipped motion_touch_A_* clips all
+       END mid-gesture — measured end-vs-idle displacement is 170–490 world
+       units on the arm chain, so a fixed 0.3 s return whips the arm down at
+       up to ~1600 u/s (the reported 「点击后的动作恢复不自然」). Scale the
+       fade with the actual displacement; per-clip result is cached. */
+    _pokeExitMix: function (anim) {
+      var pcfg = (Avatar.gesture && Avatar.gesture.projectConfig) || {};
+      var base = Number(pcfg.tapReactionExitMix);
+      if (!(base > 0)) base = 0.3;
+      if (!anim || !anim.duration) return base;
+      var cache = Avatar._exitMixCache || (Avatar._exitMixCache = {});
+      if (cache[anim.name] != null) return cache[anim.name];
+      var mix = base;
+      try {
+        var data = Avatar.avatar.data;
+        var sk = new spine.Skeleton(data);
+        var asd = new spine.AnimationStateData(data);
+        asd.defaultMix = 0;
+        var st = new spine.AnimationState(asd);
+        var idle = Avatar._idleName();
+        if (!idle || !data.findAnimation(idle)) {
+          idle = (data.findAnimation('motion_A_001_idle') && 'motion_A_001_idle') ||
+                 (data.animations[0] && data.animations[0].name);
+        }
+        st.setAnimation(0, idle, false);
+        st.update(0); st.apply(sk); sk.updateWorldTransform(spine.Physics.pose);
+        var ref = sk.bones.map(function (b) { return [b.worldX, b.worldY]; });
+        st.setAnimation(1, anim.name, false);
+        st.update(anim.duration); st.apply(sk);
+        sk.updateWorldTransform(spine.Physics.pose);
+        var maxD = 0;
+        for (var i = 0; i < sk.bones.length; i++) {
+          var b = sk.bones[i];
+          var d = Math.hypot(b.worldX - ref[i][0], b.worldY - ref[i][1]);
+          if (d > maxD) maxD = d;
+        }
+        mix = Util.clamp(base + maxD / 1400, base, 0.65);
+      } catch (e) { mix = base; }
+      cache[anim.name] = mix;
+      return mix;
+    },
+
     poke: function (partName) {
       var L = Avatar.avatar;
-      if (!L || !L.ready) return null;
+      if (!L || !L.ready || !partName) return null;
       var reactions = (Avatar.gesture && Avatar.gesture.emotionalGesture &&
                        Avatar.gesture.emotionalGesture.TapReactions) || [];
-      var list = partName ? reactions.filter(function (r) { return r.PartName === partName; }) : [];
-      if (!list.length) list = reactions;
+      /* Only reactions mapped to the tapped part. The old "no match → any
+         reaction" fallback made misses and unmapped parts still flinch. */
+      var list = reactions.filter(function (r) { return r.PartName === partName; });
       if (!list.length) return null;
       var pick = list[Math.floor(Math.random() * list.length)];
       var anim = pickAnim(L.data, pick.OverlayID);
       if (!anim) return null;
       var pc = Avatar.gesture.projectConfig || {};
+      var enter = Number(pc.tapReactionEnterMix);
+      if (!(enter >= 0)) enter = 0.2;
+      /* The source's enter mix is 0: a poke from rest cuts straight in. But
+         when a NEW reaction lands on top of one still playing or still
+         fading out, a hard cut drops the limb to the new clip's first frame
+         mid-gesture — chained taps felt worse than the old flat 0.2. Cross-
+         fade only in that overlap case. */
+      if (enter === 0 && Avatar._trackBusy(6)) enter = 0.15;
       Avatar._muteAdditives(true);
       var tr = L.state.setAnimation(6, anim, false);
-      tr.mixDuration = Number(pc.tapReactionEnterMix) || 0.2;
-      L.state.addEmptyAnimation(6, Number(pc.tapReactionExitMix) || 0.25, 0);
+      tr.mixDuration = enter;
+      L.state.addEmptyAnimation(6, Avatar._pokeExitMix(anim), 0);
       return pick.OverlayID;
+    },
+
+    /* Un-mute timing for the tap exit. The limb/occupancy layers used to come
+       back on the first frame after the exit fade fully drained: the body
+       landed on the bare idle, then shifted again as the layers blended in —
+       a two-phase "bounce" the user felt as 退出点击突兀. Letting the layers
+       re-blend from ~60 % into the fade turns the two moves into one settle.
+       (tapReactionExitMix stays the source's authority; we only overlap.) */
+    _pokeUnmuteReady: function () {
+      var L = Avatar.avatar;
+      var st = L && L.state;
+      if (!st) return false;
+      if (!Avatar._oneShotBusy()) return true;
+      var tr = st.getCurrent(6);
+      if (!tr || !tr.mixingFrom || !Avatar._entryLive(tr.mixingFrom)) return false;
+      if (!/<empty>/i.test((tr.animation && tr.animation.name) || '')) return false;
+      var dur = Math.max(1e-6, Number(tr.mixDuration) || 0.3);
+      return (Number(tr.mixTime) || 0) / dur >= 0.6;
     },
 
     /* --------------------------------------------------------------- loop */
@@ -1951,7 +2067,7 @@
         Avatar._rerollIdle();
       }
 
-      if (Avatar._addMuted && !Avatar._oneShotBusy()) {
+      if (Avatar._addMuted && Avatar._pokeUnmuteReady()) {
         Avatar._muteAdditives(false);
       }
 

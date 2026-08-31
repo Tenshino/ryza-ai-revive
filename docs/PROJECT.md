@@ -4,11 +4,15 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-09-02）：**RPG 层已按源数据补全**——游戏状态（体力苹果 / 经验等级 / 金币 /
-双背包 / 相遇名单 / 记忆）、8 段主线任务（终点「造船出海」解锁世界地图）、
-对话驱动的 `<state>` 数值增减、每日登录、体力耗尽与睡觉恢复，全部本地实现；
-官方付费墙不做，改为设置里的**作弊模式**一键解除全部限制。
-桌面壳换成 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK 的构建脚本就绪。
+状态（2026-09-03）：**点击交互精修完成**——热区改为 BB_* 多边形∩可见轮廓
+（点空白不再触发），退出点击态按末帧位移放大淡出并与肢体层/注视恢复重叠
+（不再两段弹），连续点击交叉衔接；RPG 层已按源数据补全——游戏状态（体力苹果 /
+经验等级 / 金币 / 双背包 / 相遇名单 / 记忆）、8 段主线任务（终点「造船出海」
+解锁世界地图）、对话驱动的 `<state>` 数值增减、每日登录、体力耗尽与睡觉恢复，
+全部本地实现；官方付费墙不做，改为设置里的**作弊模式**一键解除全部限制。
+桌面壳是 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK
+统一重出 **1.2.2**（`output/desktop/RyzaChat-Setup-1.2.2.exe`、
+`output/android/RyzaChat-1.2.2.apk`）。
 立绘动作与音景维持 2026-09-01 的修复结论（见 `docs/AUDIT.md` §3.7）。
 
 本目录已 `git init`，作为防错改快照。`config/providers.json` **不要提交**（含 API Key）；模板是 `config/providers.example.json`。
@@ -159,7 +163,9 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 路径：`ManagedWebGLRenderingContext` + 自建 `Matrix4` MVP + `PolygonBatcher` +
 `SkeletonRenderer`。单画布 `#scene-canvas`，点击层 `#avatar-hit`。
 坐/站随场景 `midgroundPostures`；`fixedBasePoseMode`；注视/张力/指尖/口型/
-Occupancy/rim 全部见 AUDIT §3.7。**不要退回旧坑**（HANDOFF 的 21 条）。
+Occupancy/rim 全部见 AUDIT §3.7；**点击热区（BB 多边形∩轮廓）与退出平滑
+（位移缩放淡出 + 重叠还原 + 连点交叉）见 AUDIT §3.9**。
+**不要退回旧坑**（HANDOFF 的坑清单）。
 
 #### `web/js/app.js` — 主控制器（只编排，不存状态）
 
@@ -245,7 +251,7 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 | **背包** | `inventory_sheet`、you/ryza 两包、四档容量 | **已实现**（双 tab + 金币扩容） |
 | **NPC** | 地图在场、`met_charas` 进状态、`area_bottom_sheet` | **已实现**（人物面板 + 提示词注入 + 状态页名单） |
 | 付费墙/代币/订阅 | — | 不做；**作弊模式**替代（设置→游戏性） |
-| `spine_avatar` | 情绪/表情/眨眼/分部位点击/注视/物理/站坐/ASMR/视差/rim | 已接（AUDIT §3；点击热区本轮修复） |
+| `spine_avatar` | 情绪/表情/眨眼/分部位点击/注视/物理/站坐/ASMR/视差/rim | 已接（AUDIT §3；点击热区与退出平滑精修见 §3.9） |
 | `audio` | 标题 opening BGM；对话 ambient；地图 world BGM；SE；tap_voice | `audio.js`（不变，对话无 BGM 是源设计） |
 | `alarm` | 列表+编辑、贪睡、响铃全屏、env 口型 | 有；仅前台 |
 | `chara` + `save_slot` | 角色卡、存档槽 | 设定表单 + 3 槽（含游戏态） |

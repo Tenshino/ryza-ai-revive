@@ -4,6 +4,8 @@
 增补：2026-09-01（动作抽动与不自然：注视/指针/张力/眨眼/重掷加权/hash；见 §3.7）
 增补：2026-09-02（**游戏系统补全**：GameState/体力苹果/主线 8 段/每日登录/背包/NPC
 上下文；桌面壳换 Electron 无边框；点击热区修复。见 §6；§5 的「不做」清单已改）
+增补：2026-09-03（**点击退出平滑 + 热区精确化**：§3.9；死代码清理；
+exe/APK 统一重出 1.2.2）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -178,6 +180,39 @@
 **注意**：断言对象是 `_aimSm`（注视系统自己的输出），不是骨骼位置（含动画基底，
 idle 重掷本身有合法位移，别改回测骨骼）。
 
+### 3.9 点击退出平滑 + 热区精确化（2026-09-03 已修，不要退回去）
+
+用户报告「切换到非点击状态突兀」「点其他区域也触发」，后追加「连续点击衔接变差」。
+根因全部实测定位（`motion_regression.js` 新增 4 组守门断言）：
+
+1. **误触主因不是半径兜底**（那半确实删了）：`poke(null)` 旧代码有
+   `list = reactions` 兜底——没命中部位也随机放反应；App 层无条件画波纹/播 SE/振动。
+   现在：`hitPartAt` = **BB_\* 多边形 ∩ 可见轮廓**（`_onCharacter` 逐槽
+   Region/Mesh 世界顶点 point-in-poly），多边形按
+   `_PART_PRIORITY`（head>breast>weast>arm_l>arm_r>body，作者盒子互相覆盖）取
+   最specific者；miss 一律 null（骨根半径 140/220 兜底**已删**，别加回来）。
+   App 只在命中时才有波纹/SE/语音；`poke` 只认映射到该 PartName 的反应。
+   实测：BB 盒中心 4/6 落在轮廓内（手臂盒本来就画得比手臂大——这是作者数据，
+   断言只锁「盒内∧轮廓内⇔可命中」的一致性，不锁数量）。
+2. **退出两段弹**：肢体层（8–14）旧时在 track 6 淡出**完全结束后**才还原，
+   身体先落到裸 idle 再被叠层拽一次。现在 `_pokeUnmuteReady()`：淡出到 60% 即
+   开始还原，`_lookMul`（注视/指针跟随增益）同一时机、τ=0.3s 回升——所有量
+   一次收敛。
+3. **手臂鞭甩**：7 条 `motion_touch_A_*` 的**结束帧停在动作中途**（末帧 vs idle
+   实测位移 170–490u），固定 0.3s 淡出＝手臂 ~1600u/s 抽回去。现在
+   `_pokeExitMix(anim)` 按末帧位移线性放大淡出（源 `tapReactionExitMix=0.3` 是
+   **下限**，上限 0.65s；每 clip 缓存）。实测 001→0.43s、005→0.46s。
+4. **指针参考摆动**：`_applyLook` 的 finger-track 偏移量是「光标 − face 骨骼
+   当前位置」，反应动画把脸拖走时偏移跟着甩、退出再甩回来。现在一次性动作期间
+   参考点冻结（`_faceRef`），几何不随动画摆。
+5. **连点衔接**：源 `tapReactionEnterMix=0`（首发瞬切，保留）；但新反应叠在
+   仍活跃/淡出中的旧反应上时**瞬切＝从动作中途硬跳新 clip 首帧**（用户报告的
+   「连续点击不流畅」）。现在 `_trackBusy(6)` 时改用 0.15s 交叉淡化。
+
+回归断言：`tap hit-test`（轮廓门控+miss→null+角点 null）、`poke exit: single
+settle`（淡出 70% 处肢体已还原且 `_aimSm` 每帧 <25u）、`tap chaining`
+（rest→cut-in / overlap→crossfade）、`tap exit mix scales`（005>001、区间钳制）。
+
 ---
 
 ## 4. 其它模块（对照旧 AUDIT 已修）
@@ -198,31 +233,12 @@ idle 重掷本身有合法位移，别改回测骨骼）。
 2. `spine/objects/` 仍只有图集、没有完整 skel
 3. 闹钟仅前台
 4. ~~鼠标注视特定位置卡模型/重影~~ **【2026-09 已修，见 §3.8】**
-5. **【新·待修】点击反应结束回待机略突兀**（用户报告：状态之间切换可以，
-   退出点击态突兀）。嫌疑点（按优先级）：
-   a. `poke()` 出口：`addEmptyAnimation(6, tapReactionExitMix=0.3, 0)` 之后
-      `_loop` 里 `if (Avatar._addMuted && !Avatar._oneShotBusy()) _muteAdditives(false)`
-      ——一次性动作刚结束的那一帧立刻还原被静音的 8–14 肢体层；若
-      `_muteAdditives(false)` 的 setAnimation mix 太小/为 0，手臂会从
-      反应姿势直接弹回叠加层姿势。查 `_muteAdditives` 的 mix 值，出口应
-      用 `tapReactionExitMix`（0.3）级别的淡入，且最好延迟到 empty 淡出完成。
-   b. track 6 的 empty 淡出与 track 0/1 的交互：反应 clip 幅度大时 0.3s 可能仍短，
-      可叠 `performanceConfig` 的 exit 值（源 tapReactionExitMix 是权威，别乱改大）。
-6. **【新·待修】点击区域判定太粗**（点身体外围也触发）。现状：`hitPartAt`
-   用 `projectConfig.hitPartNames`（BB_head/BB_body/BB_arm_L/BB_arm_R/BB_weast/
-   BB_breast → head/body/arm_l/arm_r/weast/breast），但**只有当槽当前挂着
-   attachment 时才走多边形**，否则退化成骨根半径（head 140 / 其余 **220** 世界单位）
-   ——220 半径基本覆盖半个身体轮廓外沿，这就是误触来源。
-   源 skel 里确认存在 6 个 `BB_*` 包围盒（`strings` 扫 skel 验证），
-   修复方向：从 `skeleton.data` 直接取 BoundingBoxData（spine 4.2 运行时
-   `data.boundingBoxes` 或 skins attachments 里 constructor 名含 BoundingBox），
-   用其 `vertices`（局部坐标）× 槽骨骼世界变换 → 世界多边形 → `_pointInPoly`；
-   多边形全部 miss 时**返回 null**（不再大半径兜底），最多保留 head 一个小半径
-   （≤60）容错。探针写法（无浏览器）：
-   `const spine = eval(fs.readFileSync('web/vendor/spine-webgl.js','utf8') + '\n;spine');`
-   然后 `new spine.SkeletonBinary().readSkeletonData(buf.buffer)` 查
-   `data.boundingBoxes`/slot attachment 类型；把断言并入 motion_regression
-   （角点/体外坐标 → hitPartAt===null；脸中心 → 'head'）。
+5. ~~【新·待修】点击反应结束回待机略突兀~~ **【2026-09-03 已修，见 §3.9】**
+   （肢体层还原与 `_lookMul` 已重叠进淡出、退出时长按末帧位移放大、
+   指针参考冻结；`motion_regression` 有 single-settle 断言守门）
+6. ~~【新·待修】点击区域判定太粗~~ **【2026-09-03 已修，见 §3.9】**
+   （BB_\* 多边形 ∩ 可见轮廓，miss→null，半径兜底已删；
+   `poke(null)` 不再兜底放随机反应；App 只在命中时出波纹/SE）
 
 **明确不做（官方服务端/商业能力）：** 登录/Firebase、订阅付费墙、代币/回合票购买、
 皮肤内购、远程资源门、公告、强制更新、分析、官方 marionette websocket。
@@ -265,6 +281,15 @@ idle 重掷本身有合法位移，别改回测骨骼）。
 - `app.js`：编排层。上下文注入 = `Game.promptBlock + App._peopleBlock + Quests.promptBlock`，
   人物块由 App 拼（World 的名字表只有 App 会同时拿到 World 和 Game，模块间不互相 import）。
 - 事件：`Game.on(cb)` 单向广播，HUD/面板只读不写。
+
+**2026-09-03 整理**（为后续加内容腾结构）：删除全仓零引用的死函数
+`Avatar._measure/_mixFor/_idles`、`Daily.cheatSetStreak`、`Welcome.allDone`、
+`World.stagesInArea/hasScene`（`backgroundFor` 有 8 处引用，保留）、
+`Avatar` 的 `_addGroup/_torsoGroup/_legGroup/_legLGroup/_legRGroup` 遗留字段；
+TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
+（api.js 不再直读 `I18n.TTS_LANGS`，该导出已删）。
+`motion_regression` 的 poke 出口条件与 `_loop` 共用 `Avatar._pokeUnmuteReady()`，
+不再两处各写一份。
 
 ### 6.3 本地定值（≠ 官方数值）
 

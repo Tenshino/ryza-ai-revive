@@ -293,7 +293,7 @@
     _qwenSpeak: function (text, lang) {
       var tts = Config.section('tts');
       var lg = lang || (window.Langs ? Langs.tts() : 'ja');
-      var langType = (window.I18n && I18n.TTS_LANGS && I18n.TTS_LANGS[lg]) || 'Auto';
+      var langType = window.Langs ? Langs.ttsLangType(lg) : 'Auto';
       var base = (tts.baseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
       return request(localProxy(base + '/api/v1/services/aigc/multimodal-generation/generation'), {
         model: tts.qwenModel || 'qwen3-tts-flash',

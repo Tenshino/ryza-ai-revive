@@ -106,12 +106,6 @@
       return { ok: true, day: idx + 1, text: msgs.join('、') };
     },
 
-    /* Cheat helper: jump the streak pointer without editing dates. */
-    cheatSetStreak: function (n) {
-      Daily.s.streak = Util.clamp(n | 0, 0, 6);
-      Daily.save();
-    },
-
     render: function (root) {
       if (!root) return;
       root.innerHTML = '';
