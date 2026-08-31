@@ -251,8 +251,10 @@
     speak: function (text, lang) {
       var tts = Config.section('tts');
       if (tts.mode === 'off') return Promise.resolve(null);
-      if (!tts.apiKey) return Promise.reject(new Error('NO_KEY'));
+      /* Per-provider credentials: qwen has its own baseUrl/apiKey so a MiMo
+         setup can never leak into a DashScope call (or back). */
       if ((tts.provider || 'openai') === 'qwen') return Api._qwenSpeak(text, lang);
+      if (!tts.apiKey) return Promise.reject(new Error('NO_KEY'));
 
       var audio = { format: tts.format || 'wav' };
       if (tts.mode === 'clone') {
@@ -292,9 +294,10 @@
 
     _qwenSpeak: function (text, lang) {
       var tts = Config.section('tts');
+      if (!tts.qwenApiKey) return Promise.reject(new Error('NO_KEY'));
       var lg = lang || (window.Langs ? Langs.tts() : 'ja');
       var langType = window.Langs ? Langs.ttsLangType(lg) : 'Auto';
-      var base = (tts.baseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
+      var base = (tts.qwenBaseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
       return request(localProxy(base + '/api/v1/services/aigc/multimodal-generation/generation'), {
         model: tts.qwenModel || 'qwen3-tts-flash',
         input: {
@@ -302,7 +305,7 @@
           voice: tts.qwenVoice || 'Cherry',
           language_type: langType
         }
-      }, tts.apiKey, 180000).then(function (j) {
+      }, tts.qwenApiKey, 180000).then(function (j) {
         var aud = j && j.output && j.output.audio;
         if (aud && aud.data) return Api._b64ToUrl(aud.data, 'audio/wav');
         if (aud && aud.url) return Api._downloadUrl(aud.url);
@@ -324,8 +327,8 @@
        return the voice_id. target_model must match the synthesis model. */
     qwenCloneVoice: function () {
       var tts = Config.section('tts');
-      if (!tts.apiKey) return Promise.reject(new Error('NO_KEY'));
-      var base = (tts.baseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
+      if (!tts.qwenApiKey) return Promise.reject(new Error('NO_KEY'));
+      var base = (tts.qwenBaseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
       return Api._fetchAsDataUrl(tts.reference).then(function (dataUri) {
         return request(localProxy(base + '/api/v1/services/audio/tts/customization'), {
           model: 'voice-enrollment',
@@ -336,7 +339,7 @@
             preferred_name: 'ryza',
             url: dataUri
           }
-        }, tts.apiKey, 120000);
+        }, tts.qwenApiKey, 120000);
       }).then(function (j) {
         var out = j && j.output;
         var vid = out && (out.voice_id || out.voice);

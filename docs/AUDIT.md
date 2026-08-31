@@ -367,6 +367,21 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   无需公网托管）→ voice_id 自动填入。
   **实测边界**：Token Plan 个人版 key 在 dashscope 401（其条款亦禁止 API 调用），
   token-plan maas 主机无 TTS 模型（404）→ Qwen 槽必须用普通百炼 sk- key。
+- **TTS 端点/密钥按 provider 分离（2026-09-03）**：qwen 用自己的
+  `tts.qwenBaseUrl`/`tts.qwenApiKey`（设置页 Qwen 区块绑定这两个字段；
+  baseUrl 留空回落公共 DashScope），openai 用 `tts.baseUrl`/`tts.apiKey`。
+  切换提供商**互不残留**——此前两端共享字段，把 MiMo 的 URL/key 发给
+  DashScope 会 401/404（用户担心的「跨端找不到」实际发生在这里，不是音色上）。
+  旧配置一次性迁移：`Config.load` 里 provider=qwen 且 qwen 字段为空时
+  把共享字段值搬过去。音色字段本来就分离（`qwenVoice` vs
+  `presetVoice`/`reference`），voice_id 不会跨端串用。
+- **参考音频跨端解析（已核）**：`tts.reference='assets/voice/ryza_wav/prologue_08.wav'`
+  是页面相对路径，经三端同源 HTTP 服务解析：serve.py（web/ 根）、Electron
+  （resources/web 根）、APK AssetServer（`assets.open("assets/voice/...")` →
+  APK 条目 `assets/assets/voice/...`，pack 脚本对 web/ 整体加 `assets/` 前缀，
+  映射一致）。ryza_wav 九个 wav 由 git 跟踪、随两包打包（APK 内已验证 9 个
+  entry）；换机 clone 后文件仍在。`_fetchAsDataUrl` 失败只 toast
+  「无法读取参考音频」，不崩。
 - **命名硬规则**：人名/地名/物品名只用**源包内验证过**的官方译名。验证方法：
   从 APK 提取 `libapp.so`，Dart 双字节字符串是 **UTF-16LE** 存储——按两种对齐
   扫 CJK 串（`D:\agent\temp\apk-l10n\dump_ordered.py`，temp 会清，方法在案）；

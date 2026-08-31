@@ -170,6 +170,11 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
       sk- API key**；Token Plan 个人版 key 在 dashscope 是 401，且条款禁止 API 调用，
       别把它配进 Qwen 槽。Qwen 声音复刻走 voice-enrollment + data URI（本地 wav 直接
       base64，无需公网），voice_id 自动填设置。
+    - 【2026-09-03】两端**凭据字段已分离**：qwen 只读 `tts.qwenBaseUrl`/`tts.qwenApiKey`
+      （baseUrl 空=回落公共 DashScope），openai 只读 `tts.baseUrl`/`tts.apiKey`；
+      音色本来就分离（`qwenVoice` vs `presetVoice`/`reference`）。别把 qwen 路径
+      改回读共享字段——那正是「切端点后 401/404」的根源（AUDIT §6.9）。
+      参考 wav（assets/voice/ryza_wav/，git 跟踪）三端相对路径解析已核，随包分发。
 
 【三条必须知道的技术约束】
 1. Spine 4.2：skeleton.updateWorldTransform(spine.Physics.update) 必须传枚举；

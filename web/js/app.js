@@ -1354,11 +1354,11 @@
       ], function (v) { Config.set('tts.provider', v); App.buildSettings(); });
 
       if ((Config.section('tts').provider || 'openai') === 'qwen') {
-        App._field(w, T('settings.baseUrl'), Config.section('tts').baseUrl,
-          function (v) { Config.set('tts.baseUrl', v); },
-          { hint: '默认 https://dashscope.aliyuncs.com（百炼 API Key 需 sk- 开头）' });
-        App._field(w, T('settings.apiKey'), Config.section('tts').apiKey,
-          function (v) { Config.set('tts.apiKey', v); }, { password: true });
+        App._field(w, T('settings.baseUrl'), Config.section('tts').qwenBaseUrl,
+          function (v) { Config.set('tts.qwenBaseUrl', v); },
+          { hint: '留空即可（用公共 DashScope 端点）；百炼 API Key 需 sk- 开头' });
+        App._field(w, T('settings.apiKey'), Config.section('tts').qwenApiKey,
+          function (v) { Config.set('tts.qwenApiKey', v); }, { password: true });
         App._select(w, T('settings.qwenModel'), Config.section('tts').qwenModel, [
           { v: 'qwen3-tts-flash', t: 'qwen3-tts-flash（内置音色）' },
           { v: 'qwen3-tts-instruct-flash', t: 'qwen3-tts-instruct-flash（指令）' },
@@ -1585,7 +1585,9 @@
     },
 
     _testTts: function () {
-      if (!Config.section('tts').apiKey) { App.toast(I18n.t('toast.needKey'), true); return; }
+      var tts = Config.section('tts');
+      var key = (tts.provider === 'qwen') ? tts.qwenApiKey : tts.apiKey;
+      if (!key) { App.toast(I18n.t('toast.needKey'), true); return; }
       App.toast('合成中…');
       Api.speak('やあ、聞こえてる？').then(function (url) {
         if (!url) { App.toast('语音已关闭'); return; }

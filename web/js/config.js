@@ -39,7 +39,11 @@
       // Ryza's own take, shipped inside the APK.
       reference: 'assets/voice/ryza_wav/prologue_08.wav',
       styleHint: '明るく元気な若い女性の声。親しみやすい口調で。',
-      /* qwen-specific */
+      /* qwen-specific — endpoint + key are SEPARATE from the openai ones so
+         switching providers never sends a MiMo URL/key to DashScope or back.
+         Empty qwenBaseUrl falls back to the public DashScope host. */
+      qwenBaseUrl: '',
+      qwenApiKey: '',
       qwenModel: 'qwen3-tts-flash',  // or qwen3-tts-vc-2026-01-22 with a cloned voice
       qwenVoice: 'Cherry',           // preset name, or voice_id from 声音复刻
       qwenCloneTarget: 'qwen3-tts-vc-2026-01-22',
@@ -126,6 +130,14 @@
   }
   if (data.state && data.state.skin) {
     data.state.skin = String(data.state.skin).replace(/_(01|99)$/, '');
+  }
+  /* One-time migration: qwen got its own baseUrl/apiKey (they used to share
+     the openai fields, which made provider switching send a MiMo URL/key to
+     DashScope and back). Whoever was ACTIVELY on qwen meant the shared
+     values for qwen — carry them over once. */
+  if (data.tts && data.tts.provider === 'qwen') {
+    if (!data.tts.qwenApiKey && data.tts.apiKey) data.tts.qwenApiKey = data.tts.apiKey;
+    if (!data.tts.qwenBaseUrl && data.tts.baseUrl) data.tts.qwenBaseUrl = data.tts.baseUrl;
   }
 
   var Config = {

@@ -124,7 +124,9 @@ localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日�
   实测（token-plan qwen 通道）：中文指令下 `[emotion|attitude]` 标签保留、正文中文。
 - `parseTaggedReply` 剥掉 `<state>` 块（含忘写闭合标签的宽容解析），
   返回 `{emotion, attitude, text, state}`；显示与朗读永远不含机器块。
-- **TTS 双提供商**（`tts.provider`）：
+- **TTS 双提供商**（`tts.provider`，**端点/密钥/音色字段完全分离**：qwen 用
+  `qwenBaseUrl`/`qwenApiKey`/`qwenVoice`，openai 用 `baseUrl`/`apiKey`/
+  `presetVoice`/`reference`；切换互不残留，旧配置在 `Config.load` 一次性迁移）：
   - `openai`：chat/completions + `audio.voice`（MiMo 克隆路径，实测 200 返回 RIFF wav）；
   - `qwen`：百炼 DashScope `POST /api/v1/services/aigc/multimodal-generation/generation`
     （`qwen3-tts-flash` / `-instruct-flash` / `-vc-2026-01-22`），`language_type`
@@ -133,6 +135,8 @@ localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日�
     dashscope 返回 401（且其条款禁止 API 调用），token-plan maas 主机不挂 TTS 模型（404）。
   - `Api.qwenCloneVoice()`：声音复刻——把 `assets/voice/ryza_wav/` 原声转 base64 data URI
     发 `voice-enrollment`（接口接受 data URI，无需公网托管），返回 voice_id 自动填入设置。
+    参考 wav 随 exe/APK 打包且 git 跟踪，三端（serve.py/Electron/AssetServer）
+    同源相对路径解析已核（AUDIT §6.9）。
 - `Api.translate(text, toLang)`：朗读语言 ≠ 回复语言时的翻译通道（同一 LLM，低温、
   只输出译文；失败原样返回）。显示文字不受影响。
 
