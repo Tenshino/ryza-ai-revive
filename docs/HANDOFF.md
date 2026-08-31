@@ -333,6 +333,13 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
   - 用户计划以后把「游戏完整版」下载下来后继续加内容——保持模块边界
     （game/quests/daily 只经 Game.applyDelta 写；UI 只读；见 AUDIT §6.2），
     新数值/曲线类数据一律「形制照抄、本地定值」并登记在 AUDIT §6.3。
+  - app.js 已按节分区（utils/boot/chrome/talk/sheets/LLM/bubble/alarms/modal/
+    memory/skins/forms/语言矩阵/作弊/存档槽，82 个方法），**唯一还值得动的一刀**
+    是把「forms + 语言矩阵 + 作弊 + 存档槽」四段（约 1.1k 行，纯 UI 装配，
+    只读 Config/Game）拆成 web/js/settings.js：拆时要一起改 index.html 的
+    script 顺序（在 app.js 之前）、boot_smoke 的文件清单，以及
+    App.buildSettings/buildCharaForm/_renderSlots 三个入口名。本轮**没拆**，
+    因为刚验完「安装包与源码逐文件哈希一致」，不想在打包之后再动结构。
 
 【明确不要做】（官方服务端/商业能力）
 登录 / Firebase、订阅付费墙、代币与回合票购买、皮肤内购、远程资源下载门、
