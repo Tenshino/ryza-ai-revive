@@ -103,7 +103,11 @@
       skin: 'crf_skn_002_0001',
       stage: 'stage_01_001_04',      // ライザの家
       tod: 'aft',                    // mor | aft | eve | ngt
-      posture: 'posture_sitting',
+      /* Standing (crf_skn_002_0001_99) is the default posture. Only scenes
+         whose midgroundPostures lists BOTH postures honour the choice — in the
+         shipped pack that is 隠れ家前 / stage_01_002_01 alone; every other
+         scene dictates its own posture (Avatar.postureKey reads the scene). */
+      posture: 'posture_standing',
       day: 1,
       lastDayDate: '',
       onboardingDone: false,
@@ -141,6 +145,14 @@
   if (data.tts && data.tts.provider === 'qwen') {
     if (!data.tts.qwenApiKey && data.tts.apiKey) data.tts.qwenApiKey = data.tts.apiKey;
     if (!data.tts.qwenBaseUrl && data.tts.baseUrl) data.tts.qwenBaseUrl = data.tts.baseUrl;
+  }
+  /* One-time migration: `posture_sitting` used to be the shipped default, so
+     an old save carries it even though sitting is only selectable on the one
+     dual-posture stage — where the source starts STANDING (_99). Reset once;
+     after that the player's own choice on that stage is respected. */
+  if (data.state && !data.state.postureMigrated) {
+    data.state.posture = 'posture_standing';
+    data.state.postureMigrated = true;
   }
 
   var Config = {

@@ -22,6 +22,12 @@
   var FALLBACK_LIP = 'facial_mouth_002_scrub_02';
   var FALLBACK_IDLE = ['motion_A_001_idle', 'motion_A_002_idle', 'motion_A_005_idle',
                        'motion_A_006_idle', 'motion_A_024_idle', 'motion_A_025_idle'];
+  /* posture_camera.json is relative: zoom 1.93 (sitting) is the reference the
+     table's world units were authored against, and it frames 1720 world units
+     of height on the reference viewport. Everything else scales from that, so
+     the stage never resizes when the costume or the posture changes. */
+  var REF_ZOOM = 1.93;
+  var REF_H = 1720;
 
   var RIM_VS = [
     'attribute vec2 a_pos;',
@@ -91,6 +97,8 @@
       assets: new spine.AssetManager(host.ctx),
       skeleton: null, state: null, data: null,
       bounds: null, ready: false,
+      /* painted-plate box of the scene, measured once per skeleton */
+      _cover: null, _coverDone: false,
       cssW: 0, cssH: 0, dpr: 1
     };
   }
@@ -116,6 +124,11 @@
     _mouthIdle: null,
     _lipSync: FALLBACK_LIP,
     _view: { left: 0, bottom: 0, worldW: 1, worldH: 1, cssW: 1, cssH: 1 },
+    /* the authored (unclamped) window _view was solved from — _placeCharacter
+       maps the character through it so her framing survives the clamp */
+    _viewAuth: null,
+    /* head bone's setup-pose local Y for the loaded skin (eyeline align) */
+    _headLocal: null,
     _env: null,
     _look: { yaw: 0, pitch: 0, roll: 0, ty: 0, tp: 0, tr: 0, hold: 2, trans: 0.8, t: 0 },
     _pointer: { x: 0, y: 0, on: false },
@@ -226,7 +239,7 @@
         if (!L) return;
         L.cssW = w; L.cssH = h; L.dpr = dpr;
       });
-      Avatar._placeCharacter();
+      /* one pass: _applyCamera solves the window and places the character */
       Avatar._applyCamera();
     },
 
@@ -234,26 +247,47 @@
       return String(id || 'crf_skn_002_0001').replace(/_(01|99)$/, '');
     },
 
-    /* Scene midgroundPostures pick sitting vs standing. Player picks the outfit.
-       Dual-posture scenes (midgroundPostures lists both) honour the player's
-       state.posture choice; otherwise the scene's first entry wins. */
-    postureKey: function () {
+    /* --------------------------------------------------- posture (source) */
+    /* Which skeleton the current scene wants. The scene JSON is the only
+       authority: `midgroundPostures` names the postures its midground was
+       authored for (196 of the 200 shipped scene/time combinations list
+       posture_sitting only; 隠れ家前 / stage_01_002_01 lists both).
+       The gesture files confirm the identity from the other side:
+         crf_skn_002_0001_01 → name 座りライザ（普通座り）, postureKey sitting
+         crf_skn_002_0001_99 → name ライザ(3の通常)_立ち,  postureKey standing
+       so sitting ⇒ _01 and standing ⇒ _99 (never the reverse).
+       On the dual-posture stage the player chooses, and the default is
+       STANDING — that is the only place a choice exists at all. */
+    _scenePostures: function () {
       var cfg = Avatar.sceneConfig && Avatar.sceneConfig.config;
-      var m = cfg && cfg.midgroundPostures;
-      if (m && m.length > 1) {
+      return (cfg && cfg.midgroundPostures) || [];
+    },
+
+    postureKey: function () {
+      var m = Avatar._scenePostures();
+      if (m.length > 1) {
         try {
           var want = Config.section('state').posture;
           if (want === 'posture_standing' || want === 'posture_sitting') return want;
         } catch (e) { /* Config not ready */ }
+        return 'posture_standing';
       }
-      if (m && m.length) return m[0];
-      return 'posture_sitting';
+      return m[0] || 'posture_standing';
     },
 
     supportsBothPostures: function () {
-      var cfg = Avatar.sceneConfig && Avatar.sceneConfig.config;
-      var m = cfg && cfg.midgroundPostures;
-      return !!(m && m.length > 1);
+      return Avatar._scenePostures().length > 1;
+    },
+
+    /* The posture a scene asks for first — used for the (posture-independent)
+       background window, see _solveView. */
+    _primaryPosture: function () {
+      var m = Avatar._scenePostures();
+      return m[0] || 'posture_standing';
+    },
+
+    _asmrOn: function () {
+      try { return Config.section('state').mode === 'asmr'; } catch (e) { return false; }
     },
 
     resolveSkel: function (outfitId) {
@@ -271,58 +305,194 @@
       return skins.filter(function (x) { return x.hasSpine && x.skel; })[0] || null;
     },
 
-    /* Shared orthographic camera from posture_camera.json. Do not derive the
-       view from the character AABB — switching sitting/standing outfits used
-       to zoom the whole stage. */
-    _camParams: function () {
-      var key = Avatar.postureKey();
-      var pack = (Avatar.postureCam && Avatar.postureCam[key]) ||
-                 (Avatar.postureCam && Avatar.postureCam.posture_sitting);
-      var base = (pack && pack.base) || {
-        offsetX: 0, offsetY: 0, scale: 1,
-        cameraZoom: 1.6, cameraPanX: 0, cameraPanY: 900
-      };
-      var asmr = null;
-      try {
-        if (Config && Config.section('state').mode === 'asmr' && pack && pack.asmr) {
-          asmr = pack.asmr;
+    /* ------------------------------------------------------------- camera */
+    /* One orthographic window (Avatar._view) maps world units to the canvas
+       and is shared by the scene plate and the character.
+
+       posture_camera.json supplies the AUTHORED window per posture (sitting
+       zoom 1.93 / standing 1.45) plus a closer ASMR pair. Two of its
+       assumptions do not survive contact with the shipped art:
+
+       1. the standing window is 2289u tall, but the only dual-posture stage
+          (隠れ家前 / stage_01_002_01) paints far_bg over y 629..2701 — 2072u —
+          and its second quad (`floor`, a foreground strip at y −2701..−1064)
+          leaves the band between them UNPAINTED. The standing window's bottom
+          edge walked into that band: a black bar across the lower third of the
+          screen, and a different window centre per posture, so the background
+          visibly jumped when the player toggled sit/stand;
+       2. worldW is worldH × canvas aspect, so any wide viewport (landscape
+          desktop, tablet) walks outside the plate on both sides.
+
+       So the window actually used is the authored window of the scene's
+       PRIMARY posture — never enlarged, shrunk and shifted until it fits
+       inside the plate's painted box (`_coverFor`). No black bars at any
+       aspect ratio, and because the window does not depend on the player's
+       choice the background no longer moves on a posture toggle. The
+       character is mapped through that window by `_placeCharacter` so she
+       keeps exactly the on-screen framing the table asks for. */
+    _coverFor: function (L) {
+      if (!L || !L.skeleton) return null;
+      if (L._coverDone) return L._cover || null;
+      var best = null, slots = L.skeleton.slots, i, j, slot, att, verts, n;
+      L.skeleton.updateWorldTransform(spine.Physics.none);
+      for (i = 0; i < slots.length; i++) {
+        slot = slots[i];
+        /* Alpha is deliberately ignored: the scene's only animation is a fade,
+           so measuring mid-fade must not call the plate empty. */
+        if (!slot.bone.active || !slot.data.visible) continue;
+        att = slot.getAttachment && slot.getAttachment();
+        if (!att || att instanceof spine.BoundingBoxAttachment ||
+            att instanceof spine.ClippingAttachment ||
+            att instanceof spine.PathAttachment ||
+            att instanceof spine.PointAttachment) continue;
+        verts = [];
+        try {
+          if (att instanceof spine.RegionAttachment) {
+            att.computeWorldVertices(slot, verts, 0, 2);
+          } else if (att.worldVerticesLength) {
+            att.computeWorldVertices(slot, 0, att.worldVerticesLength, verts, 0, 2);
+          } else { continue; }
+        } catch (e) { continue; }
+        n = verts.length;
+        if (n < 6) continue;
+        var x0 = 1e9, x1 = -1e9, y0 = 1e9, y1 = -1e9;
+        for (j = 0; j < n; j += 2) {
+          if (!isFinite(verts[j]) || !isFinite(verts[j + 1])) { x1 = -1e9; break; }
+          if (verts[j] < x0) x0 = verts[j];
+          if (verts[j] > x1) x1 = verts[j];
+          if (verts[j + 1] < y0) y0 = verts[j + 1];
+          if (verts[j + 1] > y1) y1 = verts[j + 1];
         }
-      } catch (e) { /* Config may not be ready */ }
-      var zoom = asmr ? Number(asmr.cameraZoom) : Number(base.cameraZoom);
-      var panX = asmr && asmr.cameraPanX != null ? Number(asmr.cameraPanX) : Number(base.cameraPanX);
-      var panY = Number(base.cameraPanY);
-      /* ASMR panY in the file (~3200) sits above the sitting AABB (~2190).
-         Keep the closer zoom but look at the face, not empty sky. */
-      if (asmr) panY = panY + (zoom / Number(base.cameraZoom) - 1) * 280;
+        if (!(x1 > x0) || !(y1 > y0)) continue;
+        /* The LARGEST quad, not the union: a far-away foreground strip would
+           otherwise pretend the gap under the backdrop is covered. */
+        if (!best || (x1 - x0) * (y1 - y0) > best.w * best.h) {
+          best = { x0: x0, x1: x1, y0: y0, y1: y1, w: x1 - x0, h: y1 - y0 };
+        }
+      }
+      L._coverDone = true;
+      L._cover = best;
+      return best;
+    },
+
+    /* Authored window for one posture (+ the ASMR close-up when on). */
+    _camParams: function (postureKey, asmr) {
+      var pack = (Avatar.postureCam &&
+                  Avatar.postureCam[postureKey || Avatar.postureKey()]) ||
+                 (Avatar.postureCam && Avatar.postureCam.posture_sitting) || {};
+      var base = pack.base || { offsetX: 0, offsetY: 0, scale: 1,
+                                cameraZoom: REF_ZOOM, cameraPanX: 0, cameraPanY: 900 };
+      var zoom = Number(base.cameraZoom); if (!(zoom > 0.2)) zoom = REF_ZOOM;
+      var panX = Number(base.cameraPanX) || 0;
+      var panY = Number(base.cameraPanY) || 0;
+      var a = (asmr === undefined ? Avatar._asmrOn() : asmr) && pack.asmr;
+      if (a) {
+        var az = Number(a.cameraZoom);
+        /* ASMR keeps the authored close-up zoom but not its panY (~3200 sits
+           above the skeleton): lift toward the face instead of empty sky. */
+        if (az > 0.2) { panY += (az / zoom - 1) * 280; zoom = az; }
+        if (a.cameraPanX != null) panX = Number(a.cameraPanX) || 0;
+      }
+      var tight = zoom / REF_ZOOM;
+      if (tight > 1.05) panY = panY + (tight - 1) * 140;
+      var worldH = REF_H / Math.max(0.45, tight);
+      var L = Avatar.scene || Avatar.avatar;
+      var aspect = (L && L.cssW && L.cssH) ? L.cssW / L.cssH : 0.5;
+      var worldW = worldH * aspect;
       return {
         offsetX: Number(base.offsetX) || 0,
         offsetY: Number(base.offsetY) || 0,
         scale: Number(base.scale) || 1,
-        zoom: zoom > 0.2 ? zoom : 1.6,
-        panX: panX || 0,
-        panY: panY || 0
+        zoom: zoom, panX: panX, panY: panY,
+        worldW: worldW, worldH: worldH,
+        left: panX - worldW / 2, bottom: panY - worldH / 2
       };
     },
 
+    /* Solve the window to use, then place the character inside it. */
     _applyCamera: function () {
       var host = Avatar.host, L = Avatar.scene || Avatar.avatar;
       if (!host || !L || !L.cssW || !L.cssH) return;
-      var cam = Avatar._camParams();
-      Avatar._placeCharacter();
-      /* Sitting zoom 1.93 → 1720 world units tall. Standing 1.45 is wider.
-         Independent of the character mesh, so a costume swap cannot rescale the stage. */
-      var tightness = cam.zoom / 1.93;
-      if (tightness < 0.45) tightness = 0.45;
-      var worldH = 1720 / tightness;
-      var worldW = worldH * (L.cssW / L.cssH);
-      var panX = cam.panX;
-      var panY = cam.panY;
-      if (tightness > 1.05) panY = panY + (tightness - 1) * 140;
-      var left = panX - worldW / 2;
-      var bottom = panY - worldH / 2;
-      Avatar._view = { left: left, bottom: bottom, worldW: worldW, worldH: worldH, cssW: L.cssW, cssH: L.cssH };
-      host.mvp.ortho2d(left, bottom, worldW, worldH);
+      var active = Avatar._camParams(Avatar.postureKey());
+      /* The background is framed by the scene's own posture, not the player's
+         choice, so toggling sit/stand cannot move it. On single-posture scenes
+         the two are the same window anyway. */
+      var win = Avatar.supportsBothPostures()
+        ? Avatar._camParams(Avatar._primaryPosture(), Avatar._asmrOn())
+        : active;
+      var cover = Avatar._coverFor(Avatar.scene);
+      if (cover && cover.w > 0 && cover.h > 0) {
+        var aspect = L.cssW / L.cssH;
+        var h = Math.min(win.worldH, Math.min(cover.h, cover.w / aspect));
+        var w = h * aspect;
+        var bottom = win.bottom;
+        if (bottom < cover.y0) bottom = cover.y0;
+        if (cover.h >= h && bottom > cover.y1 - h) bottom = cover.y1 - h;
+        var left = win.left + (win.worldW - w) / 2;
+        if (left < cover.x0) left = cover.x0;
+        if (cover.w >= w && left > cover.x1 - w) left = cover.x1 - w;
+        win = { left: left, bottom: bottom, worldW: w, worldH: h };
+      }
+      Avatar._view = {
+        left: win.left, bottom: win.bottom,
+        worldW: win.worldW, worldH: win.worldH, cssW: L.cssW, cssH: L.cssH
+      };
+      Avatar._viewAuth = active;
+      host.mvp.ortho2d(win.left, win.bottom, win.worldW, win.worldH);
       if (host.gl) host.gl.viewport(0, 0, host.canvas.width, host.canvas.height);
+      Avatar._placeCharacter();
+    },
+
+    /* Head bone's local Y (skeleton space, scale 1, setup pose) for the skin
+       that is currently loaded. Needed to align her eyeline — see
+       _placeCharacter. Cheap: one throwaway skeleton, once per skin load. */
+    _measureHeadLocal: function () {
+      var L = Avatar.avatar;
+      Avatar._headLocal = null;
+      if (!L || !L.data) return;
+      try {
+        var sk = new spine.Skeleton(L.data);
+        sk.updateWorldTransform(spine.Physics.pose);
+        var b = sk.findBone('head');
+        if (b) Avatar._headLocal = b.worldY;
+      } catch (e) { /* no head bone → skip the alignment */ }
+    },
+
+    /* Place the character so her on-screen framing is what the table asks
+       for, whatever the plate did to the camera. Called every frame:
+       chara_root rides the scene's parallax. */
+    _placeCharacter: function () {
+      var L = Avatar.avatar, S = Avatar.scene;
+      if (!L || !L.skeleton) return;
+      var cam = Avatar._camParams(Avatar.postureKey());
+      var x = cam.offsetX, y = cam.offsetY;
+      if (S && S.skeleton) {
+        var bone = S.skeleton.findBone('chara_root');
+        if (bone) { x += bone.worldX; y += bone.worldY; }
+      }
+      var v = Avatar._view, a = Avatar._viewAuth;
+      var k = (v && v.worldH && a && a.worldH) ? v.worldH / a.worldH : 1;
+      var sx = (v && a) ? v.left + (x - a.left) * k : x;
+      var sy = (v && a) ? v.bottom + (y - a.bottom) * k : y;
+      var sc = cam.scale * k;
+      /* Eyeline alignment — dual-posture stages only.
+         posture_camera.json frames the SITTING head at 0.70 of the window
+         (upper third, the framing every other stage uses) but the STANDING
+         head at 0.37, and the ASMR close-up at 0.49 sitting vs 0.10 standing:
+         the standing pair was authored against art taller than the plate that
+         ships here, so on screen she sank to the bottom of the frame and the
+         surplus camera fell off the plate as a black bar. Her authored SIZE
+         (scale/zoom) is kept; only the vertical placement is moved onto the
+         same eyeline for both postures — so toggling sit/stand cannot slide
+         her up or down either. Other scenes never enter this branch. */
+      if (Avatar.supportsBothPostures() && Avatar._headLocal != null &&
+          v && v.worldH && v.worldH > 0) {
+        var target = Avatar._asmrOn() ? 0.50 : 0.68;
+        sy += (v.bottom + target * v.worldH) - (sy + Avatar._headLocal * sc);
+      }
+      L.skeleton.x = sx;
+      L.skeleton.y = sy;
+      L.skeleton.scaleX = L.skeleton.scaleY = sc;
     },
 
     screenToWorld: function (cssX, cssY) {
@@ -428,20 +598,6 @@
       return null;
     },
 
-    _placeCharacter: function () {
-      var L = Avatar.avatar, S = Avatar.scene;
-      if (!L || !L.skeleton) return;
-      var cam = Avatar._camParams();
-      var x = cam.offsetX, y = cam.offsetY;
-      if (S && S.skeleton) {
-        var bone = S.skeleton.findBone('chara_root');
-        if (bone) { x += bone.worldX; y += bone.worldY; }
-      }
-      L.skeleton.x = x;
-      L.skeleton.y = y;
-      L.skeleton.scaleX = L.skeleton.scaleY = cam.scale;
-    },
-
     /* ------------------------------------------------------- asset loading */
     _loadSpine: function (L, skelUrl, atlasUrl, done) {
       var a = L.assets;
@@ -462,6 +618,9 @@
             L.skeleton = new spine.Skeleton(data);
             L.state = new spine.AnimationState(new spine.AnimationStateData(data));
             L.state.data.defaultMix = 0.12;
+            /* new skeleton ⇒ its painted plate box has to be re-measured */
+            L._cover = null;
+            L._coverDone = false;
             if (L === Avatar.avatar) Avatar._skelHash = String(data.hash || '').toLowerCase();
             L.ready = true;
             done(null);
@@ -515,6 +674,7 @@
             Avatar._mutedSnap = null;
             Avatar._typeMap = null;
             Avatar._sittingId = Avatar._sittingFromPosture();
+            Avatar._measureHeadLocal();
             Avatar.setEmotion(Avatar._emotion, Avatar._attitude, true);
             Avatar._playWind();
             Avatar.resize();
@@ -1202,12 +1362,17 @@
         eyeOpen: inten && inten.eyeBase, eyeClosed: null,
         eyebrow: inten && inten.eyebrowBase, mouth: inten && inten.mouthBase
       };
+      /* weight is OPTIONAL in the data (absent = 1); an explicit 0 is the
+         author switching a face off — 18 of the 30 standing happy/weak sets
+         and half of tease/weak are. Never fall back to a disabled set: with
+         nothing live, _applyFace uses the band's eye/eyebrow/mouthBase. */
       var live = sets.filter(function (s) {
         return s.weight == null || Number(s.weight) > 0;
       });
-      return Avatar._weighted(live.length ? live : sets, function (s) {
+      if (!live.length) return null;
+      return Avatar._weighted(live, function (s) {
         return Number(s.weight) > 0 ? Number(s.weight) : 1;
-      }) || sets[0];
+      });
     },
 
     _pc: function () {
@@ -1345,6 +1510,15 @@
       Avatar._idleGap = a + Math.random() * Math.max(0, b - a);
       Avatar._idleTimer = 0;
       Avatar._poseType = nextType;
+      /* Periodic expression re-roll. The AOT snapshot carries the symbol
+         IntensitySettings.ExpressionRerollMin (and expressionRerollInterval
+         Min/Max as profile fields), but the shipped JSON leaves them out, so
+         the pose-reroll tick is the only cadence we can read from the pack.
+         Without it the face was only ever re-rolled on an emotion change or a
+         band flip, which is why the ASMR-only mouth shapes in
+         intensityProfiles.weak (facial_mouth_010 / _015) practically never
+         appeared. Never mid-speech: that would cut a lip-synced line. */
+      if (!Avatar._talking) Avatar._applyFace(false);
       var keep = nextType === prevType;
       if (fromName === name) {
         if (!keep) Avatar._syncAdditives(name, nextType, false, false, false);

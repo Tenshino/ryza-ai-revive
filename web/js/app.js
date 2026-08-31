@@ -209,6 +209,13 @@
         setTimeout(function () {
           if (curtain) curtain.classList.remove('on');
         }, 280);
+        /* Sit/stand is a choice that only exists on stages whose scene lists
+           both postures. Walking away resets it to the source default
+           (standing), so the next visit to that stage starts on her feet. */
+        if (window.Avatar && !Avatar.supportsBothPostures() &&
+            Config.section('state').posture !== 'posture_standing') {
+          Config.set('state.posture', 'posture_standing');
+        }
         App.updateHud();   /* posture chip only shows on dual-posture stages */
       });
     },
@@ -300,16 +307,8 @@
          and standing midgroundPostures (e.g. stage_01_002_01). */
       var postureBtn = document.getElementById('btn-posture');
       if (postureBtn) postureBtn.onclick = function () {
-        var cur = Avatar.postureKey();
-        var next = cur === 'posture_standing' ? 'posture_sitting' : 'posture_standing';
-        Config.set('state.posture', next);
-        var veil = document.getElementById('skin-veil');
-        if (veil) veil.classList.add('veil-on');
-        if (window.Sound) Sound.se('skin_change');
-        Avatar.loadSkin(Config.section('state').skin, function () {
-          setTimeout(function () { if (veil) veil.classList.remove('veil-on'); }, 260);
-          App.updateHud();
-        });
+        App.setPosture(Avatar.postureKey() === 'posture_standing'
+          ? 'posture_sitting' : 'posture_standing');
       };
       var skinBtn = document.getElementById('btn-chara-skin');
       if (skinBtn) skinBtn.onclick = function () { App.showView('skin'); };
@@ -416,6 +415,22 @@
       App.refreshHud();
     },
 
+    /* Single write path for the sit/stand choice: store it, cross-fade the
+       skeleton swap (the skin_change SE + veil are the source's own costume
+       feedback), and let Avatar.resize() re-solve the camera for the new
+       posture. Only meaningful on the dual-posture stage. */
+    setPosture: function (posture) {
+      if (posture !== 'posture_standing' && posture !== 'posture_sitting') return;
+      Config.set('state.posture', posture);
+      var veil = document.getElementById('skin-veil');
+      if (veil) veil.classList.add('veil-on');
+      if (window.Sound) Sound.se('skin_change');
+      Avatar.loadSkin(Config.section('state').skin, function () {
+        setTimeout(function () { if (veil) veil.classList.remove('veil-on'); }, 260);
+        App.updateHud();
+      });
+    },
+
     updateHud: function () {
       var st = Config.section('state');
       var modes = { chat: '雑談', story: '物語', immersive: '没入', asmr: 'ASMR', text: 'テキスト' };
@@ -428,8 +443,14 @@
       if (postureBtn) {
         var both = window.Avatar && Avatar.supportsBothPostures && Avatar.supportsBothPostures();
         postureBtn.classList.toggle('hidden', !both);
-        postureBtn.textContent = both && Avatar.postureKey() === 'posture_standing'
-          ? I18n.t('posture.stand') : I18n.t('posture.sit');
+        /* ACTION semantics, not state: the chip is a button, so it names what
+           the tap will do. Labelling it with the current posture (standing →
+           「立つ」) read as "pressing this makes her stand" while she was
+           already standing — the reported 「按站立却变坐」 confusion. */
+        postureBtn.textContent = both
+          ? (Avatar.postureKey() === 'posture_standing'
+              ? I18n.t('posture.sit') : I18n.t('posture.stand'))
+          : '';
       }
       var todBtn = document.getElementById('btn-tod-label');
       if (todBtn) todBtn.textContent = World.todLabel(st.tod);

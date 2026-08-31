@@ -55,8 +55,13 @@
     var dur = Math.max(40, ms || 280);
     if (el._fadeRaf) cancelAnimationFrame(el._fadeRaf);
     (function step(now) {
-      var u = Math.min(1, (now - t0) / dur);
-      el.volume = Util ? Util.lerp(from, to, u) : from + (to - from) * u;
+      /* rAF hands out the FRAME START timestamp, which can be earlier than
+         the performance.now() taken here — an unclamped u then went slightly
+         negative and `el.volume = -0.002` threw IndexSizeError inside the
+         loop, killing the fade (ambient stuck silent). */
+      var u = Util ? Util.clamp((now - t0) / dur, 0, 1) : Math.min(1, Math.max(0, (now - t0) / dur));
+      el.volume = Util ? Util.clamp(Util.lerp(from, to, u), 0, 1)
+                       : Math.min(1, Math.max(0, from + (to - from) * u));
       if (u < 1) el._fadeRaf = requestAnimationFrame(step);
       else { el.volume = to; done && done(); }
     })(t0);

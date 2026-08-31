@@ -28,3 +28,6 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# scratch (agent working files, never shipped)
+temp/
