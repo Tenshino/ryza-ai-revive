@@ -11,8 +11,8 @@
 解锁世界地图）、对话驱动的 `<state>` 数值增减、每日登录、体力耗尽与睡觉恢复，
 全部本地实现；官方付费墙不做，改为设置里的**作弊模式**一键解除全部限制。
 桌面壳是 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK
-统一重出 **1.2.2**（`output/desktop/RyzaChat-Setup-1.2.2.exe`、
-`output/android/RyzaChat-1.2.2.apk`）。
+统一重出 **1.2.3**（`output/desktop/RyzaChat-Setup-1.2.3.exe`、
+`output/android/RyzaChat-1.2.3.apk`）。
 立绘动作与音景维持 2026-09-01 的修复结论（见 `docs/AUDIT.md` §3.7）。
 
 本目录已 `git init`，作为防错改快照。`config/providers.json` **不要提交**（含 API Key）；模板是 `config/providers.example.json`。
@@ -261,7 +261,7 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 | `chara` + `save_slot` | 角色卡、存档槽 | 设定表单 + 3 槽（含游戏态） |
 | `skin` | 5 预览、2 可穿、veil | 有；3 套无骨骼只有预览图，作弊也穿不了（数据缺失） |
 | `i18n` | UI 多语言 | 7 语（新系统全量 zh/ja/en） |
-| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.2）**，见 §5 条 5 |
+| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.3）**，见 §5 条 5 |
 
 素材在包里、代码**故意未用或做不到**的：
 
@@ -296,8 +296,8 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 3. 主线 8 段的具体文案是**按源素材文案重建**，不是官方任务表（表在服务器，包里只有键名）。
 4. 等级曲线（`1+√(exp/30)`）、体力价目、背包容量档位是本地定的——源值在服务器。
 5. APK：`scripts/build_apk.ps1` 需要装了便携 JDK+SDK 的机器（`setup_android_tools.ps1` 一次性装到 D:\agent\tools）。
-   **当前产物已出**：`output/desktop/RyzaChat-Setup-1.2.2.exe`（612MB，NSIS 正常安装/卸载，
-   存档在 %AppData%\RyzaChat 卸载默认保留）与 `output/android/RyzaChat-1.2.2.apk`
+   **当前产物已出**：`output/desktop/RyzaChat-Setup-1.2.3.exe`（612MB，NSIS 正常安装/卸载，
+   存档在 %AppData%\RyzaChat 卸载默认保留）与 `output/android/RyzaChat-1.2.3.apk`
    （559MB，自签，正常安装/卸载）。两包均不含 providers.json/个人端点（AUDIT §6.7）。
 6. 标题/语音钮/彩纸是画布按 Lottie JSON 帧率播，不是 Lottie 运行时。
 7. `spine/objects/` 仍只有图集、没有完整 skel，无法加载。

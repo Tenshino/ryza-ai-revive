@@ -5,7 +5,7 @@
 增补：2026-09-02（**游戏系统补全**：GameState/体力苹果/主线 8 段/每日登录/背包/NPC
 上下文；桌面壳换 Electron 无边框；点击热区修复。见 §6；§5 的「不做」清单已改）
 增补：2026-09-03（**点击退出平滑 + 热区精确化**：§3.9；死代码清理；
-exe/APK 统一重出 1.2.2）
+exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -334,13 +334,13 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
 
 - 桌面：Electron `frame:false` + `setAlwaysOnTop('screen-saver')` 开关 + 顶栏拖拽；
   NSIS 安装/卸载走系统「应用和功能」，存档在 `%AppData%\RyzaChat`（卸载默认保留）。
-  产物 `output/desktop/RyzaChat-Setup-1.2.2.exe`（612MB，含全部素材；
+  产物 `output/desktop/RyzaChat-Setup-1.2.3.exe`（612MB，含全部素材；
   win-unpacked 自检截图=标题页正常渲染）。
 - 安卓：`AssetServer` 补 `/_proxy`（缺它手机端对话必 CORS 挂）、`config/*` 一律 404；
   去 androidx；`scripts/build_apk.ps1` 无 Gradle 直出签名 APK；正常安装/卸载。
 - 隐私：包内**无** `providers.json`；`config.js` 默认端点中立化（不再内置个人地址）；
   `src/` 原型、`data/*.wav` 测试音频、`output/*.png` 截图已从仓库删除；
-  keystore 目录 gitignore。1.2.2 产物内嵌文件逐包扫描：**零** `bmh05/token-plan/
+  keystore 目录 gitignore。1.2.3 产物内嵌文件逐包扫描：**零** `bmh05/token-plan/
   xiaomimimo/sk-*/D:\agent` 私人标识（`api.js` 内置的 `dashscope.aliyuncs.com` 是
   百炼**公共**默认端点，等同 api.openai.com，属功能必需，不是私人信息）。
 
