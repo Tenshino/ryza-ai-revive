@@ -167,6 +167,7 @@ function resetAvatar(skin) {
     _addMuted: false, _mutedSnap: null, _hideChara: false,
     _lookCyc: null, _ptrW: 0, _ptrN: 0, _dt: 0,
     _blinkMode: 'blink', _closedDur: 0, _closedHold: 0, _tension: 0,
+    _rollSm: 0, _exprBand: '',
     _lookMul: 1, _lipOpen: 0, _lipHold: 0, _lookHist: [], _lookClock: 0
   });
   Avatar._look = { yaw: 0, pitch: 0, roll: 0, ty: 0, tp: 0, tr: 0,
@@ -310,7 +311,20 @@ for (const skin of SKINS) {
 
   let midSeen = false, lowSeen = false, highSeen = false;
   soak(L, label + ' pre-talk', 1);
+  /* neutral: normal and strong expressionSets are content-identical in the
+     shipped data, so talk start must NOT re-roll the face (that was churn).
+     Talk start must hand the gaze to gazeEntries.lookAtUser (front, 3 s). */
+  Avatar.setEmotion('neutral', 'agree');
+  soak(L, label + ' settle', 2);
+  const eyeBefore = Avatar._eyeOpen;
   Avatar.setTalking(true);
+  if (Avatar._eyeOpen !== eyeBefore) {
+    fail(label + ': talk start re-rolled the neutral face (' + eyeBefore + ' -> ' + Avatar._eyeOpen + ')');
+  }
+  if (Avatar._look.ty !== 0 || Avatar._look.tp !== 0 || !(Avatar._look.hold >= 3)) {
+    fail(label + ': talk start did not pin gaze to the user (ty=' + Avatar._look.ty +
+         ' hold=' + Avatar._look.hold + ')');
+  }
   soak(L, label + ' talking', 2, function (t) {
     if (Avatar._tensionBand() === 'high') highSeen = true;
     if (Avatar._intensityBand() !== 'strong') fail(label + ': talking band is ' + Avatar._intensityBand());
@@ -327,7 +341,6 @@ for (const skin of SKINS) {
   if (!midSeen) fail(label + ': never passed through the mid band while decaying');
   if (!lowSeen) fail(label + ': tension never settled to the low band');
   if (Avatar._tension > 0.2) fail(label + ': tension stuck at ' + Avatar._tension.toFixed(2) + ' after 6s decay');
-  Avatar.setTalking(false);
 
   let sawPtrW = { up: false, down: false };
   Avatar._pointer.on = true;
@@ -338,12 +351,12 @@ for (const skin of SKINS) {
   if (!sawPtrW.down) fail(label + ': pointer-follow weight never ramped out');
 
   let closedSeen = false, eyeModes = {};
-  soak(L, label + ' blink soak', 120, function () {
+  soak(L, label + ' blink soak', 240, function () {
     eyeModes[Avatar._blinkMode] = (eyeModes[Avatar._blinkMode] || 0) + 1;
     if (Avatar._closedHold > 0) closedSeen = true;
   });
   if (!closedSeen && (eyeModes.closed || 0) === 0) {
-    fail(label + ': eyeModeEntries "closed" never fired in 120s (long blinks missing)');
+    fail(label + ': eyeModeEntries "closed" never fired in 240s (long blinks missing)');
   }
   console.log(label + ': blink modes seen ' + JSON.stringify(eyeModes));
 

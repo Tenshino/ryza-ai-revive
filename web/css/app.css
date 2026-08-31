@@ -25,6 +25,13 @@ input,select,textarea{font:inherit;color:inherit}
 #scene-canvas,#avatar-hit{position:absolute;inset:0;width:100%;height:100%;display:block}
 #scene-canvas{background:#0b0810}
 #avatar-hit{background:transparent}
+/* touch_ripple_overlay.dart: the tap ring that answers a poke */
+#ripple-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
+.tap-ripple{position:absolute;width:86px;height:86px;margin:-43px 0 0 -43px;border-radius:50%;
+  border:2px solid rgba(246,217,160,.75);
+  background:radial-gradient(circle,rgba(246,217,160,.22),rgba(246,217,160,0) 70%);
+  animation:tap-ripple .7s ease-out forwards}
+@keyframes tap-ripple{from{transform:scale(.25);opacity:.9}to{transform:scale(1.15);opacity:0}}
 #vignette{position:absolute;inset:0;pointer-events:none;
   background:radial-gradient(ellipse at 50% 42%,transparent 42%,rgba(0,0,0,.55) 100%);
   transition:box-shadow .35s,background .35s}

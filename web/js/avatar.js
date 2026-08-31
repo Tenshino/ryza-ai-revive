@@ -168,6 +168,8 @@
     _blinkMode: 'blink',
     _closedDur: 0,
     _closedHold: 0,
+    _exprBand: '',
+    _rollSm: 0,
     /* Continuous tension (projectConfig.tensionConfig): ramps to 1 while
        talking, then decays high → mid → low at the band's decay rate.
        Drives gaze bindings, torso weights and blink cadence. */
@@ -223,12 +225,26 @@
       return String(id || 'crf_skn_002_0001').replace(/_(01|99)$/, '');
     },
 
-    /* Scene midgroundPostures pick sitting vs standing. Player picks the outfit. */
+    /* Scene midgroundPostures pick sitting vs standing. Player picks the outfit.
+       Dual-posture scenes (midgroundPostures lists both) honour the player's
+       state.posture choice; otherwise the scene's first entry wins. */
     postureKey: function () {
       var cfg = Avatar.sceneConfig && Avatar.sceneConfig.config;
       var m = cfg && cfg.midgroundPostures;
+      if (m && m.length > 1) {
+        try {
+          var want = Config.section('state').posture;
+          if (want === 'posture_standing' || want === 'posture_sitting') return want;
+        } catch (e) { /* Config not ready */ }
+      }
       if (m && m.length) return m[0];
       return 'posture_sitting';
+    },
+
+    supportsBothPostures: function () {
+      var cfg = Avatar.sceneConfig && Avatar.sceneConfig.config;
+      var m = cfg && cfg.midgroundPostures;
+      return !!(m && m.length > 1);
     },
 
     resolveSkel: function (outfitId) {
@@ -439,6 +455,7 @@
             Avatar._ptrW = 0;
             Avatar._ptrN = 0;
             Avatar._closedHold = 0;
+            Avatar._rollSm = 0;
             Avatar._drivers = null;
             Avatar._fxOn = false;
             Avatar._poseType = '';
@@ -1398,9 +1415,16 @@
       look.yaw = (look.fromY || 0) + ((look.ty || 0) - (look.fromY || 0)) * u;
       look.pitch = (look.fromP || 0) + ((look.tp || 0) - (look.fromP || 0)) * u;
       look.roll = (look.fromR || 0) + ((look.tr || 0) - (look.fromR || 0)) * u;
+      /* DriverDefs rollFollowSpeed: head roll trails the yaw/pitch step with
+         its own exponential follow — the lag is what reads as "alive" neck
+         motion instead of a rigid whole-head swipe. */
+      var cyc = Avatar._lookCyc;
+      var rfs = (cyc && cyc.spec && Number(cyc.spec.rollFollowSpeed)) || 5;
+      if (!(rfs > 0)) rfs = 5;
+      Avatar._rollSm += (look.roll - Avatar._rollSm) * (1 - Math.exp(-dt * rfs));
 
       Avatar._lookClock += dt;
-      Avatar._lookHist.push({ t: Avatar._lookClock, y: look.yaw, p: look.pitch, r: look.roll });
+      Avatar._lookHist.push({ t: Avatar._lookClock, y: look.yaw, p: look.pitch, r: Avatar._rollSm });
       while (Avatar._lookHist.length > 1 && Avatar._lookHist[0].t < Avatar._lookClock - 2.8) {
         Avatar._lookHist.shift();
       }
@@ -1461,7 +1485,7 @@
       if (!L || !L.skeleton) return;
       var pc = Avatar._pc();
       var look = Avatar._look;
-      var yaw = look.yaw, pitch = look.pitch, roll = look.roll;
+      var yaw = look.yaw, pitch = look.pitch, roll = Avatar._rollSm;
       var mul = Avatar._lookMul;
       yaw *= mul; pitch *= mul; roll *= mul;
       var fEyeX = 0, fEyeY = 0, fHeadX = 0, fHeadY = 0, fBodyX = 0, fBodyY = 0;
@@ -1505,6 +1529,12 @@
       if (!on && Avatar._ptrW < 0.004) Avatar._ptrW = 0;
       fEyeX *= Avatar._ptrW; fEyeY *= Avatar._ptrW;
       fHeadX *= Avatar._ptrW; fHeadY *= Avatar._ptrW;
+      /* A one-shot (track 1) owns the aim bones during the gesture — the
+         finger term must shrink with the ambient look (_lookMul 0.15) or the
+         head fights between the gesture pose and the cursor. */
+      fEyeX *= mul; fEyeY *= mul;
+      fHeadX *= mul; fHeadY *= mul;
+      fBodyX *= mul; fBodyY *= mul;
       fBodyX *= Avatar._ptrW; fBodyY *= Avatar._ptrW;
       var unit = 110;
       var bodyScale = 0.55, neckScale = 0.55, bodyDelay = 0, neckDelay = 0, headDelay = 0;
@@ -1678,6 +1708,7 @@
       }
 
       Avatar._applyFace(!!immediate);
+      Avatar._exprBand = Avatar._intensityBand();
       Avatar._syncFx(!!immediate);
       Avatar._lookCyc = null;   /* new emotion → fresh gaze pattern */
       Avatar._pickLook();
@@ -1719,12 +1750,63 @@
       }
       var tr0 = st.getCurrent(0);
       if (tr0) tr0.timeScale = Avatar._animTimeScale();
-      Avatar._applyFace(false);
+      /* expressionSets are content-identical between normal↔strong for 7 of
+         9 emotions (only shy/tease differ): re-rolling the face on every talk
+         toggle was churn, not source behaviour. Only re-apply when the two
+         bands' sets actually differ; emotion changes still re-roll normally. */
+      var bandNow = Avatar._intensityBand();
+      var bandPrev = Avatar._exprBand || bandNow;
+      Avatar._exprBand = bandNow;
+      if (bandNow !== bandPrev && Avatar._exprSetsDiffer(bandPrev, bandNow)) {
+        Avatar._applyFace(false);
+      }
       Avatar._syncFx(false);
-      Avatar._pickLook();
+      if (Avatar._talking) Avatar._lookAtUserNow();
       if (!Avatar._addMuted) {
         Avatar._syncAdditives(Avatar._idleName(), Avatar._poseType, false, false, true);
       }
+    },
+
+    _exprSetsDiffer: function (a, b) {
+      var prof = Avatar._profile(Avatar._emotion);
+      var ip = (prof && prof.intensityProfiles) || {};
+      function sig(band) {
+        var sets = (ip[band] && ip[band].expressionSets) || [];
+        return sets.map(function (s) {
+          return [s.eyeOpen, s.eyeClosed, s.eyebrow, s.mouth].join(',');
+        }).sort().join('|');
+      }
+      return sig(a) !== sig(b);
+    },
+
+    /* gazeEntries ({direction:'lookAtUser', holdSeconds:3.0, weight:1}) exist
+       in every emotion × band — authored: when she starts talking she looks
+       at you for a beat before the ambient pattern resumes. The transition
+       time comes from gazeReturnToFront.entry. */
+    _lookAtUserNow: function () {
+      var bag = Avatar._tensionBag();
+      var ge = ((bag && bag.gaze) || {}).gazeEntries || [];
+      var at = null, i;
+      for (i = 0; i < ge.length; i++) {
+        if (ge[i].direction === 'lookAtUser' && (Number(ge[i].weight) || 0) > 0) {
+          at = ge[i]; break;
+        }
+      }
+      if (!at) { Avatar._pickLook(); return; }
+      var gr = Avatar._pc().gazeReturnToFront || {};
+      var ent = gr.entry || {};
+      var sp = Number(ent.secondsPerDistance); if (!(sp > 0)) sp = 0.8;
+      var mn = Number(ent.minSeconds); if (!(mn > 0)) mn = 0.4;
+      var mx = Number(ent.maxSeconds); if (!(mx >= mn)) mx = Math.max(mn, 0.8);
+      var look = Avatar._look;
+      var dist = Math.abs(look.yaw) + Math.abs(look.pitch) + Math.abs(look.roll);
+      look.fromY = look.yaw; look.fromP = look.pitch; look.fromR = look.roll;
+      look.ty = 0; look.tp = 0; look.tr = 0;
+      look.trans = Util.clamp(sp * Math.max(0.25, dist), mn, mx);
+      look.hold = Number(at.holdSeconds) > 0 ? Number(at.holdSeconds) : 3;
+      look.t = 0;
+      look.eyeDrv = false;
+      Avatar._lookCyc = null;   /* ambient pattern resumes after the hold */
     },
 
     /* alarm .env.json: durationMs / windowMs / envelope[] drive mouth timeScale. */
@@ -1753,6 +1835,7 @@
       if (tr0) tr0.timeScale = Avatar._animTimeScale();
       Avatar._fxPick = null;
       Avatar._applyFace(false);
+      Avatar._exprBand = Avatar._intensityBand();
       Avatar._syncFx(false);
       if (!Avatar._addMuted) {
         Avatar._syncAdditives(Avatar._idleName(), Avatar._poseType, false, false, true);

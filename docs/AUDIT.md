@@ -148,6 +148,11 @@
 7. **`MixDurationPoses.sourceHash` 其实一直对得上**。skel 头里的 hash 是**两个有符号 32 位半**拼出来的字符串（`-2a81ab33` + `-1db7ab26` = `"-2a81ab33-1db7ab26"`），无符号化 = `d57e54cde24854da`，与坐/站两份 gesture 的 sourceHash 完全一致（站姿 `-248f57f7`+`6b63f08c` → `db70a8096b63f08c` 同样一致）。`Util.hashHex` 之前只是剥字符 → 永不命中，只能靠 `_hasPoseBones` 兜底。已按签名解析修正，**AUDIT 旧文「sourceHash 可能对不上」这条作废**。
 8. **FX 名一次回复重摇两次**。setEmotion 与 setTalking 都会 `_syncFx`，`effectSets` 每次重新加权抽 → 同一句话腮红/泪可能换配方。现在 `_effectNames` 按 `emotion|intensityBand` memo；`_syncFx` 的 key 去掉说话标志。
 9. 小修：`samePartDetourDirection` 在 `armInOutPartConfig` 里（之前读 projectConfig 顶层，永远 fallback 'up'，与源值巧合同款）；followers `scale` 缺失时 NaN 防护；口型 `.env.json` 优先于实时 RMS（预录语音用作者包络）。
+10. **说话不再重摇表情**（2026-09-01 二批）：normal↔strong 的 `expressionSets` 在 9 个情绪里有 7 个内容完全相同（只有 shy/tease 不同），按强度档重抽 60 个 set 是抖动不是源行为。`setTalking` 现在只在两档集合真的不同时才 `_applyFace`。
+11. **说话时看向你（gazeEntries）**：每个情绪×band 的 `gaze.gazeEntries` 都是 `{direction:lookAtUser, holdSeconds:3.0, speed:normal, weight:1}`，配合 `gazeReturnToFront.entry`（0.4–0.8s）。之前完全没读。现在 `setTalking(true)` 锁正脸 3 秒（转台时长按 gazeReturnToFront），到点后环境注视循环自然恢复。
+12. **rollFollowSpeed:5.0**：DriverDefs 每条都有 —— 头部滚转对 yaw/pitch 应有独立指数跟随（滞后显得"活"）。现在 `look.roll` 经 `_rollSm` 滤波后才进骨骼与注视历史。
+13. **站/坐（`_01`↔`_99`）什么时候切**：唯一开关是场景 JSON 的 `midgroundPostures`。实测 200 组场景：196 组只有 posture_sitting，**只有 stage_01_002_01 四个时段同时列了 posture_sitting + posture_standing**。旧代码取 m[0] → 站姿骨骼 `crf_skn_002_0001_99` **在游戏中永远不会被加载**。现在双姿态舞台顶栏出现「坐下/站起」chip（#btn-posture），选择记 `state.posture`（仅该场景生效），换姿走 skin-veil + loadSkin（镜头 zoom 1.93↔1.45 同表切换）。
+14. **touch_ripple_overlay.dart（源模块，已补）**：点击立绘在触点画 86px 金色波纹环（0.7s），与 tap SE / 反应语音同时。之前只接了 tap_voice，落下了这个 overlay。
 
 **App 侧连带**：TTS 失败/无音频不再把 `setTalking(true)` 卡死（说话改在音频就绪、`playUrl` 真正开播时才进 strong 档）；序章旁白改走 `App.playFile(src, null, true)`（吃口型 analyser、语音开关不吞序章）。
 

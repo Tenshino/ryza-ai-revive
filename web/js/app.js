@@ -146,7 +146,21 @@
         setTimeout(function () {
           if (curtain) curtain.classList.remove('on');
         }, 280);
+        App.updateHud();   /* posture chip only shows on dual-posture stages */
       });
+    },
+
+    /* touch_ripple_overlay (source module): a light ring where the avatar
+       was tapped, under the reaction voice. */
+    _ripple: function (x, y) {
+      var layer = document.getElementById('ripple-layer');
+      if (!layer) return;
+      var el = document.createElement('div');
+      el.className = 'tap-ripple';
+      el.style.left = x + 'px';
+      el.style.top = y + 'px';
+      layer.appendChild(el);
+      setTimeout(function () { if (el.remove) el.remove(); }, 720);
     },
 
     /* ------------------------------------------------------------ chrome */
@@ -219,6 +233,21 @@
       syncVoice();
 
       document.getElementById('btn-settings').onclick = function () { App.showView('settings'); };
+      /* Posture chip — visible only on stages whose scene lists both sitting
+         and standing midgroundPostures (e.g. stage_01_002_01). */
+      var postureBtn = document.getElementById('btn-posture');
+      if (postureBtn) postureBtn.onclick = function () {
+        var cur = Avatar.postureKey();
+        var next = cur === 'posture_standing' ? 'posture_sitting' : 'posture_standing';
+        Config.set('state.posture', next);
+        var veil = document.getElementById('skin-veil');
+        if (veil) veil.classList.add('veil-on');
+        if (window.Sound) Sound.se('skin_change');
+        Avatar.loadSkin(Config.section('state').skin, function () {
+          setTimeout(function () { if (veil) veil.classList.remove('veil-on'); }, 260);
+          App.updateHud();
+        });
+      };
       var skinBtn = document.getElementById('btn-chara-skin');
       if (skinBtn) skinBtn.onclick = function () { App.showView('skin'); };
       document.getElementById('hud-mode').onclick = function () {
@@ -281,6 +310,13 @@
       var place = World.find(st.stage);
       document.getElementById('hud-place').textContent = place ? place.stage : st.stage;
       document.getElementById('hud-tod').textContent = World.todLabel(st.tod);
+      var postureBtn = document.getElementById('btn-posture');
+      if (postureBtn) {
+        var both = window.Avatar && Avatar.supportsBothPostures && Avatar.supportsBothPostures();
+        postureBtn.classList.toggle('hidden', !both);
+        postureBtn.textContent = both && Avatar.postureKey() === 'posture_standing'
+          ? I18n.t('posture.stand') : I18n.t('posture.sit');
+      }
       var todBtn = document.getElementById('btn-tod-label');
       if (todBtn) todBtn.textContent = World.todLabel(st.tod);
       document.getElementById('drawer-day').textContent = '同伴 ' + (st.day || 1) + ' 天';
@@ -323,7 +359,9 @@
       document.getElementById('avatar-hit').onclick = function (ev) {
         if (App._inTutorial) { Onboarding.tutorialAdvance(); return; }
         var rect = ev.target.getBoundingClientRect();
-        var part = Avatar.hitPartAt(ev.clientX - rect.left, ev.clientY - rect.top);
+        var x = ev.clientX - rect.left, y = ev.clientY - rect.top;
+        App._ripple(x, y);
+        var part = Avatar.hitPartAt(x, y);
         var overlay = Avatar.poke(part);
         App.buzz();
         if (window.Sound) {
