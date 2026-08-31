@@ -88,9 +88,10 @@ PROJECT.md 第 7 节列出了所有解包产物的路径。其中这些是**原�
 
 【已经跑通的部分】
 标题页、onboarding 问卷/序章/教程、
-单 WebGL 画布立绘+场景（fade 一次、不闪）、坐/站随 `midgroundPostures`、
+单 WebGL 画布立绘+场景（fade 一次、不闪）、坐/站随 `midgroundPostures`（双姿态舞台顶栏可坐/站切换）、
 gesture：待机不跟情绪换、一次性覆盖、effectSets 特效、注视/指尖、手臂组、lipSync、
-分部位点击、腮红 overlay 按 Normal（颊线/鼻高光仍摘）、
+说话锁脸 3s（gazeEntries.lookAtUser）、张力三带衰减、closed 长眨、driver 重复循环、rollFollowSpeed 随动、
+分部位点击（含金色 touch ripple）、腮红 overlay 按 Normal（颊线/鼻高光仍摘）、
 世界钉子图 + NPC 全字段、音景（标题 opening BGM / 对话 ambient / 地图 world BGM）、闹钟响铃/贪睡/env、
 5 槽换装+veil、欢迎任务、存档槽、道具栏、
 LLM 经代理 + providers.json 水合、TTS 克隆、

@@ -79,7 +79,7 @@ python scripts/serve.py
 - 画布 backing store = CSS 尺寸 × `devicePixelRatio`
 - 角色与场景**共用同一套正交镜头**。视野高度 `1720 / (cameraZoom / 1.93)`（sitting 1.93 为基准）。ASMR zoom 3.5 是表里的特写，不是比例算错。
 - 角色放在场景骨骼 `chara_root` + `posture_camera.json` 的 offset/scale 上
-- 坐/站骨骼：场景 `midgroundPostures[0]` → `_01` / `_99`；玩家选的是 outfit（`crf_skn_002_0001`），不是带后缀的目录名
+- 坐/站骨骼：场景 `midgroundPostures` → `_01` / `_99`；玩家选的是 outfit（`crf_skn_002_0001`），不是带后缀的目录名。**实测只有 stage_01_002_01（四时段）同时列两种姿态**，其余场景只有坐姿；双姿态场景顶栏出「坐下/站起」chip（`state.posture` 持久化，见 AUDIT §3.7-13）
 - `setEmotion`：脸/特效/一次性动作；**不换** track 0 待机（`fixedBasePoseMode`）
 - 待机重掷、`PoseTypeSets`、`MotionGroups` Occupancy 分层见 AUDIT §3
 - **注视指针与张力（2026-09-01，见 AUDIT §3.7）**：`fingerTrack*` 的偏移必须乘 `_ptrW`（按 `gazeReturnToFront` entry/exit 进出缓动，平滑指针初值钉在 `rig_face`），禁止裸 `+=`；`ambientBindings.repeatMin/Max` 由 `_lookCyc` 兑现；`tensionConfig` 的三带速率驱动连续 `_tension`（high→mid→low 收尾约 2s），`_tensionBand()` 决定 gaze/torso/眨眼档，ASMR 用 `intensityProfiles.weak` + `onModeChange()`；`eyeModeEntries.closed`（闭眼 1.5s）在 blink 队列里用 delay 兑现；`_effectNames` 按 `emotion|band` memo
