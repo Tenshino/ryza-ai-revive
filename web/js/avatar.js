@@ -875,12 +875,11 @@
     },
 
     _layerSet: function (kind, g) {
-      var id = (g && g.GroupId) || '';
-      if (kind === 'torso') { Avatar._torsoG = g || null; Avatar._torsoGroup = id; }
-      else if (kind === 'leg') { Avatar._legG = g || null; Avatar._legGroup = id; }
-      else if (kind === 'legL') { Avatar._legLG = g || null; Avatar._legLGroup = id; }
-      else if (kind === 'legR') { Avatar._legRG = g || null; Avatar._legRGroup = id; }
-      else { Avatar._armG = g || null; Avatar._addGroup = id; }
+      if (kind === 'torso') Avatar._torsoG = g || null;
+      else if (kind === 'leg') Avatar._legG = g || null;
+      else if (kind === 'legL') Avatar._legLG = g || null;
+      else if (kind === 'legR') Avatar._legRG = g || null;
+      else Avatar._armG = g || null;
     },
 
     _sameAnims: function (a, b) {
