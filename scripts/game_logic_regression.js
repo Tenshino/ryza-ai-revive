@@ -55,7 +55,12 @@ load('game.js');
 /* Audio / fx / quests render helpers used at clear time. */
 sandbox.Sound = { se() {}, tapVoice() {} };
 sandbox.Fx = { burstConfetti() {} };
-sandbox.I18n = { t: (k) => k };
+sandbox.I18n = {
+  t: (k) => k,
+  tc: (k, fb) => fb,
+  tf: (k, fb) => fb,
+  LANG_NAMES: { ja: '日本語', zh: '简体中文' }
+};
 load('quests.js');
 load('daily.js');
 load('api.js');

@@ -284,9 +284,11 @@
         Onboarding._onDone && Onboarding._onDone();
         return;
       }
-      if (window.App && App.showBubble) App.showBubble(line.ja);
+      var text = (window.I18n && I18n.tc)
+        ? I18n.tc('tut.' + (Onboarding._tutIdx + 1), line.ja) : line.ja;
+      if (window.App && App.showBubble) App.showBubble(text);
       if (window.Avatar && Avatar.setEmotion) Avatar.setEmotion(line.emotion, line.attitude);
-      if (window.App && App.speakThen) App.speakThen(line.ja, line.emotion);
+      if (window.App && App.speakThen) App.speakThen(text, line.emotion);
       Onboarding._tutIdx++;
     },
 

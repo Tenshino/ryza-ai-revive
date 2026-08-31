@@ -99,6 +99,10 @@ public final class AssetServer extends Thread {
                 proxy(rawUrl, hs, in, out);
                 return;
             }
+            if ("GET".equals(method) && rawUrl.startsWith("/_proxy")) {
+                proxyGet(rawUrl, out);
+                return;
+            }
             if (!"GET".equals(method) && !"HEAD".equals(method)) {
                 write(out, 405, "text/plain", "method not allowed"); return;
             }
@@ -196,6 +200,39 @@ public final class AssetServer extends Thread {
         } catch (IOException e) {
             String msg = "{\"error\":{\"message\":\"" + String.valueOf(e.getMessage()).replace("\"", "'") + "\"}}";
             write(out, 502, "application/json", msg);
+        }
+    }
+
+    /** GET /_proxy?u=https%3A%2F%2F... — Qwen TTS audio URL passthrough. */
+    private void proxyGet(String rawUrl, OutputStream out) throws IOException {
+        String target = "";
+        int q = rawUrl.indexOf('?');
+        if (q >= 0) {
+            for (String kv : rawUrl.substring(q + 1).split("&")) {
+                int e = kv.indexOf('=');
+                if (e > 0 && "u".equals(kv.substring(0, e))) {
+                    target = URLDecoder.decode(kv.substring(e + 1), "UTF-8");
+                }
+            }
+        }
+        if (!target.startsWith("https://")) {
+            write(out, 400, "application/json", "{\"error\":{\"message\":\"proxy target must be https\"}}");
+            return;
+        }
+        try {
+            HttpURLConnection up = (HttpURLConnection) new URL(target).openConnection();
+            up.setRequestMethod("GET");
+            up.setConnectTimeout(20000);
+            up.setReadTimeout(120000);
+            up.setInstanceFollowRedirects(true);
+            int code = up.getResponseCode();
+            InputStream is = code >= 400 ? up.getErrorStream() : up.getInputStream();
+            byte[] resp = is == null ? new byte[0] : readAll(is);
+            String ct = up.getContentType() == null ? "application/octet-stream" : up.getContentType();
+            up.disconnect();
+            writeBytes(out, code, ct, resp, "");
+        } catch (IOException e) {
+            write(out, 502, "application/json", "{\"error\":{\"message\":\"proxy get failed\"}}");
         }
     }
 

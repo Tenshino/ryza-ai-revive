@@ -68,6 +68,8 @@
     init: function () {
       I18n.setLang(Config.section('app').lang || 'zh');
       I18n.apply(document);
+      var inpEl = document.getElementById('input');
+      if (inpEl) inpEl.placeholder = I18n.tc('input.hint', inpEl.placeholder);
       document.getElementById('overlay-title').classList.remove('hidden');
       document.getElementById('btn-title-start').disabled = true;
 
@@ -386,7 +388,8 @@
       var modes = { chat: '雑談', story: '物語', immersive: '没入', asmr: 'ASMR', text: 'テキスト' };
       document.getElementById('hud-mode').textContent = modes[st.mode] || st.mode;
       var place = World.find(st.stage);
-      document.getElementById('hud-place').textContent = place ? place.stage : st.stage;
+      document.getElementById('hud-place').textContent =
+        place ? World.placeLabel(st.stage, place.stage) : st.stage;
       document.getElementById('hud-tod').textContent = World.todLabel(st.tod);
       var postureBtn = document.getElementById('btn-posture');
       if (postureBtn) {
@@ -430,7 +433,7 @@
       App.renderWorld();
       App.updateHud();
       var place = World.find(stageId);
-      if (place) App.toast('来到：' + place.stage);
+      if (place) App.toast('来到：' + World.placeLabel(stageId, place.stage));
       var npcs = World.npcsAt(stageId, st.day || 1);
       var names = Game.meetCharas(npcs, st.day);
       if (names.length) Game.remember(names.join('、') + ' と出会った。');
@@ -455,17 +458,17 @@
       if (World.mapLevel === 'stages' && World.mapFieldId) {
         list = World.npcsInField(World.mapFieldId, day);
         var pack = World.findField(World.mapFieldId);
-        title = pack ? pack.field.name : I18n.t('world.here');
+        title = pack ? World.placeLabel(pack.field.id, pack.field.name) : I18n.t('world.here');
         list.forEach(function (n) { if (!n.where) n.where = n.stage; });
       } else if (World.mapLevel === 'fields' && World.mapAreaId) {
         list = World.npcsInArea(World.mapAreaId, day);
         var area = World.areas().filter(function (a) { return a.id === World.mapAreaId; })[0];
-        title = area ? area.name : I18n.t('world.areas');
+        title = area ? World.placeLabel(area.id, area.name) : I18n.t('world.areas');
         list.forEach(function (n) { n.where = (n.where || []).join(' / '); });
       } else {
         list = World.npcsAt(st.stage, day);
         var place = World.find(st.stage);
-        title = place ? place.stage : I18n.t('world.here');
+        title = place ? World.placeLabel(st.stage, place.stage) : I18n.t('world.here');
       }
       var sheet = document.getElementById('sheet-npc');
       var root = document.getElementById('npc-sheet-list');
@@ -740,6 +743,20 @@
       return L.join('\n');
     },
 
+    /* re-paint every localized surface after a language change */
+    _relocalize: function () {
+      App.buildSettings();
+      App.buildCharaForm();
+      App.updateHud();
+      var inp = document.getElementById('input');
+      if (inp) inp.placeholder = I18n.tc('input.hint', inp.placeholder);
+      Quests.render(document.getElementById('quest-list'), {});
+      Daily.render(document.getElementById('daily-body'));
+      Welcome.render(document.getElementById('welcome-body'));
+      App.renderWorld();
+      App.renderStatus();
+    },
+
     _openLangSheet: function () {
       var sheet = document.getElementById('sheet-lang');
       var list = document.getElementById('lang-list');
@@ -754,9 +771,7 @@
           Config.set('app.lang', item.id);
           I18n.setLang(item.id);
           I18n.apply(document);
-          App.buildSettings();
-          App.buildCharaForm();
-          App.updateHud();
+          App._relocalize();
           sheet.classList.add('hidden');
         };
         list.appendChild(b);
@@ -806,7 +821,9 @@
 
     greet: function () {
       var st = Config.section('state');
-      App.showBubble('……' + (st.day > 1 ? '今日も' : 'やあ、') + '会えたね。');
+      var line = st.day > 1 ? I18n.tc('greet.n', '……今日も、会えたね。')
+                            : I18n.tc('greet.1', '……やあ、会えたね。');
+      App.showBubble(line);
       Avatar.setEmotion('happy', 'agree');
     },
 
@@ -872,7 +889,15 @@
       var st = Config.section('state');
       var app = Config.section('app');
       if (!app.voice || st.style === 'text' || Config.section('tts').mode === 'off') return;
-      Api.speak(text).then(function (url) {
+      /* language matrix: display stays in the reply language; when the TTS
+         slot asks for a different one, translate first, then synthesize. */
+      var replyL = (window.Langs && Langs.llm()) || 'ja';
+      var ttsL = (window.Langs && Langs.tts()) || replyL;
+      var prep = (ttsL !== replyL && Api.translate)
+        ? Api.translate(text, ttsL) : Promise.resolve(text);
+      prep.then(function (speakText) {
+        return Api.speak(speakText, ttsL);
+      }).then(function (url) {
         /* Talking starts when the audio actually exists — before that the
            mouth sat closed (RMS target 0) for the whole TTS latency, and a
            failed synth left _talking stuck true forever. */
@@ -1322,6 +1347,48 @@
         function (v) { Config.set('llm.temperature', parseFloat(v) || 0.9); });
 
       App._title(w, T('settings.tts'));
+      App._select(w, T('settings.tts.provider'), Config.section('tts').provider || 'openai', [
+        { v: 'openai', t: T('settings.tts.provider.openai') },
+        { v: 'qwen', t: T('settings.tts.provider.qwen') }
+      ], function (v) { Config.set('tts.provider', v); App.buildSettings(); });
+
+      if ((Config.section('tts').provider || 'openai') === 'qwen') {
+        App._field(w, T('settings.baseUrl'), Config.section('tts').baseUrl,
+          function (v) { Config.set('tts.baseUrl', v); },
+          { hint: '默认 https://dashscope.aliyuncs.com（百炼 API Key 需 sk- 开头）' });
+        App._field(w, T('settings.apiKey'), Config.section('tts').apiKey,
+          function (v) { Config.set('tts.apiKey', v); }, { password: true });
+        App._select(w, T('settings.qwenModel'), Config.section('tts').qwenModel, [
+          { v: 'qwen3-tts-flash', t: 'qwen3-tts-flash（内置音色）' },
+          { v: 'qwen3-tts-instruct-flash', t: 'qwen3-tts-instruct-flash（指令）' },
+          { v: 'qwen3-tts-vc-2026-01-22', t: 'qwen3-tts-vc（复刻音色）' }
+        ], function (v) { Config.set('tts.qwenModel', v); });
+        App._field(w, T('settings.qwenVoice'), Config.section('tts').qwenVoice,
+          function (v) { Config.set('tts.qwenVoice', v); },
+          { hint: '内置如 Cherry/Serena/Chelsie；复刻后自动填入 voice_id' });
+        var crow = document.createElement('div');
+        crow.className = 'btn-row';
+        var clone = document.createElement('button');
+        clone.type = 'button'; clone.className = 'btn';
+        clone.textContent = T('settings.cloneQwen');
+        clone.onclick = function () {
+          App.toast(T('toast.cloning'));
+          Api.qwenCloneVoice().then(function (vid) {
+            Config.set('tts.qwenVoice', vid);
+            Config.set('tts.qwenModel', Config.section('tts').qwenCloneTarget || 'qwen3-tts-vc-2026-01-22');
+            App.toast(T('toast.cloneOk'));
+            App.buildSettings();
+          }).catch(function (e) {
+            App.toast(T('toast.cloneFail') + e.message, true);
+          });
+        };
+        crow.appendChild(clone);
+        w.appendChild(crow);
+        App._select(w, T('settings.ttsMode'), Config.section('tts').mode === 'off' ? 'off' : 'clone', [
+          { v: 'clone', t: T('settings.ttsMode.clone') },
+          { v: 'off', t: T('settings.ttsMode.off') }
+        ], function (v) { Config.set('tts.mode', v); App.buildSettings(); });
+      } else {
       App._field(w, T('settings.baseUrl'), Config.section('tts').baseUrl,
         function (v) { Config.set('tts.baseUrl', v); });
       App._field(w, T('settings.apiKey'), Config.section('tts').apiKey,
@@ -1342,14 +1409,27 @@
       }
       App._field(w, T('settings.styleHint'), Config.section('tts').styleHint,
         function (v) { Config.set('tts.styleHint', v); });
+      }
 
-      App._title(w, T('settings.app'));
-      App._select(w, T('settings.lang'), Config.section('app').lang,
-        (I18n.LANGS || []).map(function (x) { return { v: x.id, t: x.label }; }),
+      /* ---------------- language matrix: UI / recorded voice / reply / TTS */
+      App._title(w, T('nav.lang'));
+      var langOpts = Langs.ALL.map(function (o) { return { v: o.v, t: T(o.k) }; });
+      App._select(w, T('settings.lang.ui'), Config.section('app').lang, langOpts,
         function (v) {
           Config.set('app.lang', v); I18n.setLang(v); I18n.apply(document);
-          App.buildSettings(); App.buildCharaForm(); App.updateHud();
+          App._relocalize();
         });
+      App._select(w, T('settings.lang.voice'), (Config.section('voice') || {}).lang || 'auto', langOpts,
+        function (v) { Config.set('voice.lang', v); });
+      App._select(w, T('settings.lang.llm'), (Config.section('llm') || {}).lang || 'auto', langOpts,
+        function (v) { Config.set('llm.lang', v); });
+      App._select(w, T('settings.lang.tts'), (Config.section('tts') || {}).lang || 'auto', langOpts,
+        function (v) { Config.set('tts.lang', v); });
+      var lh = document.createElement('div');
+      lh.className = 'hint'; lh.textContent = T('settings.lang.ttsHint');
+      w.appendChild(lh);
+
+      App._title(w, T('settings.app'));
       App._range(w, T('settings.volume'), Config.section('app').volume,
         function (v) {
           Config.set('app.volume', v);

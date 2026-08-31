@@ -127,7 +127,20 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
     - 苹果图标（stamina_apple_*）不吃通用 sepia 滤镜（css 有 src*='apple' 豁免）。
     - <state> 块必须在显示/朗读前剥掉（api.parseTaggedReply 里做）；reducer 是唯一写入口。
     - talk 类任务：同轮 LLM 已回 quest 数据时不要再 progressEvent（防双计）。
-    - AssetServer / Electron main 的 /_proxy 与 serve.py 是同一契约，改一处三处同步。
+    - AssetServer / Electron main 的 /_proxy 与 serve.py 是同一契约，改一处三处同步
+      （POST=LLM/TTS JSON，GET=Qwen 音频 URL 回拉）。
+13. 【语言与命名（2026-09-02）】
+    - 语言矩阵四槽：app.lang / voice.lang / llm.lang / tts.lang（Langs 助手在 i18n.js）。
+      tts.lang ≠ llm.lang 时 Api.translate 先翻译再合成；显示文字永远是 llm.lang。
+    - 人格提示词保持原版日文，只加「## 出力言語（厳守）」段。别把 persona 翻成中文。
+    - **人名/地名/物品名只用源包验证过的官方译名**（i18n.js CONTENT 表有注释标明来源=
+      libapp.so UTF-16 扫描）。没验证过的一律保留日文原名——禁止自行发明翻译
+      （已发生过一次：尼梅德地方/冥界奥利姆等编造被撤销）。要加新译名，先回
+      D:\agent\temp\apk-l10n\ 的扫描脚本（dump_ordered.py / scan_cjk.py）在包里验证。
+    - TTS 双提供商 tts.provider=openai|qwen。Qwen 用百炼 DashScope，**必须是普通
+      sk- API key**；Token Plan 个人版 key 在 dashscope 是 401，且条款禁止 API 调用，
+      别把它配进 Qwen 槽。Qwen 声音复刻走 voice-enrollment + data URI（本地 wav 直接
+      base64，无需公网），voice_id 自动填设置。
 
 【三条必须知道的技术约束】
 1. Spine 4.2：skeleton.updateWorldTransform(spine.Physics.update) 必须传枚举；

@@ -39,7 +39,10 @@
     relic:     { name: '古代の遺物',     value: 150, kind: 'treasure' },
     apple:     { name: 'スタミナリンゴ', value: 40,  kind: 'tool', stamina: 999 }
   };
-  function itemName(id) { return (ITEMS[id] && ITEMS[id].name) || id; }
+  function itemName(id) {
+    var base = (ITEMS[id] && ITEMS[id].name) || id;
+    return (window.I18n && I18n.tc) ? I18n.tc('item.' + id, base) : base;
+  }
   function itemValue(id) { return (ITEMS[id] && ITEMS[id].value) || 10; }
 
   /* Bag sizes are the four official labels: talk.inventory.bag.* */
@@ -214,7 +217,8 @@
       if (after > before) {
         /* cap grows with level: give the new headroom (official feels the same) */
         Game.s.stamina = Util.clamp(Game.s.stamina + 10 * (after - before), 0, Game.max());
-        Game.remember('Lv' + after + ' reached!');
+        Game.remember(I18n.tf ? I18n.tf('mem.lv', 'Lv{lv} reached!', { lv: after })
+                              : 'Lv' + after + ' reached!');
       }
       Game.save();
       Game.emit('exp');

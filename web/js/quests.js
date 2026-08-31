@@ -84,13 +84,24 @@
   var PART_ITEMS = ['driftwood', 'ironwood', 'cloth', 'ore'];
   var PART_NAMES = { driftwood: '船底の竜骨材', ironwood: 'マストの堅木', cloth: '大きな帆布', ore: '魔石入りの留め金' };
   var MONSTERS = [
-    { name: 'モコモコ', area: 1 }, { name: 'ビッグツノ', area: 1 },
-    { name: '溶岩カニ', area: 2 }, { name: '森の番人', area: 3 },
-    { name: '遺跡の守卫像', area: 4 }, { name: '星霜の竜', area: 5 }
+    { i: 1, name: 'モコモコ', area: 1 }, { i: 2, name: 'ビッグツノ', area: 1 },
+    { i: 3, name: '溶岩カニ', area: 2 }, { i: 4, name: '森の番人', area: 3 },
+    { i: 5, name: '遺跡の守卫像', area: 4 }, { i: 6, name: '星霜の竜', area: 5 }
   ];
+
+  function itemName(id) {
+    var base = (Game.ITEMS[id] && Game.ITEMS[id].name) || id;
+    return (window.I18n && I18n.tc) ? I18n.tc('item.' + id, base) : base;
+  }
 
   function nowQuest() { return Game.s.quest || null; }
   function setQuest(q) { Game.s.quest = q; Game.save(); Game.emit('quest'); }
+
+  /* content-localisation helpers (ja strings below are the shipped fallback) */
+  function L(key, fb) { return (window.I18n && I18n.tc) ? I18n.tc(key, fb) : fb; }
+  function TF(key, fb, map) {
+    return (window.I18n && I18n.tf) ? I18n.tf(key, fb, map) : fb;
+  }
 
   function areaOfStage(stageId) {
     return (stageId || '').slice(6, 8) ? 'area_' + (stageId || '').slice(6, 8) : 'area_01';
@@ -113,8 +124,10 @@
       var q;
       if (def) {
         q = JSON.parse(JSON.stringify(def));
+        q.k = 'q.' + no;
       } else {
         q = JSON.parse(JSON.stringify(POOL[Math.floor(Math.random() * POOL.length)]));
+        q.k = 'pq.' + (1 + Math.floor(Math.random() * POOL.length));
         q.no = 100 + (Game.flag('side_done', 0));
         q.type = q.type || 'talk';
       }
@@ -128,6 +141,17 @@
       return q;
     },
 
+    /* live text (re-resolves when the UI language changes). Old saves /
+       fixtures may lack q.k — derive it from the quest number. */
+    keyOf: function (q) {
+      if (!q) return '';
+      if (q.k) return q.k;
+      return q.side ? '' : 'q.' + q.no;
+    },
+    titleOf: function (q) { return q ? L(Quests.keyOf(q) + '.title', q.title) : ''; },
+    descOf: function (q) { return q ? L(Quests.keyOf(q) + '.desc', q.desc) : ''; },
+    goalOf: function (q) { return q ? L(Quests.keyOf(q) + '.goal', q.goal) : ''; },
+
     /* 「無限のクエスト生成」 without the paywall: LLM invents a side quest,
        pool fallback keeps it working offline. */
     generate: function (useLLM) {
@@ -140,7 +164,8 @@
         '次のJSONだけ出力（説明不要）:',
         '{"type":"talk|explore|gather|craft|battle|shop","title":"...","desc":"...","goal":"...","need":2,"cost":3}',
         'type は talk/explore/gather/craft/battle/shop のいずれか1つ。',
-        'need は2〜5、cost は1〜5。日本語で。'
+        'need は2〜5、cost は1〜5。',
+        'title/desc/goal は ' + ((window.Langs && I18n.LANG_NAMES) ? I18n.LANG_NAMES[Langs.llm()] || Langs.llm() : '日本語') + 'で書くこと。'
       ].join('\n'), { mode: 'chat', style: 'text' }).then(function (r) {
         var m = /\{[\s\S]*\}/.exec(r.text || '');
         if (!m) throw new Error('bad quest json');
@@ -169,7 +194,8 @@
         talk: '',
         sail: '出航には資金も必要。お店で稼いでおこう。'
       };
-      return byType[q.type] || '';
+      var fb = byType[q.type] || '';
+      return L('qobs.' + q.type, fb);
     },
 
     /* ------------------------------------------------------- progression */
@@ -222,7 +248,8 @@
       var reward = q.reward || { exp: 30, money: 20 };
       Game.addExp(reward.exp);
       Game.addMoney(reward.money);
-      Game.remember('「' + q.title + '」をクリア！ +' + reward.exp + 'EXP / +' + reward.money + 'G');
+      Game.remember(TF('mem.cleared', '「{title}」をクリア！ +{exp}EXP / +{money}G',
+        { title: Quests.titleOf(q), exp: reward.exp, money: reward.money }));
       var log = Game.s.flags.quest_log || [];
       log.push({ no: q.no, type: q.type, title: q.title, at: Date.now() });
       if (log.length > 40) log = log.slice(-40);
@@ -256,11 +283,11 @@
     doAction: function (actType, ctx) {
       var q = nowQuest();
       ctx = ctx || {};
-      if (!q || q.complete) return { ok: false, line: '今はクエストなし。新しいお題を考えてもらおう。' };
-      if (!Game.canAct(q.cost)) return { ok: false, faint: true, line: '……お腹すいた。気絶しちゃう前に、安全なところで寝たいな…' };
+      if (!q || q.complete) return { ok: false, line: L('qact.noquest', '今はクエストなし。新しいお題を考えてもらおう。') };
+      if (!Game.canAct(q.cost)) return { ok: false, faint: true, line: L('qact.hungry', '……お腹すいた。気絶しちゃう前に、安全なところで寝たいな…') };
 
       var match = (actType || q.type);
-      if (match !== q.type) return { ok: false, line: '今のクエストと違うことをしたかったの？' };
+      if (match !== q.type) return { ok: false, line: L('qact.mismatch', '今のクエストと違うことをしたかったの？') };
       if (!Game.spend(q.cost, 'quest')) return { ok: false, faint: true, line: 'スタミナが足りないよ…' };
       var fn = Quests['act_' + q.type];
       var res = fn ? fn(q, ctx) : { ok: false, line: 'まだできないことみたい。' };
@@ -275,10 +302,10 @@
     },
 
     act_talk: function (q) {
-      return { ok: false, line: 'これは会話で進むクエストだよ。あたしに話しかけて？' };
+      return { ok: false, line: L('qact.talk.hint', 'これは会話で進むクエストだよ。あたしに話しかけて？') };
     },
     act_explore: function (q) {
-      return { ok: false, line: 'ワールドマップから移動するたびに progress が入るよ。' };
+      return { ok: false, line: L('qact.explore.hint', 'ワールドマップから移動するたびに進行するよ。') };
     },
     act_gather: function (q) {
       var area = ctx_area(q);
@@ -287,14 +314,16 @@
       var n = 1 + (Math.random() < 0.45 ? 1 : 0);
       for (var i = 0; i < n; i++) {
         var id = table[Math.floor(Math.random() * table.length)];
-        if (Game.addItem('you', id, 1)) got.push(Game.ITEMS[id].name);
+        if (Game.addItem('you', id, 1)) got.push(itemName(id));
       }
-      if (!got.length) return { ok: false, line: 'バッグがパンパン…いらないものを売らないと入らないよ。' };
+      if (!got.length) return { ok: false, line: L('qact.gather.full', 'バッグがパンパン…いらないものを売らないと入らないよ。') };
       q.step = Math.min(q.need, (q.step | 0) + got.length);
       Game.addExp(6);
       var done = q.step >= q.need;
+      var tail = done ? L('qact.gather.done', 'これで十分！')
+                      : TF('qact.gather.more', 'あと {n} 個！', { n: q.need - q.step });
       return { ok: true, done: done,
-        line: 'わあい、' + got.join('と') + ' が採れた！ ' + (done ? 'これで十分！' : 'あと ' + (q.need - q.step) + ' 個！') };
+        line: TF('qact.gather.ok', 'わあい、{items} が採れた！ {tail}', { items: got.join('、'), tail: tail }) };
     },
     act_craft: function (q) {
       var made = null, fail = null;
@@ -307,28 +336,30 @@
         if (!fail) fail = r;
       }
       if (!made) {
-        var need = fail ? fail.in.map(function (p) { return Game.ITEMS[p[0]].name + '×' + p[1]; }).join('と') : '素材';
-        return { ok: false, refund: true, line: 'うーん、' + need + ' が足りないみたい。集めてこよっ。' };
+        var need = fail ? fail.in.map(function (p) { return itemName(p[0]) + '×' + p[1]; }).join('、') : itemName('emeralia');
+        return { ok: false, refund: true, line: TF('qact.craft.lack', 'うーん、{need} が足りないみたい。集めてこよっ。', { need: need }) };
       }
       made.in.forEach(function (pair) { Game.removeItem('you', pair[0], pair[1]); });
       Game.addItem('you', made.out, 1);
       q.step = Math.min(q.need, (q.step | 0) + 1);
       Game.addExp(14);
       return { ok: true, done: q.step >= q.need,
-        line: 'せーの… できた！ ' + made.name + '！ あたしの調合、上達してない？' };
+        line: TF('qact.craft.ok', 'せーの… できた！ {item}！ あたしの調合、上達してない？', { item: itemName(made.out) }) };
     },
     act_battle: function (q) {
       var area = ctx_area(q);
       var mobs = MONSTERS.filter(function (m) { return m.area === area; });
-      var mob = (mobs.length ? mobs : MONSTERS)[Math.floor(Math.random() * (mobs.length || MONSTERS.length))];
+      var mi = Math.floor(Math.random() * (mobs.length || MONSTERS.length));
+      var mob = (mobs.length ? mobs : MONSTERS)[mi];
+      var mobName = TF('mob.' + mob.i, mob.name, {});
       var odds = 0.30 + 0.06 * Game.level();
       var tools = [];
       ['bomb', 'charm', 'bottle'].forEach(function (t) {
         var n = Game.countItem('you', t);
-        if (t === 'bomb' && n > 0) { odds += 0.18; tools.push('爆弾瓶'); Game.removeItem('you', t, 1); }
+        if (t === 'bomb' && n > 0) { odds += 0.18; tools.push(itemName('bomb')); Game.removeItem('you', t, 1); }
         else if (t === 'charm' && n > 0) { odds += 0.12; }
         else if (t === 'bottle' && n > 0 && !Game.cheat() && Game.s.stamina < Game.max() / 2) {
-          Game.removeItem('you', t, 1); Game.restore(Game.ITEMS.bottle.stamina); tools.push('回復のボトル');
+          Game.removeItem('you', t, 1); Game.restore(Game.ITEMS.bottle.stamina); tools.push(itemName('bottle'));
         }
       });
       var win = Game.cheat() || Math.random() < Util.clamp(odds, 0.1, 0.92);
@@ -338,12 +369,12 @@
         Game.addExp(18 + area * 8);
         q.step = Math.min(q.need, (q.step | 0) + 1);
         return { ok: true, done: q.step >= q.need,
-          line: 'やった、' + mob.name + ' 倒した！ ' + money + 'G 落と化したよ。' +
-                (tools.length ? '（' + tools.join('・') + ' 使用）' : '') };
+          line: TF('qact.battle.win', 'やった、{mob} 倒した！ {money}G 落としてったよ。{tools}',
+            { mob: mobName, money: money, tools: tools.length ? '（' + tools.join('・') + '）' : '' }) };
       }
       Game.addExp(5);
       return { ok: false, spent: true, done: false,
-        line: 'うぅ…' + mob.name + '、強すぎだよ。また挑戦しよ。' };
+        line: TF('qact.battle.lose', 'うぅ…{mob}、強すぎだよ。また挑戦しよ。', { mob: mobName }) };
     },
     act_shop: function (q) {
       var list = Game.s.inventory.slice().sort(function (a, b) {
@@ -356,43 +387,46 @@
         var n = Math.min(it.count, 2);
         if (!Game.removeItem('you', it.id, n)) continue;
         take += n * Math.round(itemValue(it.id) * (1 + Math.random() * 0.6));
-        sold.push(Game.ITEMS[it.id].name + '×' + n);
+        sold.push(itemName(it.id) + '×' + n);
       }
-      if (!sold.length) return { ok: false, refund: true, line: '売れる在庫がないや…素材を集めてこよ？' };
+      if (!sold.length) return { ok: false, refund: true, line: L('qact.shop.empty', '売れる在庫がないや…素材を集めてこよ？') };
       Game.addMoney(take);
       Game.addExp(16);
       q.step = Math.min(q.need, (q.step | 0) + 1);
       return { ok: true, done: q.step >= q.need,
-        line: '開店！ ' + sold.join('、') + ' が売れて +' + take + 'G。あたしたち、才能あるかも！' };
+        line: TF('qact.shop.ok', '開店！ {items} が売れて +{money}G。あたしたち、才能あるかも！',
+          { items: sold.join('、'), money: take }) };
     },
     act_build: function (q) {
       var partsDone = Game.flag('ship_parts', 0);
-      if (partsDone >= 4) return { ok: false, line: '部品はもうそろってる！ 次は「船で自由に旅へ出よう」だね。' };
+      if (partsDone >= 4) return { ok: false, line: L('qact.build.done', '部品はもうそろってる！ 次は「船で自由に旅へ出よう」だね。') };
       var want = PART_ITEMS[partsDone];
       var have = Game.countItem('you', want) + Game.countItem('ryza', want);
       if (!Game.cheat() && have <= 0) {
         return { ok: false, refund: true,
-          line: '造船には ' + PART_NAMES[want] + '（' + Game.ITEMS[want].name + '）が必要みたい。探してこよ！' };
+          line: TF('qact.build.lack', '造船には {part}（{item}）が必要みたい。探してこよ！',
+            { part: L('part.' + want, PART_NAMES[want]), item: itemName(want) }) };
       }
       if (!Game.removeItem('you', want, 1)) Game.removeItem('ryza', want, 1);
       Game.setFlag('ship_parts', partsDone + 1);
       Game.addExp(12);
       q.step = Math.min(q.need, partsDone + 1);
       return { ok: true, done: q.step >= q.need,
-        line: '「' + PART_NAMES[want] + '」装着！ 船が形になってきた。あと ' + (4 - q.step) + ' つ！' };
+        line: TF('qact.build.ok', '「{part}」装着！ 船が形になってきた。あと {n} つ！',
+          { part: L('part.' + want, PART_NAMES[want]), n: 4 - q.step }) };
     },
     act_sail: function (q) {
       if (Game.flag('ship_parts', 0) < 4) {
-        return { ok: false, refund: true, line: 'まだ部品が足りない！ 造船クエストに戻ろう。' };
+        return { ok: false, refund: true, line: L('qact.sail.parts', 'まだ部品が足りない！ 造船クエストに戻ろう。') };
       }
       if (!Game.cheat() && Game.s.money < 200) {
-        return { ok: false, refund: true, line: '出航に 200G 必要らしい。お店を開いて稼ごう！' };
+        return { ok: false, refund: true, line: L('qact.sail.money', '出航に 200G 必要らしい。お店を開いて稼ごう！') };
       }
       if (!Game.cheat()) Game.addMoney(-200);
       q.step = q.need;
       var cleared = Quests.clear();   /* complete() flips sailed */
       return { ok: true, done: true, sail: true, quest: cleared,
-        line: '出発の時間だ——！ クーケン島を離れて、自由な旅へ。世界の扉、開いたよ！' };
+        line: L('qact.sail.ok', '出発の時間だ——！ クーケン島を離れて、自由な旅へ。世界の扉、開いたよ！') };
     },
 
     /* ------------------------------------------------------------- refund
@@ -422,14 +456,14 @@
         '<div class="qbar"><i></i></div>' +
         '<div class="qacts"></div>';
       card.querySelector('.qico').src = icon;
-      card.querySelector('.qtitle').textContent = q.title;
+      card.querySelector('.qtitle').textContent = Quests.titleOf(q);
       card.querySelector('.qno').textContent = q.no <= 8
         ? (I18n.t('quest.no') + ' ' + q.no + ' / 8' + (q.side ? '' : ''))
         : I18n.t('quest.side');
-      card.querySelector('.qdesc').textContent = q.desc;
+      card.querySelector('.qdesc').textContent = Quests.descOf(q);
       card.querySelector('.qgoal-t').textContent = I18n.t('quest.goal') + '：';
-      card.querySelector('.qgoal-v').textContent = q.goal + '（' + (q.step | 0) + '/' + q.need + '）';
-      card.querySelector('.qobs').textContent = q.obstacle || '';
+      card.querySelector('.qgoal-v').textContent = Quests.goalOf(q) + '（' + (q.step | 0) + '/' + q.need + '）';
+      card.querySelector('.qobs').textContent = L('qobs.' + q.type, q.obstacle || '');
       card.querySelector('.qbar i').style.width =
         Math.round(((q.step | 0) / Math.max(1, q.need)) * 100) + '%';
 
@@ -464,7 +498,7 @@
           var hasKey = !!(window.Config && Config.section('llm').apiKey);
           if (hasKey && window.App) App.toast(I18n.t('toast.questGen'));
           Quests.generate(hasKey).then(function () {
-            if (window.App) { App.toast(I18n.t('quest.newOk') + '「' + Quests.active().title + '」'); }
+            if (window.App) { App.toast(I18n.t('quest.newOk') + '「' + Quests.titleOf(Quests.active()) + '」'); }
             Quests.render(root, hooks);
           });
         };
@@ -495,7 +529,8 @@
           var row = document.createElement('div');
           row.className = 'qhist';
           row.innerHTML = '<img alt="" src="assets/icons/quest_clear_icon.svg"><span></span>';
-          row.querySelector('span').textContent = x.title;
+          row.querySelector('span').textContent =
+            x.no <= 8 ? L('q.' + x.no + '.title', x.title) : x.title;
           root.appendChild(row);
         });
       }
@@ -508,7 +543,10 @@
       var t = ov.querySelector('.qc-title');
       if (t) t.textContent = (q && q.title) || '';
       var p = ov.querySelector('.qc-praise');
-      if (p) p.textContent = PRAISES[Math.floor(Math.random() * PRAISES.length)];
+      if (p) {
+        var pi = Math.floor(Math.random() * PRAISES.length);
+        p.textContent = L('pr.' + pi, PRAISES[pi]);
+      }
     },
 
     /* ---------------------------------------------------------- prompt block */
@@ -516,9 +554,9 @@
       var q = Quests.ensure();
       var L = [];
       L.push('## クエスト（進行度あたしと共有。達成したら <state> で教えて）');
-      L.push('- No.' + q.no + '「' + q.title + '」kind=' + q.type);
-      L.push('  目標：' + q.goal + '（進行 ' + (q.step | 0) + '/' + q.need + '）');
-      L.push('  詳細：' + q.desc + (q.obstacle ? ' / 障害：' + q.obstacle : ''));
+      L.push('- No.' + q.no + '「' + Quests.titleOf(q) + '」kind=' + q.type);
+      L.push('  目標：' + Quests.goalOf(q) + '（進行 ' + (q.step | 0) + '/' + q.need + '）');
+      L.push('  詳細：' + Quests.descOf(q) + (q.obstacle ? ' / 障害：' + q.obstacle : ''));
       if (!Game.s.sailed) {
         L.push('- まだクーケン島にいる。船（No.8）ができるまで世界地図の他エリアはロック。');
         L.push('- 造船部品：' + Game.flag('ship_parts', 0) + '/4。');

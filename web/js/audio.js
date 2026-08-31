@@ -25,7 +25,10 @@
   };
 
   function voiceLocale() {
-    var lang = (Config && Config.section('app').lang) || 'ja';
+    /* the recorded-voice packs have their own language slot (voice.lang);
+       'auto' follows the UI language */
+    var lang = (window.Langs && Langs.voice()) ||
+               (Config && Config.section('app').lang) || 'ja';
     var map = {
       zh: { alarm: 'zh-tw', tap: 'zh-tw', prologue: 'zh-tw' },
       'zh-tw': { alarm: 'zh-tw', tap: 'zh-tw', prologue: 'zh-tw' },

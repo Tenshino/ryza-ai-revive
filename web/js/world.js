@@ -214,7 +214,7 @@
       Object.keys(loc).forEach(function (id) {
         if (loc[id] !== stageId) return;
         var n = byId[id];
-        if (n) out.push({ id: n.id, name: n.name, note: n.note || '' });
+        if (n) out.push({ id: n.id, name: World.npcName(n.id), note: n.note || '' });
       });
       return out.sort(function (a, b) { return a.name.localeCompare(b.name, 'ja'); });
     },
@@ -230,7 +230,7 @@
         if (seen[id]) return;
         seen[id] = true;
         var n = byId[id];
-        if (n) out.push({ id: n.id, name: n.name, note: n.note || '', stageId: loc[id], stage: info.stage });
+        if (n) out.push({ id: n.id, name: World.npcName(n.id), note: n.note || '', stageId: loc[id], stage: info.stage });
       });
       return out;
     },
@@ -248,15 +248,22 @@
         .sort(function (a, b) { return a.name.localeCompare(b.name, 'ja'); });
     },
 
-    npcName: function (npcId) {
-      var hit = ((World.npcs && World.npcs.npcs) || []).filter(function (n) { return n.id === npcId; })[0];
-      return hit ? hit.name : npcId;
-    },
-
     iconFor: function (npcId) {
       var key = npcId.replace(/^npc_/, '');
       var aliases = { empel: 'ampel', klaudia: 'claudia', patricia: 'patrizia' };
       return 'assets/images/chara_icons/' + (aliases[key] || key) + '.png';
+    },
+
+    /* display-name localization (ja is the shipped data, i18n CONTENT has
+       official-style zh / en names) */
+    npcName: function (npcId) {
+      var hit = ((World.npcs && World.npcs.npcs) || []).filter(function (n) { return n.id === npcId; })[0];
+      var base = hit ? hit.name : npcId;
+      if (!window.I18n || !I18n.tc) return base;
+      return I18n.tc('npc.' + String(npcId).replace(/^npc_/, ''), base);
+    },
+    placeLabel: function (id, base) {
+      return (window.I18n && I18n.tc) ? I18n.tc('place.' + id, base) : base;
     },
 
     /* --------------------------------------------------------- pin map */
@@ -351,7 +358,7 @@
         World._pinGrid(body, World.areas().map(function (a) {
           var on = here && here.areaId === a.id;
           return {
-            id: a.id, name: a.name, pin: PIN.area, here: on,
+            id: a.id, name: World.placeLabel(a.id, a.name), pin: PIN.area, here: on,
             locked: World.locked(a.id),
             faces: []
           };
@@ -372,11 +379,11 @@
           World.render(root, sideRoot, currentStageId, onPick);
         });
         var area = World.areas().filter(function (a) { return a.id === World.mapAreaId; })[0];
-        crumb(area ? area.name : World.mapAreaId);
+        crumb(area ? World.placeLabel(area.id, area.name) : World.mapAreaId);
         World._pinGrid(body, World.fields(World.mapAreaId).map(function (f) {
           var npcs = World.npcsInField(f.id, day);
           return {
-            id: f.id, name: f.name,
+            id: f.id, name: World.placeLabel(f.id, f.name),
             pin: (here && here.fieldId === f.id) ? PIN.field : PIN.fieldOff,
             here: here && here.fieldId === f.id,
             faces: npcs.slice(0, 3).map(function (n) { return World.iconFor(n.id); })
@@ -395,18 +402,18 @@
         });
         var pack = World.findField(World.mapFieldId);
         if (pack) {
-          crumb(pack.area.name, function () {
+          crumb(World.placeLabel(pack.area.id, pack.area.name), function () {
             World.mapLevel = 'fields';
             World.mapAreaId = pack.area.id;
             World.render(root, sideRoot, currentStageId, onPick);
           });
-          crumb(pack.field.name);
+          crumb(World.placeLabel(pack.field.id, pack.field.name));
         }
         var stages = World.stagesInField(World.mapFieldId);
         World._pinGrid(body, stages.map(function (s) {
           var npcs = World.npcsAt(s.id, day);
           return {
-            id: s.id, name: s.name, pin: PIN.field,
+            id: s.id, name: World.placeLabel(s.id, s.name), pin: PIN.field,
             here: s.id === currentStageId,
             faces: npcs.slice(0, 3).map(function (n) { return World.iconFor(n.id); })
           };
@@ -455,7 +462,7 @@
       sel.innerHTML = '';
       World.areas().forEach(function (a) {
         var o = document.createElement('option');
-        o.value = a.id; o.textContent = a.name;
+        o.value = a.id; o.textContent = World.placeLabel(a.id, a.name);
         if (a.id === areaId) o.selected = true;
         sel.appendChild(o);
       });

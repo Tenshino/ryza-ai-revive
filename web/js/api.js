@@ -27,7 +27,7 @@
   function persona() {
     var c = Config.section('chara'), p = Config.section('profile');
     var lines = [];
-    lines.push('あなたは『ライザ』（ライザリン・シュタウト）です。日本語で話してください。');
+    lines.push('あなたは『ライザ』（ライザリン・シュタウト）です。');
     lines.push('');
     lines.push('## キャラクター');
     lines.push('- 一人称は「あたし」。相手は「' + (c.callMe || '君') + '」と呼ぶ。');
@@ -60,8 +60,21 @@
     return lines.join('\n');
   }
 
-  function buildSystemPrompt(mode, style, rpgContext) {
+  function langName(lg) {
+    return (window.I18n && I18n.LANG_NAMES && I18n.LANG_NAMES[lg]) || lg;
+  }
+
+  function buildSystemPrompt(mode, style, rpgContext, outLang) {
     var L = [persona()];
+    L.push('');
+    L.push('## 出力言語（厳守）');
+    if (!outLang || outLang === 'ja') {
+      L.push('日本語で話すこと。');
+    } else {
+      L.push('セリフ本文は必ず「' + langName(outLang) + '」で書くこと（ライザらしい元気な口調を' + langName(outLang) + 'でも維持）。');
+      L.push('地名や人名は' + langName(outLang) + '表記を基本に、必要なら日本語を併記してよい。');
+      L.push('先頭のタグ行（emotion/attitude）と <state> ブロックは今まで通り英キーのまま。');
+    }
     L.push('');
     L.push('## 今回の会話モード');
     L.push(MODES[mode] || MODES.chat);
@@ -177,14 +190,44 @@
     buildSystemPrompt: buildSystemPrompt,
     extractState: extractState,
 
+    /* resolved reply language (auto = UI) */
+    replyLang: function () {
+      return (window.Langs && Langs.llm()) || 'ja';
+    },
+
+    /* ------------------------------------------------- translate channel
+       Used when the TTS language differs from the reply language: the
+       displayed text stays, the spoken text is re-voiced in another
+       language by the same LLM. */
+    translate: function (text, toLang) {
+      if (!text || !toLang || toLang === Api.replyLang()) {
+        return Promise.resolve(text);
+      }
+      var llm = Config.section('llm');
+      if (!llm.apiKey) return Promise.resolve(text);
+      return request(localProxy(upstreamUrl(llm.baseUrl, '/chat/completions')), {
+        model: llm.model,
+        messages: [
+          { role: 'system', content: 'You are a translator for a Japanese anime game character (Ryza, cheerful young alchemist). Translate her line into ' + langName(toLang) + ', keeping the playful spoken tone, first-person feel and emotion. Output ONLY the translated line — no quotes, notes or tags.' },
+          { role: 'user', content: text }
+        ],
+        temperature: 0.3,
+        max_tokens: Math.max(80, (llm.maxTokens || 400))
+      }, llm.apiKey, 60000).then(function (j) {
+        var c = j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content;
+        return (c && String(c).trim()) || text;
+      }).catch(function () { return text; });
+    },
+
     /* ------------------------------------------------------------- LLM */
     chat: function (history, userText, opts) {
       var llm = Config.section('llm');
       if (!llm.apiKey) return Promise.reject(new Error('NO_KEY'));
       opts = opts || {};
       var st = Config.section('state');
+      var outLang = opts.lang || Api.replyLang();
       var system = buildSystemPrompt(opts.mode || st.mode, opts.style || st.style,
-                                     opts.rpgContext || '');
+                                     opts.rpgContext || '', outLang);
       var keep = Math.max(0, (llm.historyTurns || 12) * 2);
       var msgs = [{ role: 'system', content: system }]
         .concat(history.slice(-keep))
@@ -202,11 +245,14 @@
     },
 
     /* ------------------------------------------------------------- TTS */
-    /* Resolves to a Blob URL. Returns null when voice is disabled. */
-    speak: function (text) {
+    /* Resolves to a Blob URL. Returns null when voice is disabled.
+       provider: 'openai' (chat/completions + audio, MiMo-style) or
+       'qwen' (Bailian DashScope multimodal-generation, wav URL reply). */
+    speak: function (text, lang) {
       var tts = Config.section('tts');
       if (tts.mode === 'off') return Promise.resolve(null);
       if (!tts.apiKey) return Promise.reject(new Error('NO_KEY'));
+      if ((tts.provider || 'openai') === 'qwen') return Api._qwenSpeak(text, lang);
 
       var audio = { format: tts.format || 'wav' };
       if (tts.mode === 'clone') {
@@ -239,6 +285,64 @@
         return Api._fetchAsDataUrl(tts.reference).then(send);
       }
       return send(audio.voice);
+    },
+
+    /* ------------------------------------------- Qwen / Bailian (DashScope) */
+    QWEN_DEFAULT_BASE: 'https://dashscope.aliyuncs.com',
+
+    _qwenSpeak: function (text, lang) {
+      var tts = Config.section('tts');
+      var lg = lang || (window.Langs ? Langs.tts() : 'ja');
+      var langType = (window.I18n && I18n.TTS_LANGS && I18n.TTS_LANGS[lg]) || 'Auto';
+      var base = (tts.baseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
+      return request(localProxy(base + '/api/v1/services/aigc/multimodal-generation/generation'), {
+        model: tts.qwenModel || 'qwen3-tts-flash',
+        input: {
+          text: text,
+          voice: tts.qwenVoice || 'Cherry',
+          language_type: langType
+        }
+      }, tts.apiKey, 180000).then(function (j) {
+        var aud = j && j.output && j.output.audio;
+        if (aud && aud.data) return Api._b64ToUrl(aud.data, 'audio/wav');
+        if (aud && aud.url) return Api._downloadUrl(aud.url);
+        throw new Error((j && j.message) || 'Qwen TTS 未返回音频');
+      });
+    },
+
+    /* DashScope hands back a 24h OSS URL; pull it through our own proxy so
+       the blob feeds the lip-sync analyser without CORS problems. */
+    _downloadUrl: function (url) {
+      return fetch(localProxy(url)).then(function (r) {
+        if (!r.ok) throw new Error('音频下载失败 HTTP ' + r.status);
+        return r.blob();
+      }).then(function (blob) { return URL.createObjectURL(blob); });
+    },
+
+    /* 声音复刻: register the shipped Ryza reference wav (data URI — the
+       endpoint accepts base64 data URIs, no public hosting needed) and
+       return the voice_id. target_model must match the synthesis model. */
+    qwenCloneVoice: function () {
+      var tts = Config.section('tts');
+      if (!tts.apiKey) return Promise.reject(new Error('NO_KEY'));
+      var base = (tts.baseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
+      return Api._fetchAsDataUrl(tts.reference).then(function (dataUri) {
+        return request(localProxy(base + '/api/v1/services/audio/tts/customization'), {
+          model: 'voice-enrollment',
+          input: {
+            action: 'create_voice',
+            target_model: tts.qwenCloneTarget || 'qwen3-tts-vc-2026-01-22',
+            prefix: 'ryza',
+            preferred_name: 'ryza',
+            url: dataUri
+          }
+        }, tts.apiKey, 120000);
+      }).then(function (j) {
+        var out = j && j.output;
+        var vid = out && (out.voice_id || out.voice);
+        if (!vid) throw new Error((j && (j.message || j.code)) || '未返回 voice_id');
+        return vid;
+      });
     },
 
     _b64ToUrl: function (b64, mime) {

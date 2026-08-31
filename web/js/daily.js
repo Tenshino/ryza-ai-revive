@@ -26,6 +26,8 @@
     d = d || new Date();
     return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
   }
+  function L(key, fb) { return (window.I18n && I18n.tc) ? I18n.tc(key, fb) : fb; }
+  function rewardText(i) { return L('dl.rw.' + (i + 1), REWARDS[i].text); }
   function yesterdayStr() {
     var d = new Date();
     d.setDate(d.getDate() - 1);
@@ -73,21 +75,23 @@
       var r = Daily.rewardFor(idx);
       var msgs = [];
       switch (r.kind) {
-        case 'stamina': Game.refill(); msgs.push(r.text); break;
-        case 'money': Game.addMoney(r.amount); msgs.push(r.text); break;
-        case 'exp': Game.addExp(r.amount); msgs.push(r.text); break;
+        case 'stamina': Game.refill(); msgs.push(rewardText(0)); break;
+        case 'money': Game.addMoney(r.amount); msgs.push(rewardText(1)); break;
+        case 'exp': Game.addExp(r.amount); msgs.push(rewardText(3)); break;
         case 'item':
           Game.addItem('you', r.id, r.n || 1);
-          msgs.push(Game.ITEMS[r.id].name + '×' + (r.n || 1));
+          var inm = (Game.ITEMS[r.id] || {}).name || r.id;
+          if (window.I18n && I18n.tc) inm = I18n.tc('item.' + r.id, inm);
+          msgs.push(inm + '×' + (r.n || 1));
           break;
         case 'big':
           Game.addMoney(r.money); Game.addExp(r.exp); Game.refill();
-          msgs.push(r.text);
+          msgs.push(rewardText(4));
           break;
         case 'chest':
           Game.addMoney(r.money);
           Game.addItem('you', r.item, 1);
-          msgs.push(r.text);
+          msgs.push(rewardText(6));
           break;
       }
       if (!cheat) {
@@ -136,15 +140,15 @@
                          (claimedEver ? 'check' : (r.kind === 'chest' || r.kind === 'big' ? 'present' : 'stamina_apple_filled')) +
                          '.svg">';
         cell.querySelector('.dl-wd').textContent = I18n.t('dl.week.' + DAYS[i]);
-        cell.querySelector('.dl-rw').textContent = r.text;
+        cell.querySelector('.dl-rw').textContent = rewardText(i);
         strip.appendChild(cell);
       });
       root.appendChild(strip);
 
       var goal = document.createElement('p');
       goal.className = 'dl-goal';
-      var next = Daily.rewardFor(Util.clamp(Daily.streak(), 0, 6));
-      goal.textContent = I18n.t('dl.next').replace('{r}', next.text);
+      var nextIdx = Util.clamp(Daily.streak(), 0, 6);
+      goal.textContent = I18n.t('dl.next').replace('{r}', rewardText(nextIdx));
       root.appendChild(goal);
 
       var btn = document.createElement('button');

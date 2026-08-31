@@ -35,7 +35,11 @@ class Handler(SimpleHTTPRequestHandler):
         sys.stderr.write("[%s] %s\n" % (self.log_date_time_string(), fmt % args))
 
     def do_GET(self):
-        path = urlparse(self.path).path
+        parsed = urlparse(self.path)
+        path = parsed.path
+        if path == "/_proxy":
+            self._proxy_get(parsed)
+            return
         if path == "/config/providers.json" and PROVIDERS.is_file():
             raw = PROVIDERS.read_bytes()
             self.send_response(200)
@@ -46,6 +50,36 @@ class Handler(SimpleHTTPRequestHandler):
             self.wfile.write(raw)
             return
         return SimpleHTTPRequestHandler.do_GET(self)
+
+    def _proxy_get(self, parsed):
+        """GET /_proxy?u=<https url> — forwards a GET (Qwen TTS returns
+        time-limited OSS audio URLs; the page pulls them through here so
+        the blob is same-origin for the lip-sync analyser)."""
+        target = (parse_qs(parsed.query).get("u") or [""])[0]
+        if not target.startswith("https://"):
+            self.send_error(400, "proxy target must be https")
+            return
+        try:
+            with urlopen(Request(target, method="GET"), timeout=120) as resp:
+                data = resp.read()
+                self.send_response(resp.status)
+                self.send_header("Content-Type", resp.headers.get("Content-Type") or "application/octet-stream")
+                self.send_header("Content-Length", str(len(data)))
+                self.end_headers()
+                self.wfile.write(data)
+        except HTTPError as e:
+            data = e.read() if e.fp else str(e).encode("utf-8")
+            self.send_response(e.code)
+            self.send_header("Content-Length", str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+        except (URLError, TimeoutError, OSError) as e:
+            msg = json.dumps({"error": {"message": str(e)}}).encode("utf-8")
+            self.send_response(502)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(msg)))
+            self.end_headers()
+            self.wfile.write(msg)
 
     def do_OPTIONS(self):
         self.send_response(204)

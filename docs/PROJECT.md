@@ -113,15 +113,44 @@ localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日�
 连续计数（断一天归零）、第 5 天里程碑（源文案「5日連続ログインで報酬獲得」）、
 奖励全走 `Game`（体力/G/道具/exp/宝箱）。作弊模式下七格随便点。
 
-#### `web/js/api.js` — LLM/TTS 传输 + RPG 注入
+#### `web/js/api.js` — LLM/TTS 传输 + RPG 注入 + 语言矩阵
 
-- `buildSystemPrompt(mode, style, rpgContext)` — 第三参非空时注入
-  人格 + 状态 + 人物 + 任务四块，并附 `<state>` 协议说明（key 白名单、
-  「没有事件发生就不要 <state>」）。
+- `buildSystemPrompt(mode, style, rpgContext, outLang)` — 人格提示词保持原版日文，
+  只追加「## 出力言語（厳守）」段：回复语言 = `Langs.llm()`（auto=界面语言）。
+  实测（token-plan qwen 通道）：中文指令下 `[emotion|attitude]` 标签保留、正文中文。
 - `parseTaggedReply` 剥掉 `<state>` 块（含忘写闭合标签的宽容解析），
   返回 `{emotion, attitude, text, state}`；显示与朗读永远不含机器块。
-- `Api.chat / Api.speak` 走 `localProxy('/_proxy?u=')`；TTS clone 用
-  `data:audio/wav;base64` 参考音频（只收 wav/mp3）。
+- **TTS 双提供商**（`tts.provider`）：
+  - `openai`：chat/completions + `audio.voice`（MiMo 克隆路径，实测 200 返回 RIFF wav）；
+  - `qwen`：百炼 DashScope `POST /api/v1/services/aigc/multimodal-generation/generation`
+    （`qwen3-tts-flash` / `-instruct-flash` / `-vc-2026-01-22`），`language_type`
+    取自朗读语言；响应 `output.audio.url` 经 `GET /_proxy` 拉回转 blob
+    （口型 analyser 需要同源）。**需要普通百炼 sk- key**——Token Plan 个人版 key 在
+    dashscope 返回 401（且其条款禁止 API 调用），token-plan maas 主机不挂 TTS 模型（404）。
+  - `Api.qwenCloneVoice()`：声音复刻——把 `assets/voice/ryza_wav/` 原声转 base64 data URI
+    发 `voice-enrollment`（接口接受 data URI，无需公网托管），返回 voice_id 自动填入设置。
+- `Api.translate(text, toLang)`：朗读语言 ≠ 回复语言时的翻译通道（同一 LLM，低温、
+  只输出译文；失败原样返回）。显示文字不受影响。
+
+### 语言矩阵（四槽独立，`Langs` 助手在 i18n.js）
+
+| 槽 | 键 | 含义 |
+|---|---|---|
+| 界面 | `app.lang` | UI 文案（7 语） |
+| 自带语音 | `voice.lang` | tap_voice/alarm/prologue 目录语言（auto=界面） |
+| 回复 | `llm.lang` | 莱莎文字输出语言（auto=界面） |
+| 朗读 | `tts.lang` | 语音合成语言（auto=回复）；与回复不同时先走 `Api.translate` |
+
+**内容本地化（游戏数据层）**：i18n.js 的 `CONTENT` 表——物品/任务链/行动台词/怪物/
+船部件/每日奖励/教程句，ja=源包原文，zh/en=重建译文。**人名地名硬规则：只用源包
+验证过的官方译名**（2026-09 从 libapp.so UTF-16 串扫描挖出：萊莎/卡爾/塔奧/米奧/
+莫里茨/安佩爾/莉拉/羅密/賽莉/丹尼斯/科洛蒂婭/菲德麗卡/薩維里奧/迪安/多爾特/安娜/
+沃爾卡/古老；库肯岛周边地区/克莱莉亚地区/王都周边地区/萊莎家/塔奧家門前；
+EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「點一下，和萊莎
+聊天」「點一下叫醒萊莎」「這裡是萊莎的夢中世界」等）。**未在包内验证过的一律保留
+日文原名，禁止自行发明**（尼梅德地方、冥界奥利姆这类编造已撤销；Agate/Lumber/Fressa
+等未验证英文名保持日文）。出口：`World.npcName/placeLabel`、
+`Quests.titleOf/descOf/goalOf`、`I18n.tc/tf`。
 
 ### 渲染与交互
 

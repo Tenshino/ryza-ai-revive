@@ -18,11 +18,17 @@
       apiKey: '',
       temperature: 0.9,
       maxTokens: 400,
-      historyTurns: 12
+      historyTurns: 12,
+      lang: 'auto'                   // 回复语言（auto=跟随界面）
     },
 
-    /* ---- TTS (any OpenAI-compatible chat/completions + audio.voice) ---- */
+    /* ---- TTS providers ----
+       provider 'openai': any OpenAI-compatible chat/completions + audio.voice
+                          (e.g. Xiaomi MiMo voice-clone).
+       provider 'qwen'  : Aliyun Bailian DashScope (qwen3-tts-flash /
+                          qwen3-tts-instruct-flash / qwen3-tts-vc-* cloned). */
     tts: {
+      provider: 'openai',
       baseUrl: '',
       apiKey: '',
       mode: 'clone',                 // 'clone' | 'preset' | 'off'
@@ -32,8 +38,21 @@
       format: 'wav',
       // Ryza's own take, shipped inside the APK.
       reference: 'assets/voice/ryza_wav/prologue_08.wav',
-      styleHint: '明るく元気な若い女性の声。親しみやすい口調で。'
+      styleHint: '明るく元気な若い女性の声。親しみやすい口調で。',
+      /* qwen-specific */
+      qwenModel: 'qwen3-tts-flash',  // or qwen3-tts-vc-2026-01-22 with a cloned voice
+      qwenVoice: 'Cherry',           // preset name, or voice_id from 声音复刻
+      qwenCloneTarget: 'qwen3-tts-vc-2026-01-22',
+      lang: 'auto'                   // 朗读语言（auto=与 llm.lang 实际值一致）
     },
+
+    /* ---- language matrix (all independent) ----
+       app.lang   = UI strings            (zh | zh-tw | ja | en | hi | id | pt-br)
+       voice.lang = shipped voice packs   ('auto' = follow UI, or an explicit code)
+       llm.lang   = what the model writes ('auto' = follow UI)
+       tts.lang   = what the voice speaks ('auto' = same as llm.lang; anything else
+                    triggers an LLM translation pass before synthesis) */
+    voice: { lang: 'auto' },
 
     /* ---- character / persona (fed into the system prompt) ---- */
     chara: {

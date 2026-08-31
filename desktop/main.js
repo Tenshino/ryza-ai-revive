@@ -64,6 +64,33 @@ function serveStatic(root, req, res) {
   });
 }
 
+/* GET /_proxy?u=https://... — forwards a GET (Qwen TTS audio URLs). */
+function handleProxyGet(rawUrl, res) {
+  let target = '';
+  try { target = new URL(rawUrl, 'http://127.0.0.1').searchParams.get('u') || ''; } catch (e) {}
+  if (!target.startsWith('https://')) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: { message: 'proxy target must be https' } }));
+    return;
+  }
+  https.get(target, (up) => {
+    const out = [];
+    up.on('data', (c) => out.push(c));
+    up.on('end', () => {
+      const buf = Buffer.concat(out);
+      res.writeHead(up.statusCode || 502, {
+        'Content-Type': up.headers['content-type'] || 'application/octet-stream',
+        'Content-Length': buf.length
+      });
+      res.end(buf);
+    });
+  }).on('error', (e) => {
+    const msg = Buffer.from(JSON.stringify({ error: { message: String(e && e.message || e) } }));
+    res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length });
+    res.end(msg);
+  });
+}
+
 /* POST /_proxy?u=https://... — body + auth headers forwarded verbatim. */
 function handleProxy(req, res) {
   let target;
@@ -121,6 +148,7 @@ function startServer(root) {
         res.writeHead(204); res.end(); return;
       }
       if (req.method === 'POST' && req.url.startsWith('/_proxy')) { handleProxy(req, res); return; }
+      if (req.method === 'GET' && req.url.startsWith('/_proxy')) { handleProxyGet(req.url, res); return; }
       if (req.method === 'GET' || req.method === 'HEAD') { serveStatic(root, req, res); return; }
       res.writeHead(405); res.end();
     });

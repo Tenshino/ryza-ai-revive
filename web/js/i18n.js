@@ -143,7 +143,19 @@
       'talk.retryHint': '连接失败了', 'talk.retry': '重试',
       'toast.staminaOut': '体力不足，让莱莎睡一觉吧',
       'world.lockedToast': '还没有船，去不了库肯岛以外（完成主线8「造船出海」）',
-      'toast.sailed': '出航成功！世界地图已解锁'
+      'toast.sailed': '出航成功！世界地图已解锁',
+      'lang.auto': '跟随界面语言', 'lang.zh': '简体中文', 'lang.zh-tw': '繁體中文',
+      'lang.ja': '日本語', 'lang.en': 'English', 'lang.hi': 'हिन्दी',
+      'lang.id': 'Bahasa Indonesia', 'lang.pt-br': 'Português (Brasil)',
+      'settings.lang.ui': '界面语言', 'settings.lang.voice': '自带语音语言',
+      'settings.lang.llm': '莱莎回复语言', 'settings.lang.tts': '朗读语言',
+      'settings.lang.ttsHint': '朗读语言与回复语言不同时会先翻译再合成（文字仍显示回复语言）',
+      'settings.tts.provider': 'TTS 服务', 'settings.tts.provider.openai': 'OpenAI 兼容（MiMo 等）',
+      'settings.tts.provider.qwen': 'Qwen / 百炼（DashScope）',
+      'settings.qwenModel': 'Qwen TTS 模型', 'settings.qwenVoice': 'Qwen 音色',
+      'settings.cloneQwen': '用莱莎原声复刻（Qwen）',
+      'toast.cloning': '正在向百炼注册复刻音色…', 'toast.cloneOk': '复刻完成，音色 ID 已填入',
+      'toast.cloneFail': '复刻失败：'
     },
 
     ja: {
@@ -285,7 +297,19 @@
       'talk.retryHint': 'つながなかった…', 'talk.retry': 'もう一回',
       'toast.staminaOut': 'スタミナ不足。ライザを寝かせてあげて',
       'world.lockedToast': '船がないとクーケン島の外へは出られない（メイン8をクリア！）',
-      'toast.sailed': '出航成功！世界の扉が開いたよ'
+      'toast.sailed': '出航成功！世界の扉が開いたよ',
+      'lang.auto': 'UI に従う', 'lang.zh': '简体中文', 'lang.zh-tw': '繁體中文',
+      'lang.ja': '日本語', 'lang.en': 'English', 'lang.hi': 'हिन्दी',
+      'lang.id': 'Bahasa Indonesia', 'lang.pt-br': 'Português (Brasil)',
+      'settings.lang.ui': '表示言語', 'settings.lang.voice': '収録ボイスの言語',
+      'settings.lang.llm': 'ライザの返事の言語', 'settings.lang.tts': '読み上げの言語',
+      'settings.lang.ttsHint': '読み上げが返事と違う言語のとき、先に翻訳してから合成します（表示は返事の言語のまま）',
+      'settings.tts.provider': 'TTS サービス', 'settings.tts.provider.openai': 'OpenAI 互換（MiMo など）',
+      'settings.tts.provider.qwen': 'Qwen / Bailian（DashScope）',
+      'settings.qwenModel': 'Qwen TTS モデル', 'settings.qwenVoice': 'Qwen 音色',
+      'settings.cloneQwen': 'ライザの声でクローン作成（Qwen）',
+      'toast.cloning': 'Bailian にクローン音声を登録中…', 'toast.cloneOk': '登録完了、voice_id を入力しました',
+      'toast.cloneFail': 'クローン作成失敗：'
     },
 
     en: {
@@ -427,7 +451,19 @@
       'talk.retryHint': 'Connection failed', 'talk.retry': 'Retry',
       'toast.staminaOut': 'Not enough stamina — let Ryza sleep',
       'world.lockedToast': 'No ship, no leaving Kurken Island (finish Main Quest 8)',
-      'toast.sailed': 'You sailed! The world map is open'
+      'toast.sailed': 'You sailed! The world map is open',
+      'lang.auto': 'Follow UI language', 'lang.zh': '简体中文', 'lang.zh-tw': '繁體中文',
+      'lang.ja': '日本語', 'lang.en': 'English', 'lang.hi': 'हिन्दी',
+      'lang.id': 'Bahasa Indonesia', 'lang.pt-br': 'Português (Brasil)',
+      'settings.lang.ui': 'UI language', 'settings.lang.voice': 'Recorded voice language',
+      'settings.lang.llm': 'Ryza replies in', 'settings.lang.tts': 'Speech language',
+      'settings.lang.ttsHint': 'If speech differs from the reply language, the reply is translated first (display keeps the reply language)',
+      'settings.tts.provider': 'TTS service', 'settings.tts.provider.openai': 'OpenAI-compatible (MiMo etc.)',
+      'settings.tts.provider.qwen': 'Qwen / Bailian (DashScope)',
+      'settings.qwenModel': 'Qwen TTS model', 'settings.qwenVoice': 'Qwen voice',
+      'settings.cloneQwen': 'Clone Ryza\u2019s voice (Qwen)',
+      'toast.cloning': 'Registering cloned voice with Bailian…', 'toast.cloneOk': 'Cloned voice ready, voice_id filled in',
+      'toast.cloneFail': 'Voice clone failed: '
     }
   };
 
@@ -529,8 +565,356 @@
     'title.start': 'Começar', 'mode.sheet': 'Modo de conversa'
   });
 
+  /* =====================================================================
+     Content dictionary — the in-game data layer (items, quests, action
+     lines, NPC/place names). ja entries are the shipped/original wording;
+     zh / en are rebuild translations (official Atelier Ryza names where
+     they exist). zh-tw inherits zh, hi/id/pt-br inherit en.
+     ================================================================== */
+  var CONTENT = {
+    ja: {
+      'item.emeralia': 'エメラリア草', 'item.uni': 'うに', 'item.wasser': '蒸留水',
+      'item.honey': '森のはちみつ', 'item.shell': '輝きの貝殻', 'item.ore': '魔石鉱のかけら',
+      'item.mushroom': '元気茸', 'item.driftwood': '漂流WOOD', 'item.ironwood': '堅鉄の木目',
+      'item.cloth': '帆布布切れ', 'item.bottle': '回復のボトル', 'item.bomb': '爆弾瓶',
+      'item.charm': 'お守りの指輪', 'item.relic': '古代の遺物', 'item.apple': 'スタミナリンゴ',
+      'q.1.title': 'まずは会話をしてみよう', 'q.1.desc': 'ライザと会話して、お互いのことにもっと慣れる。', 'q.1.goal': 'ライザと4回話す',
+      'q.2.title': '島のあちこちを冒険', 'q.2.desc': 'ワールドマップを開いて、別の場所へ移動する。', 'q.2.goal': '別のステージへ2回移動',
+      'q.3.title': '素材集めの冒険', 'q.3.desc': '冒険の材料集め。バッグに素材を詰めてこよう。', 'q.3.goal': '素材を3つ集める',
+      'q.4.title': 'はじめての調合', 'q.4.desc': '集めた素材で、あたしと一緒に調合に挑戦！', 'q.4.goal': '調合を1回成功させる',
+      'q.5.title': '進路を阻む魔物', 'q.5.desc': '冒険の途中で魔物が出た。調合アイテムも使って突破しよう。', 'q.5.goal': '戦闘に1回勝つ',
+      'q.6.title': 'お店を一日経営してみよう', 'q.6.desc': 'いらないアイテムを並べて、お小遣い稼ぎ。', 'q.6.goal': 'お店でアイテムを売る',
+      'q.7.title': '船の材料を集めて造船', 'q.7.desc': '「まずは船を手に入れて」。船には部品が4つ必要らしい。', 'q.7.goal': '船の部品を4つそろえる',
+      'q.8.title': '船で自由に旅へ出よう', 'q.8.desc': '造船を完成させて、クーケン島の外へ！世界地図が解放される。', 'q.8.goal': '資金200Gで出航する',
+      'pq.1.title': '新しいレシピ', 'pq.1.desc': 'まだ作ったことのない調合を、ライザと考える。', 'pq.1.goal': '調合を1回成功させる',
+      'pq.2.title': '水源の材料', 'pq.2.desc': 'クーケン島の水源の滝つぼ周辺で、新しい材料を探す。', 'pq.2.goal': '素材を2つ集める',
+      'pq.3.title': '星を見に行こう', 'pq.3.desc': '夜のカーク群島の星見の高台まで、一緒に歩く。', 'pq.3.goal': '夜のステージへ移動',
+      'pq.4.title': '廃村の住人', 'pq.4.desc': '忘れ去られた廃村で、邪魔するやつを退治する。', 'pq.4.goal': '戦闘に1回勝つ',
+      'pq.5.title': '移動販売の一日', 'pq.5.desc': '港の広場でちょっと商売してみない？', 'pq.5.goal': 'お店でアイテムを売る',
+      'pq.6.title': '思い出話', 'pq.6.desc': 'ふたりが初めて会った日のことを、ゆっくり思い出す。', 'pq.6.goal': 'ライザと3回話す',
+      'pq.7.title': 'おやつ探し', 'pq.7.desc': '甘いものの材料を集めて、あたしのおやつを作る。', 'pq.7.goal': '素材を2つ集める',
+      'pq.8.title': '遺跡の探索', 'pq.8.desc': '封印の祭殿の奥まで、一緒に見て回ろう。', 'pq.8.goal': '別のステージへ移動',
+      'qact.noquest': '今はクエストなし。新しいお題を考えてもらおう。',
+      'qact.hungry': '……お腹すいた。気絶しちゃう前に、安全なところで寝たいな…',
+      'qact.mismatch': '今のクエストと違うことをしたかったの？',
+      'qact.talk.hint': 'これは会話で進むクエストだよ。あたしに話しかけて？',
+      'qact.explore.hint': 'ワールドマップから移動するたびに進行するよ。',
+      'qact.gather.ok': 'わあい、{items} が採れた！ {tail}',
+      'qact.gather.more': 'あと {n} 個！', 'qact.gather.done': 'これで十分！',
+      'qact.gather.full': 'バッグがパンパン…いらないものを売らないと入らないよ。',
+      'qact.craft.lack': 'うーん、{need} が足りないみたい。集めてこよっ。',
+      'qact.craft.ok': 'せーの… できた！ {item}！ あたしの調合、上達してない？',
+      'qact.battle.win': 'やった、{mob} 倒した！ {money}G 落としてったよ。{tools}',
+      'qact.battle.lose': 'うぅ…{mob}、強すぎだよ。また挑戦しよ。',
+      'qact.shop.ok': '開店！ {items} が売れて +{money}G。あたしたち、才能あるかも！',
+      'qact.shop.empty': '売れる在庫がないや…素材を集めてこよ？',
+      'qact.build.ok': '「{part}」装着！ 船が形になってきた。あと {n} つ！',
+      'qact.build.lack': '造船には {part}（{item}）が必要みたい。探してこよ！',
+      'qact.build.done': '部品はもうそろってる！ 次は「船で自由に旅へ出よう」だね。',
+      'qact.sail.ok': '出発の時間だ——！ クーケン島を離れて、自由な旅へ。世界の扉、開いたよ！',
+      'qact.sail.parts': 'まだ部品が足りない！ 造船クエストに戻ろう。',
+      'qact.sail.money': '出航に 200G 必要らしい。お店を開いて稼ごう！',
+      'part.driftwood': '船底の竜骨材', 'part.ironwood': 'マストの堅木',
+      'part.cloth': '大きな帆布', 'part.ore': '魔石入りの留め金',
+      'mob.1': 'モコモコ', 'mob.2': 'ビッグツノ', 'mob.3': '溶岩カニ',
+      'mob.4': '森の番人', 'mob.5': '遺跡の守卫像', 'mob.6': '星霜の竜',
+      'pr.0': 'すごい、クリアおめでとう！', 'pr.1': '次のクエストもがんばろう', 'pr.2': 'すごい！次はどんな冒険にする？',
+      'dl.rw.1': 'スタミナ全回復', 'dl.rw.2': '120G', 'dl.rw.3': '蒸留水×3', 'dl.rw.4': 'EXP+60',
+      'dl.rw.5': '300G + EXP+100 + 全回復', 'dl.rw.6': 'スタミナリンゴ×1', 'dl.rw.7': '宝箱：500G + 古代の遺物',
+      'tut.1': 'やあ、会えたね。あたし、ライザ。これからよろしくね。',
+      'tut.2': '画面の見方を説明するね。',
+      'tut.3': '上のほうのリンゴはあたしのスタミナ。無くなると気絶しちゃうから、気をつけて。安全な場所で寝ると回復するよ。',
+      'tut.4': '手に入れたアイテムは、ここにしまわれるよ。この世界のお金だよ——これも。',
+      'tut.5': 'なんでも聞いてね。困ったときは、まずは船を手に入れて、船で自由に旅へ出ようとあたしは思ってる！',
+      'tut.6': '迷ったら、クエストを進めてみて。君だけの自由な発想で、クエストをクリアしていくのを、楽しみにしてるよ。',
+      'tut.7': 'まずはあたしとお喋りでもしてリフレッシュしよっ',
+      'greet.1': '……やあ、会えたね。', 'greet.n': '……今日も、会えたね。',
+      'mem.met': '{names} と出会った。', 'mem.sleep': '安全なおうちでぐっすり眠った。',
+      'mem.cleared': '「{title}」をクリア！ +{exp}EXP / +{money}G', 'mem.lv': 'Lv{lv} reached!',
+      'place.area_01': 'クーケン島周辺地域', 'place.area_02': 'クレリア地方', 'place.area_03': 'ネメッド地方',
+      'place.area_04': '冥界オーリム', 'place.area_05': '王都周辺地域',
+      'place.field_01_001': 'クーケン島', 'place.stage_01_001_04': 'ライザの家',
+      'input.hint': 'ライザと話す…', 'input.wake': 'タップしてライザを起こす',
+      'qobs.gather': 'いい素材は少し奥まで入らないと採れないみたい。',
+      'qobs.craft': '調合は失敗しやすいから、材料は余裕をもって集めとこ。',
+      'qobs.battle': 'あ、強いのが出たら逃げてもいいからね…たぶん。',
+      'qobs.shop': '売れるか微妙だけど、やってみないと分からない！',
+      'qobs.build': '部品はどれも大きくて、一回じゃ運べそうにない。',
+      'qobs.explore': '最近道の様子がちょっと変なんだよね。',
+      'qobs.sail': '出航には資金も必要。お店で稼いでおこう。',
+      'qobs.talk': ''
+    },
+
+    zh: {
+      'item.emeralia': '翡翠草', 'item.uni': '海胆', 'item.wasser': '蒸馏水',
+      'item.honey': '森林蜂蜜', 'item.shell': '光辉贝壳', 'item.ore': '魔石矿碎片',
+      'item.mushroom': '元气菇', 'item.driftwood': '漂流木', 'item.ironwood': '坚铁木',
+      'item.cloth': '帆布碎片', 'item.bottle': '回复瓶', 'item.bomb': '爆弹瓶',
+      'item.charm': '守护指轮', 'item.relic': '古代遗物', 'item.apple': '体力苹果',
+      'q.1.title': '先来聊聊天吧', 'q.1.desc': '和莱莎对话，更熟悉彼此一点。', 'q.1.goal': '和莱莎聊4次',
+      'q.2.title': '在岛各处冒险', 'q.2.desc': '打开世界地图，移动到别的地方。', 'q.2.goal': '移动到别的舞台2次',
+      'q.3.title': '采集素材的冒险', 'q.3.desc': '冒险要用的材料采集。把背包装满吧。', 'q.3.goal': '采集3个素材',
+      'q.4.title': '第一次调和', 'q.4.desc': '用采集来的素材，和莱莎一起挑战调和！', 'q.4.goal': '成功调和1次',
+      'q.5.title': '挡路的魔物', 'q.5.desc': '冒险途中冒出魔物了。用调和道具突破吧。', 'q.5.goal': '赢得1次战斗',
+      'q.6.title': '经营店铺一整天', 'q.6.desc': '摆出不需要的道具，赚点零花钱。', 'q.6.goal': '在店里卖出道具',
+      'q.7.title': '收集造船材料', 'q.7.desc': '「首先得搞到船」。船好像需要4个部件。', 'q.7.goal': '凑齐4个船部件',
+      'q.8.title': '乘船自由远航', 'q.8.desc': '完成造船，离开库肯岛！世界地图就此解锁。', 'q.8.goal': '用200G出航',
+      'pq.1.title': '新配方', 'pq.1.desc': '和莱莎一起想一个从没试过的调和。', 'pq.1.goal': '成功调和1次',
+      'pq.2.title': '水源地的材料', 'pq.2.desc': '去库肯岛水源瀑布潭附近找新材料。', 'pq.2.goal': '采集2个素材',
+      'pq.3.title': '去看星星', 'pq.3.desc': '夜里一起走到库克群岛的观星高台。', 'pq.3.goal': '移动到夜晚的舞台',
+      'pq.4.title': '废村的住客', 'pq.4.desc': '去被遗忘的废村，收拾挡路的家伙。', 'pq.4.goal': '赢得1次战斗',
+      'pq.5.title': '移动贩卖的一天', 'pq.5.desc': '在港口广场做点小买卖怎么样？', 'pq.5.goal': '在店里卖出道具',
+      'pq.6.title': '回忆往事', 'pq.6.desc': '慢慢回忆两人初次见面的那天。', 'pq.6.goal': '和莱莎聊3次',
+      'pq.7.title': '寻找点心', 'pq.7.desc': '采集甜点的材料，给莱莎做点心。', 'pq.7.goal': '采集2个素材',
+      'pq.8.title': '遗迹探索', 'pq.8.desc': '一起走到封印祭殿的深处看看。', 'pq.8.goal': '移动到别的舞台',
+      'qact.noquest': '现在没有任务。让莱莎想一个新题目吧。',
+      'qact.hungry': '……好饿。在我晕倒之前，想回安全的地方睡一觉…',
+      'qact.mismatch': '你想做的和当前任务不一样哦？',
+      'qact.talk.hint': '这个任务靠对话推进。来跟莱莎说话吧？',
+      'qact.explore.hint': '每次从世界地图移动都会推进进度哦。',
+      'qact.gather.ok': '哇，采到了{items}！ {tail}',
+      'qact.gather.more': '还差 {n} 个！', 'qact.gather.done': '这些就够啦！',
+      'qact.gather.full': '背包塞满了…先把不要的卖掉才装得下。',
+      'qact.craft.lack': '唔，好像缺{need}。先去采集吧。',
+      'qact.craft.ok': '嘿呀…… 做好了！{item}！ 我的调和是不是见长了？',
+      'qact.battle.win': '成了，打倒了{mob}！掉了 {money}G。{tools}',
+      'qact.battle.lose': '呜…{mob}太强了。下次再挑战。',
+      'qact.shop.ok': '开张！{items}卖出去了 +{money}G。我们挺有天赋的嘛！',
+      'qact.shop.empty': '没有能卖的货…先去采集点素材吧？',
+      'qact.build.ok': '「{part}」安装完成！船有形状了。还剩 {n} 个！',
+      'qact.build.lack': '造船需要{part}（{item}）。去找找吧！',
+      'qact.build.done': '部件已经齐了！接下来就是「乘船自由远航」啦。',
+      'qact.sail.ok': '出发时间到——！离开库肯岛，自由旅行开始。世界的大门打开了！',
+      'qact.sail.parts': '部件还不够！先回去完成造船任务。',
+      'qact.sail.money': '出航好像要 200G。开店赚一笔吧！',
+      'part.driftwood': '船底龙骨材', 'part.ironwood': '桅杆坚木',
+      'part.cloth': '大帆布', 'part.ore': '魔石铆钉',
+      'mob.1': '绒绒怪', 'mob.2': '大角怪', 'mob.3': '熔岩蟹',
+      'mob.4': '森林守卫', 'mob.5': '遗迹守卫像', 'mob.6': '星霜之龙',
+      'pr.0': '厉害，通关恭喜！', 'pr.1': '下一个任务也加油吧', 'pr.2': '太棒了！下次去什么样的冒险？',
+      'dl.rw.1': '体力全恢复', 'dl.rw.2': '120G', 'dl.rw.3': '蒸馏水×3', 'dl.rw.4': '经验+60',
+      'dl.rw.5': '300G + 经验+100 + 全恢复', 'dl.rw.6': '体力苹果×1', 'dl.rw.7': '宝箱：500G + 古代遗物',
+      'tut.1': '呀，见到你啦。我是莱莎。今后请多指教。',
+      'tut.2': '我来讲讲怎么看这个界面。',
+      'tut.3': '上面那排苹果是我的体力。用完我就会晕倒的，要注意哦。在安全的地方睡一觉就能恢复。',
+      'tut.4': '入手的东西会收进这里。还有这个——是这个世界流通的钱哦。',
+      'tut.5': '有什么尽管问我。要是卡住了，我的计划是先搞到船，然后乘船自由远航！',
+      'tut.6': '迷茫的时候，就先推进任务吧。很期待看你用只属于你的自由想法通关一个又一个任务。',
+      'tut.7': '先陪我聊聊天放松一下嘛',
+      'greet.1': '……呀，见到你啦。', 'greet.n': '……今天也，见到你啦。',
+      'mem.met': '遇见了{names}。', 'mem.sleep': '在安全的家里睡了个好觉。',
+      'mem.cleared': '通关「{title}」！+{exp}经验 / +{money}G', 'mem.lv': '升到 Lv{lv} 了！',
+      'place.area_01': '库肯岛周边地区', 'place.area_02': '克莱莉亚地区', 'place.area_05': '王都周边地区',
+      'place.field_01_001': '库肯岛', 'place.stage_01_001_04': '莱莎家', 'place.stage_01_002_01': '塔奥家门前',
+      'item.bottle': '回复药（草豆）',
+      'input.hint': '和莱莎说点什么…', 'input.wake': '点一下叫醒莱莎',
+      'qobs.gather': '好素材好像得往深处走才采得到。',
+      'qobs.craft': '调和容易失手，材料先多备点吧。',
+      'qobs.battle': '啊，遇到太强跑掉也没关系啦…大概。',
+      'qobs.shop': '不一定卖得动，但不试试怎么知道！',
+      'qobs.build': '每个部件都又大又重，一趟可搬不完。',
+      'qobs.explore': '最近路上的样子有点怪怪的。',
+      'qobs.sail': '出航还需要资金。开店赚一笔吧。',
+      'qobs.talk': ''
+    },
+
+    en: {
+      'item.emeralia': 'Emeralia Grass', 'item.uni': 'Sea Urchin', 'item.wasser': 'Distilled Water',
+      'item.honey': 'Forest Honey', 'item.shell': 'Radiant Shell', 'item.ore': 'Magic Ore Shard',
+      'item.mushroom': 'Vitality Mushroom', 'item.driftwood': 'Driftwood Log', 'item.ironwood': 'Ironwood Grain',
+      'item.cloth': 'Sailcloth Scrap', 'item.bottle': 'Healing Bottle', 'item.bomb': 'Bomb Vial',
+      'item.charm': 'Guardian Charm Ring', 'item.relic': 'Ancient Relic', 'item.apple': 'Stamina Apple',
+      'q.1.title': 'Let\u2019s Talk First', 'q.1.desc': 'Chat with Ryza and get used to each other.', 'q.1.goal': 'Talk to Ryza 4 times',
+      'q.2.title': 'Explore the Island', 'q.2.desc': 'Open the world map and travel somewhere else.', 'q.2.goal': 'Move to another stage twice',
+      'q.3.title': 'Gathering Adventure', 'q.3.desc': 'Collect adventuring materials. Fill that bag!', 'q.3.goal': 'Gather 3 materials',
+      'q.4.title': 'First Synthesis', 'q.4.desc': 'Try alchemy with the materials you gathered!', 'q.4.goal': 'Craft successfully once',
+      'q.5.title': 'Monster in the Way', 'q.5.desc': 'A monster showed up. Break through with crafted items.', 'q.5.goal': 'Win one battle',
+      'q.6.title': 'A Day Running the Shop', 'q.6.desc': 'Set out spare items and earn some pocket money.', 'q.6.goal': 'Sell items at the shop',
+      'q.7.title': 'Gather Ship Parts', 'q.7.desc': '"First, get a ship." It apparently needs 4 parts.', 'q.7.goal': 'Collect 4 ship parts',
+      'q.8.title': 'Set Sail, Free!', 'q.8.desc': 'Finish the ship and leave Kurken Island! The world map opens.', 'q.8.goal': 'Pay 200G and sail',
+      'pq.1.title': 'A New Recipe', 'pq.1.desc': 'Dream up a synthesis you have never tried.', 'pq.1.goal': 'Craft successfully once',
+      'pq.2.title': 'Spring Materials', 'pq.2.desc': 'Search near the waterfall pool at the spring.', 'pq.2.goal': 'Gather 2 materials',
+      'pq.3.title': 'Stargazing', 'pq.3.desc': 'Walk together to the star-viewing height at night.', 'pq.3.goal': 'Move to a night stage',
+      'pq.4.title': 'Ruined Village Resident', 'pq.4.desc': 'Deal with whatever bothers you in the forgotten ruins.', 'pq.4.goal': 'Win one battle',
+      'pq.5.title': 'Street Vendor Day', 'pq.5.desc': 'How about a little business at the harbor plaza?', 'pq.5.goal': 'Sell items at the shop',
+      'pq.6.title': 'Memory Lane', 'pq.6.desc': 'Recall the day we first met, slowly.', 'pq.6.goal': 'Talk to Ryza 3 times',
+      'pq.7.title': 'Snack Hunt', 'pq.7.desc': 'Gather sweet ingredients for my snack.', 'pq.7.goal': 'Gather 2 materials',
+      'pq.8.title': 'Ruins Expedition', 'pq.8.desc': 'Let\u2019s look deeper into the sealed sanctuary.', 'pq.8.goal': 'Move to another stage',
+      'qact.noquest': 'No quest right now. Ask for a new one.',
+      'qact.hungry': '…I\u2019m starving. Let me sleep somewhere safe before I faint…',
+      'qact.mismatch': 'That is not what the current quest is about?',
+      'qact.talk.hint': 'This one advances through conversation. Talk to me?',
+      'qact.explore.hint': 'It progresses every time you travel on the world map.',
+      'qact.gather.ok': 'Yay, got {items}! {tail}',
+      'qact.gather.more': '{n} more to go!', 'qact.gather.done': 'That should be enough!',
+      'qact.gather.full': 'The bag is stuffed… sell something first.',
+      'qact.craft.lack': 'Hmm, we are short on {need}. Go gather some?',
+      'qact.craft.ok': 'Heave-ho… done! {item}! My alchemy is getting good, right?',
+      'qact.battle.win': 'Yes, beat {mob}! It dropped {money}G. {tools}',
+      'qact.battle.lose': 'Ugh… {mob} was too strong. Let\u2019s try again.',
+      'qact.shop.ok': 'Open for business! Sold {items} for +{money}G. We have talent!',
+      'qact.shop.empty': 'Nothing to sell… gather some materials first?',
+      'qact.build.ok': '"{part}" installed! The ship is taking shape. {n} to go!',
+      'qact.build.lack': 'Shipbuilding needs {part} ({item}). Go find some!',
+      'qact.build.done': 'All parts ready! Next up: "Set Sail, Free!"',
+      'qact.sail.ok': 'Time to go——! Leaving Kurken Island for a free journey. The world is open!',
+      'qact.sail.parts': 'Not enough parts yet! Back to the shipbuilding quest.',
+      'qact.sail.money': 'Sailing costs 200G. Let\u2019s earn it at the shop!',
+      'part.driftwood': 'Keel Timber', 'part.ironwood': 'Mast Ironwood',
+      'part.cloth': 'Great Sailcloth', 'part.ore': 'Magi-steel Rivets',
+      'mob.1': 'Fluffball', 'mob.2': 'Hornbeast', 'mob.3': 'Lava Crab',
+      'mob.4': 'Forest Warden', 'mob.5': 'Ruins Sentinel', 'mob.6': 'Starfrost Dragon',
+      'pr.0': 'Amazing, you cleared it!', 'pr.1': 'Let\u2019s keep going with the next quest', 'pr.2': 'Awesome! What adventure next?',
+      'dl.rw.1': 'Stamina refill', 'dl.rw.2': '120G', 'dl.rw.3': 'Distilled Water ×3', 'dl.rw.4': 'EXP +60',
+      'dl.rw.5': '300G + EXP +100 + refill', 'dl.rw.6': 'Stamina Apple ×1', 'dl.rw.7': 'Chest: 500G + Ancient Relic',
+      'tut.1': 'Hi, there you are! I\u2019m Ryza. Nice to meet you.',
+      'tut.2': 'Let me show you how to read the screen.',
+      'tut.3': 'Those apples up top are my stamina. I faint when they run out, careful. Sleep somewhere safe to recover.',
+      'tut.4': 'Items you get go stored right here. And this — that\u2019s the money of this world.',
+      'tut.5': 'Ask me anything. When stuck, my plan is: first get a ship, then sail free!',
+      'tut.6': 'If you\u2019re unsure what to do, try a quest. I can\u2019t wait to see you clear them your own way.',
+      'tut.7': 'Let\u2019s chat a bit and refresh first',
+      'greet.1': '…Hey, there you are.', 'greet.n': '…There you are again today.',
+      'mem.met': 'Met {names}.', 'mem.sleep': 'Slept soundly at the safe home.',
+      'mem.cleared': 'Cleared "{title}"! +{exp}EXP / +{money}G', 'mem.lv': 'Reached Lv{lv}!',
+      'place.area_01': 'Kurken Island Area', 'place.area_02': 'Cleria region',
+      'place.field_01_001': 'Kurken Island', 'place.stage_01_001_04': 'Ryza\u2019s Home',
+      'input.hint': 'Say something to Ryza…', 'input.wake': 'Tap to wake Ryza',
+      'place.stage_01_002_01': 'In front of Tao\u2019s house',
+      'qobs.gather': 'Good stuff grows deeper in, apparently.',
+      'qobs.craft': 'Synthesis fails easy — gather spare materials first.',
+      'qobs.battle': 'Um, if something too strong shows up we can run… probably.',
+      'qobs.shop': 'Not sure it will sell, but worth a try!',
+      'qobs.build': 'Every part is huge. One trip won\u2019t carry them.',
+      'qobs.explore': 'The roads have felt a bit odd lately.',
+      'qobs.sail': 'Sailing costs money. Let\u2019s earn some at the shop.',
+      'qobs.talk': ''
+    }
+  };
+
+  /* NPC display names — ONLY values verified inside the source APK
+     (libapp.so string scan, 2026-09). zh = official zh-TW forms
+     (简体化为逐字转换，非再翻译); anything unverified stays Japanese. */
+  CONTENT.zh.npc = null;
+  var NPC_NAMES = {
+    zh: { ryza: '萊莎', karl: '卡爾', tao: '塔奧', mio: '米奧', moritz: '莫里茨',
+      empel: '安佩爾', lila: '莉拉', romy: '羅密', serri: '賽莉', dennis: '丹尼斯',
+      klaudia: '科洛蒂婭', federica: '菲德麗卡', saverio: '薩維里奧', dian: '迪安',
+      dort: '多爾特', anna: '安娜', volker: '沃爾卡', korou: '古老' },
+    en: { ryza: 'Ryza', lent: 'Lent', klaudia: 'Klaudia', tao: 'Tao', empel: 'Empel',
+      lila: 'Lila', boos: 'Bos', moritz: 'Moritz', karl: 'Karl', mio: 'Mio',
+      samuel: 'Samuel', kilo: 'Kilo', romy: 'Romy', patricia: 'Patricia',
+      clifford: 'Clifford', serri: 'Serri', volker: 'Volker', zephine: 'Zephine',
+      dennis: 'Dennis', cassandra: 'Cassandra', kala: 'Kala', alberta: 'Alberta',
+      saverio: 'Saverio', anna: 'Anna', dort: 'Dort', federica: 'Federica', dian: 'Dian' }
+  };
+  /* zh (simplified UI) mirrors the zh-TW official forms, char-converted */
+  var NPC_ZH_TW = NPC_NAMES.zh;
+  var NPC_ZH_CN = {};
+  Object.keys(NPC_ZH_TW).forEach(function (k) {
+    NPC_ZH_CN[k] = NPC_ZH_TW[k]
+      .replace(/萊/g, '莱').replace(/卡爾/g, '卡尔').replace(/塔奧/g, '塔奥')
+      .replace(/米奧/g, '米奥').replace(/安佩爾/g, '安佩尔').replace(/羅密/g, '罗密')
+      .replace(/賽莉/g, '赛莉').replace(/科洛蒂婭/g, '科洛蒂娅').replace(/菲德麗卡/g, '费德丽卡')
+      .replace(/薩維里奧/g, '萨维里奥').replace(/多爾特/g, '多尔特').replace(/沃爾卡/g, '沃尔卡');
+  });
+  ['zh', 'zh-tw', 'en', 'hi', 'id', 'pt-br'].forEach(function (lg) {
+    var dict = (lg === 'zh') ? NPC_ZH_CN : NPC_NAMES.en;
+    if (lg === 'zh-tw') dict = NPC_ZH_TW;
+    if (lg === 'hi' || lg === 'id' || lg === 'pt-br') dict = NPC_NAMES.en;
+    if (!CONTENT[lg]) CONTENT[lg] = {};
+    Object.keys(dict).forEach(function (k) {
+      CONTENT[lg]['npc.' + k] = dict[k];
+    });
+  });
+
+  /* Merge content into the UI dictionaries (UI keys win on collision —
+     they never actually collide; content keys are namespaced). */
+  function mergeContent(lang) {
+    var base = CONTENT[lang] || CONTENT.en;
+    if (!T[lang]) return;
+    Object.keys(base).forEach(function (k) {
+      if (base[k] && k !== 'npc') T[lang][k] = base[k];
+    });
+  }
+  mergeContent('ja'); mergeContent('zh'); mergeContent('en');
+  T['zh-tw'] = T['zh-tw'] || {};
+  Object.keys(CONTENT.zh).forEach(function (k) {
+    if (CONTENT.zh[k] && k !== 'npc') T['zh-tw'][k] = CONTENT.zh[k];
+  });
+  mergeContent('zh-tw');          /* npc.* overridden with the zh-TW forms */
+  ['hi', 'id', 'pt-br'].forEach(function (lg) { mergeContent(lg); });
+
+  /* Official zh-TW sentences recovered verbatim from libapp.so (UTF-16
+     string scan, 2026-09) — they override the simplified-derived text. */
+  var ZH_TW_VERBATIM = {
+    'tut.2': '嗨，我是這個世界的嚮導。在萊莎醒來之前，就由我來教你這個世界的玩法吧。',
+    'tut.4': '手裡拿到的道具，會收在這裡。還有這個——是這個世界流通的錢喔。',
+    'tut.5': '有什麼問題都可以問我。我的計畫是，首先取得船隻，然後乘船自由出航！',
+    'tut.6': '如果不知道該和萊莎聊什麼，可以問問她有沒有小船。用只屬於你的自由想法，一個接一個過關吧。',
+    'place.area_01': '庫肯島周邊地區', 'place.area_02': '克萊莉亞地區', 'place.area_05': '王都周邊地區',
+    'place.field_01_001': '庫肯島', 'place.stage_01_001_04': '萊莎家', 'place.stage_01_002_01': '塔奧家門前',
+    'item.bottle': '回復藥（草豆）',
+    'input.hint': '點一下，和萊莎聊天', 'input.wake': '點一下叫醒萊莎',
+    'toast.guide': '這裡是萊莎的夢中世界。',
+    'toast.story': '你與萊莎的故事，終於要開始了。'
+  };
+  Object.keys(ZH_TW_VERBATIM).forEach(function (k) { T['zh-tw'][k] = ZH_TW_VERBATIM[k]; });
+
+  /* Official EN strings recovered from the same scan. */
+  var EN_VERBATIM = {
+    'input.hint': 'Tap to talk with Ryza', 'input.wake': 'Tap to wake Ryza',
+    'place.stage_01_001_04': 'Ryza’s Home', 'place.stage_01_002_01': 'In front of Tao’s house',
+    'place.area_01': 'Kurken Island Area', 'place.area_02': 'Cleria region',
+    'place.field_01_001': 'Kurken Island'
+  };
+  Object.keys(EN_VERBATIM).forEach(function (k) { T.en[k] = EN_VERBATIM[k]; });
+  ['hi', 'id', 'pt-br'].forEach(function (lg) {
+    Object.keys(EN_VERBATIM).forEach(function (k) { if (T[lg]) T[lg][k] = EN_VERBATIM[k]; });
+  });
+
+  /* =====================================================================
+     Language matrix — UI / shipped-voice / LLM-output / TTS are four
+     independent choices (user requirement). 'auto' falls through:
+     voice.lang→UI, llm.lang→UI, tts.lang→resolved llm.lang.
+     ================================================================== */
+  var LANG_NAMES = {            /* how to address each language in a prompt */
+    zh: '简体中文', 'zh-tw': '繁體中文', ja: '日本語', en: 'English',
+    hi: 'हिन्दी', id: 'Bahasa Indonesia', 'pt-br': 'Português (Brasil)'
+  };
+  var TTS_LANGS = {             /* qwen3-tts language_type values */
+    zh: 'Chinese', 'zh-tw': 'Chinese', ja: 'Japanese', en: 'English',
+    hi: 'Auto', id: 'Auto', 'pt-br': 'Auto'
+  };
+  var Langs = {
+    ui: function () { return (Config.section('app') || {}).lang || 'zh'; },
+    voice: function () {
+      var v = (Config.section('voice') || {}).lang || 'auto';
+      return v === 'auto' ? Langs.ui() : v;
+    },
+    llm: function () {
+      var v = (Config.section('llm') || {}).lang || 'auto';
+      return v === 'auto' ? Langs.ui() : v;
+    },
+    tts: function () {
+      var v = (Config.section('tts') || {}).lang || 'auto';
+      return v === 'auto' ? Langs.llm() : v;
+    },
+    name: function (lg) { return LANG_NAMES[lg] || lg; },
+    ttsLangType: function (lg) { return TTS_LANGS[lg] || 'Auto'; },
+    ALL: [
+      { v: 'auto', k: 'lang.auto' },
+      { v: 'zh', k: 'lang.zh' }, { v: 'zh-tw', k: 'lang.zh-tw' },
+      { v: 'ja', k: 'lang.ja' }, { v: 'en', k: 'lang.en' },
+      { v: 'hi', k: 'lang.hi' }, { v: 'id', k: 'lang.id' },
+      { v: 'pt-br', k: 'lang.pt-br' }
+    ]
+  };
+
   var I18n = {
     lang: 'zh',
+    LANG_NAMES: LANG_NAMES,
+    TTS_LANGS: TTS_LANGS,
     LANGS: [
       { id: 'zh', label: '简体中文' },
       { id: 'zh-tw', label: '繁體中文' },
@@ -545,6 +929,19 @@
       var d = T[I18n.lang] || T.zh;
       return (key in d) ? d[key] : (T.en[key] || key);
     },
+    /* Content lookup with a Japanese fallback (the shipped wording). */
+    tc: function (key, fallback) {
+      var v = I18n.t(key);
+      return (v === key) ? (fallback == null ? key : fallback) : v;
+    },
+    /* Template fill: I18n.tf('qact.gather.ok', {items:'…', tail:'…'}) */
+    tf: function (key, fallback, map) {
+      var s = I18n.tc(key, fallback);
+      Object.keys(map || {}).forEach(function (k) {
+        s = s.split('{' + k + '}').join(map[k]);
+      });
+      return s;
+    },
     /* Apply data-i18n attributes inside a subtree. */
     apply: function (root) {
       (root || document).querySelectorAll('[data-i18n]').forEach(function (el) {
@@ -554,4 +951,5 @@
   };
 
   global.I18n = I18n;
+  global.Langs = Langs;
 })(window);
