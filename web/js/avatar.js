@@ -670,23 +670,6 @@
         worldW: win.worldW, worldH: win.worldH, cssW: L.cssW, cssH: L.cssH
       };
       Avatar._viewAuth = active;
-      /* Fill the band below the painted plate with a synthetic shadow floor
-         (see #stage-gap). The hideout's sitting camera looks into its art's
-         1693u gap; every other scene's plate already covers the window, so
-         this stays hidden there. */
-      var gap = document.getElementById('stage-gap');
-      if (gap) {
-        var plateBottom = cover ? cover.y0 : null;
-        var exposed = plateBottom != null && win.bottom < plateBottom - 1;
-        if (exposed) {
-          var topPx = L.cssH - (plateBottom - win.bottom) / win.worldH * L.cssH;
-          gap.style.display = 'block';
-          gap.style.top = Math.max(0, topPx).toFixed(1) + 'px';
-          gap.style.height = Math.max(0, L.cssH - topPx).toFixed(1) + 'px';
-        } else {
-          gap.style.display = 'none';
-        }
-      }
       host.mvp.ortho2d(win.left, win.bottom, win.worldW, win.worldH);
       if (host.gl) host.gl.viewport(0, 0, host.canvas.width, host.canvas.height);
       Avatar._placeCharacter();
@@ -2766,7 +2749,12 @@
       try {
         if (Config && Config.section('app').rim === false) rimOn = false;
       } catch (e) {}
-      gl.clearColor(0.043, 0.031, 0.063, 1);
+      /* Warm floor clear color: normal scenes' far_bg mesh covers the whole
+         window so this never shows; only 隠れ家前's 1693u parallax gap
+         (wall ends at world Y 629, floor starts at −1064) exposes it, and
+         there it reads as shadowed floor instead of a black void. Behind
+         the character always — it can never cover her. */
+      gl.clearColor(0.16, 0.11, 0.07, 1);
       gl.clear(gl.COLOR_BUFFER_BIT);
       host.shader.bind();
       host.shader.setUniformi(spine.Shader.SAMPLER, 0);
