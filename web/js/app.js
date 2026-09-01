@@ -392,8 +392,6 @@
         if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
         /* no camera re-solve — the window is frozen (see _syncPanelFrac) */
       };
-      var bubEl = document.getElementById('bubble');
-      if (bubEl) bubEl.onclick = function () { App._toggleLogHistory(); };
       var spd = document.getElementById('btn-speed');
       if (spd) spd.onclick = function () { App._cycleTextSpeed(); };
       var nt = document.getElementById('btn-newtalk');
@@ -1040,10 +1038,6 @@
           App._pages = []; App._pageSel = -1;
           var dots = document.getElementById('log-dots');
           if (dots) dots.innerHTML = '';
-          var his = document.getElementById('log-history');
-          if (his) { his.innerHTML = ''; his.classList.add('hidden'); }
-          var panel = document.getElementById('log-panel');
-          if (panel) panel.classList.remove('expanded');
           var bub = document.getElementById('bubble');
           if (bub) bub.classList.remove('hidden');
           var bt = document.getElementById('bubble-text');
@@ -1245,6 +1239,7 @@
       App._pages.forEach(function (t, i) {
         var d = document.createElement('i');
         if (i === App._pageSel) d.className = 'on';
+        d.title = (i + 1) + ' / ' + App._pages.length;
         d.onclick = function () {
           App._pageSel = i;
           document.getElementById('bubble-text').textContent = App._pages[i];
@@ -1252,39 +1247,6 @@
         };
         host.appendChild(d);
       });
-    },
-    _toggleLogHistory: function () {
-      var panel = document.getElementById('log-panel');
-      var his = document.getElementById('log-history');
-      var bub = document.getElementById('bubble');
-      if (!panel || !his) return;
-      var open = panel.classList.toggle('expanded');
-      var arrow = document.querySelector('#btn-log-toggle img');
-      if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
-      if (open) {
-        his.innerHTML = '';
-        his.classList.remove('hidden');
-        if (bub) bub.classList.add('hidden');
-        var rows = (App.history || []).slice(-30);
-        var whoRyza = I18n.tc ? I18n.tc('chara.ryza', 'ライザ') : 'ライザ';
-        var whoYou = I18n.tc ? I18n.tc('chara.you', 'あなた') : 'あなた';
-        rows.forEach(function (m) {
-          var r = document.createElement('div');
-          r.className = 'lh-row ' + (m.role === 'user' ? 'user' : 'ryza');
-          var w = document.createElement('div');
-          w.className = 'lh-who';
-          w.textContent = m.role === 'user' ? whoYou : whoRyza;
-          var t = document.createElement('div');
-          t.className = 'lh-text';
-          t.textContent = m.content;
-          r.appendChild(w); r.appendChild(t);
-          his.appendChild(r);
-        });
-        his.scrollTop = his.scrollHeight;
-      } else {
-        his.classList.add('hidden');
-        if (bub) bub.classList.remove('hidden');
-      }
     },
     _cycleTextSpeed: function () {
       var cur = Number(Config.section('app').textSpeed) || 28;

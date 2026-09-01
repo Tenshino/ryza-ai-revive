@@ -26,6 +26,18 @@ button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
 input,select,textarea{font:inherit;color:inherit}
 .hidden{display:none !important}
 .spacer{flex:1}
+/* Themed scrollbars everywhere — the default Windows/Chromium scrollbar is a
+   fat light-gray bar that clashes with the dark UI (and read as "broken" in
+   the chat panel). Thin, dark track, faint gold thumb, rounded. Firefox uses
+   scrollbar-color; WebKit/Blink (Android WebView, Electron) use the pseudo
+   elements. */
+*{scrollbar-width:thin;scrollbar-color:rgba(232,180,92,.4) transparent}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(232,180,92,.34);border-radius:8px;
+  border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:rgba(232,180,92,.55);background-clip:content-box}
+::-webkit-scrollbar-corner{background:transparent}
 
 /* ------------------------------------------------------------ stage */
 #stage{position:absolute;inset:0;z-index:0;background:#0b0810}
@@ -231,7 +243,6 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 #phone.panel-collapsed #log-head,
 #phone.panel-collapsed #log-dots{display:none}
 #phone.panel-collapsed #log-body{padding-top:4px;max-height:2.9em;overflow:hidden}
-#phone.panel-collapsed #log-panel.expanded #log-body{max-height:none;overflow:auto}
 #log-head{display:flex;align-items:center;gap:10px;padding:10px 0 8px;
   border-bottom:1px solid rgba(232,180,92,.14);flex:0 0 auto;cursor:pointer}
 #log-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;
@@ -241,16 +252,10 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 #log-sub{font-size:11.5px;color:var(--dim);margin-top:2px;white-space:nowrap;
   overflow:hidden;text-overflow:ellipsis}
 #log-body{flex:1;overflow:hidden;position:relative;padding-top:8px}
-#log-panel.expanded #log-body{overflow:auto}
 #bubble{max-width:min(680px,100%);line-height:1.75;font-size:16px;animation:pop .22s ease;
   text-shadow:0 1px 3px rgba(0,0,0,.8);transition:opacity .3s ease}
 #bubble.speaking{color:#fff2dd}
 #bubble.typing{min-width:72px}
-#log-history{display:flex;flex-direction:column;gap:10px;padding-bottom:8px}
-.lh-row{font-size:13.5px;line-height:1.6}
-.lh-who{font-size:11px;color:var(--gold);letter-spacing:.06em;margin-bottom:2px}
-.lh-row.user .lh-who{color:var(--dim)}
-.lh-row.user .lh-text{color:var(--dim)}
 #log-dots{display:flex;gap:8px;justify-content:center;align-items:center;height:22px;flex:0 0 auto}
 #log-dots i{width:7px;height:7px;border-radius:50%;background:rgba(246,236,223,.28);
   cursor:pointer;transition:.15s}

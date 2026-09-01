@@ -606,12 +606,12 @@
            ~89% — everything fits ONLY at that size; at our earlier 1.42 the
            face was ~31% and bow-vs-thighs became a zero-sum choice).
            Screen face = BB_head box × scale / (authored window × factor):
-           standing 617×1.488/(2289×1.68)=0.239; the sitting factor keeps
+           standing 617×1.488/(2289×1.53)=0.263; the sitting factor keeps
            parity through the skins' world-box ratio (655/617 × 1.488/1.0):
            655/(1720×1.60)=0.238. LOCAL calibration — the official
            zoom→world-height mapping is not in the package. */
-        if (pk === 'posture_standing') worldH *= 1.68;
-        else if (pk === 'posture_sitting') worldH *= 1.60;
+        if (pk === 'posture_standing') worldH *= 1.53;
+        else if (pk === 'posture_sitting') worldH *= 1.45;
       }
       var L = Avatar.scene || Avatar.avatar;
       var aspect = (L && L.cssW && L.cssH) ? L.cssW / L.cssH : 0.5;
@@ -728,7 +728,7 @@
            ±0.10). ASMR keeps its tight 0.50 close-up. */
         if (Avatar._headLocal != null && v && v.worldH > 0) {
           var target = Avatar._asmrOn() ? 0.50
-            : (Avatar._loadedPosture() === 'posture_standing' ? 0.67 : 0.71);
+            : (Avatar._loadedPosture() === 'posture_standing' ? 0.70 : 0.71);
           var frac = (sy + Avatar._headLocal * sc - v.bottom) / v.worldH;
           if (Math.abs(frac - target) > 0.10) sy += (target - frac) * v.worldH;
         }
