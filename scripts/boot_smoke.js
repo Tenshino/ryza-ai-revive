@@ -185,12 +185,16 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
        'placeholder-model check centralized');
     const nsfwTag = A.parseTaggedReply('[emotion:shy|attitude:agree|nsfw:on]\nhi');
     ok(nsfwTag.nsfw === true && nsfwTag.emotion === 'shy', 'nsfw:on parses with extra pipes');
-    ok(sandbox.NsfwIntent && sandbox.NsfwIntent.detect('把衣服脱掉') === 'on',
-       'NsfwIntent detects player undress intent');
-    sandbox.NsfwIntent.onTurn('把衣服脱掉', nsfwTag);
-    ok(sandbox.NsfwIntent.active(), 'onTurn latches nsfw');
-    sandbox.NsfwIntent.reset();
-    ok(!sandbox.NsfwIntent.active(), 'reset clears nsfw');
+    ok(sandbox.Nsfw && /着ている/.test(sandbox.Nsfw.screenFact()),
+       'prompt tells the LLM she is dressed');
+    sandbox.Nsfw.onTurn({ nsfw: null });
+    ok(!sandbox.Nsfw.active(), 'omitted tag does not strip');
+    sandbox.Nsfw.onTurn(nsfwTag);
+    ok(sandbox.Nsfw.active(), 'llm nsfw:on strips');
+    ok(/肌が見えている/.test(sandbox.Nsfw.screenFact()),
+       'prompt tells the LLM she is undressed');
+    sandbox.Nsfw.reset();
+    ok(!sandbox.Nsfw.active(), 'reset clears nsfw');
 
     /* bubble lifecycle: showBubble arms the auto-fade, keep cancels it */
     sandbox.App.showBubble('テスト');

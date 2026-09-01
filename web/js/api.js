@@ -111,7 +111,7 @@
     return (window.I18n && I18n.LANG_NAMES && I18n.LANG_NAMES[lg]) || lg;
   }
 
-  function buildSystemPrompt(mode, style, rpgContext, outLang) {
+  function buildSystemPrompt(mode, style, rpgContext, outLang, nsfwSection) {
     var L = [persona()];
     L.push('');
     L.push('## 出力言語（厳守）');
@@ -147,6 +147,10 @@
       L.push('スタミナを消費する行動には必ず stamina_delta のマイナス値を付ける。');
       L.push('何も発生しない普通の会話には <state> を付けない。');
     }
+    if (nsfwSection) {
+      L.push('');
+      L.push(nsfwSection);
+    }
     L.push('');
     L.push('## 出力形式（厳守）');
     L.push('先頭にタグ行を1行だけ置くこと：');
@@ -155,7 +159,7 @@
     if (rpgContext) L.push('<必要なら最後の行に <state>{...}</state>');
     L.push('- <emotion> は次のいずれか：' + EMOTIONS.join(' '));
     L.push('- <attitude> は次のいずれか：' + ATTITUDES.join(' '));
-    L.push('- 同じタグ行に nsfw:on / nsfw:off を付けてよい。プレイヤーが今ターン明確に色情・脱衣を求めているときだけ on、平常の着衣に戻すよう求めたときだけ off。判断できなければ書かない。');
+    L.push('- 同じタグ行の nsfw:on / nsfw:off は画面の服を切る（emotion と同じ機械欄。プレイヤーには見えない）。このターンのセリフで実際に脱いだ／脱がせたときだけ on、着直したときだけ off。求められてもすぐ脱がなくてよい。自分から脱いでもよい。省略＝現状維持。台詞と画面を矛盾させない。');
     L.push('- タグ行以外に余計な行を出さないこと。');
     return L.join('\n');
   }
@@ -284,7 +288,7 @@
       var st = Config.section('state');
       var outLang = opts.lang || Api.replyLang();
       var system = buildSystemPrompt(opts.mode || st.mode, opts.style || st.style,
-                                     opts.rpgContext || '', outLang);
+                                     opts.rpgContext || '', outLang, opts.nsfwSection || '');
       var keep = Math.max(0, (llm.historyTurns || 12) * 2);
       var msgs = [{ role: 'system', content: system }]
         .concat(history.slice(-keep))

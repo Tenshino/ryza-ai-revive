@@ -872,7 +872,7 @@
         },
         onOk: function () {
           App.history = [];
-          if (window.NsfwIntent) NsfwIntent.reset();
+          if (window.Nsfw) Nsfw.reset();
           document.getElementById('bubble').classList.add('hidden');
           App.showView('talk');
           App.greet();
@@ -909,7 +909,8 @@
       Welcome.mark('talk');
 
       Api.chat(App.history, text, {
-        mode: st.mode, style: st.style, rpgContext: App._rpgContext()
+        mode: st.mode, style: st.style, rpgContext: App._rpgContext(),
+        nsfwSection: window.Nsfw ? Nsfw.screenFact() : ''
       })
         .then(function (reply) {
           App.speaking = false;
@@ -925,7 +926,7 @@
           var cost = Game.turnCost(st.mode, st.style);
           Game.spend(cost, 'talk');
 
-          if (window.NsfwIntent) NsfwIntent.onTurn(text, reply);
+          if (window.Nsfw) Nsfw.onTurn(reply);
           Avatar.setEmotion(reply.emotion, reply.attitude);
           App.typeBubble(reply.text, function () {
             App.speakThen(reply.text, reply.emotion);

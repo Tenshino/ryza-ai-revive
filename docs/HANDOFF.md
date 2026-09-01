@@ -14,6 +14,7 @@ ASMR zoom **就是源表** sitting 3.5 / standing 2.5（相对底栏 1.93 / 1.45
 仍只做朝脸的 pan 重映射。
 源 APK 换装是整包 skel+atlas（`features/skin` / `switchSkin`），没有「同一骨架只换 PNG」。
 本轮 NSFW 是图集页变体：`{pageBase}{variant}.png`，不写死服装 id。
+脱衣只认回复标签行的 `nsfw:on/off`（和 emotion 同一栏），不是关键词、也不是 tools。
 此前（09-06）：姿态/相机/表情补全（AUDIT §9，不要退回去）：默认开局**站姿 `_99`**
 （旧存档一次性迁移 `state.postureMigrated`）；姿态 chip 改**动作语义**（站着显示
 「坐下」）；`midgroundPostures` 不再当皮肤约束（196/200 组场景只列 sitting），
@@ -203,7 +204,7 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
   node scripts/game_logic_regression.js   # 数值/任务链 1→8 通关/每日登录/reducer 钳位
   node scripts/boot_smoke.js              # App.init 用真实 index.html id 集全链路
   node scripts/expression_coverage.js     # 表情/动作可达性 + 引用解析全量核对
-  node scripts/nsfw_intent_regression.js  # NSFW 意图滞回 + 图集变体路径约定
+  node scripts/nsfw_intent_regression.js  # NSFW：标签切图集 + 路径约定
   python scripts/privacy_check.py web     # 打包前隐私自查（构建脚本已自动跑）
 截图走查（UI 改动必做）：外部工具在 D:\agent\temp\ryza-shot（puppeteer-core + 本机 Edge），
   node shot.js title talk quest daily world people settings inv status faint tap
@@ -311,6 +312,8 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
       把人缩小会让模型显得过小，还会把坐姿从沙发上抬到空气里。
     - 坐姿有 `sofa_root` 时用世界坐标（不要走 `k` 映射）；ASMR zoom 用源表
       3.5/2.5，不要拿 `cameraPanY≈3200` 当正交中心。
+    - NSFW 脱衣只认标签行 `nsfw:on/off`（和 emotion 同一栏）。不要再做玩家关键词
+      立刻换图，也不要为这一下接 OpenAI tools（自填接口不一定支持，且会多一套协议）。
 17. 【模式化 TTS + 气泡生命周期（AUDIT §8，2026-09-05）不要退回去】
     - TTS 语音指导= `ttsStyleFor(mode)` 两层：`tts.styleHint`（基底，用户可改）
       + `MODE_TTS[mode]`（模式层，`tts.modeHints` 可覆盖）。别退回「所有模式

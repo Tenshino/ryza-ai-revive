@@ -6,6 +6,7 @@
 
 状态（2026-09-07）：**图集变体（NSFW）+ 按源表取景**（AUDIT §10）。
 NSFW 按当前服装目录 `{id}{variant}.png` 换图集页，不写死 id。
+脱衣由 LLM 标签决定（不是关键词立刻换图）；prompt 每轮带当前穿着。
 取景恢复表内 scale/zoom；坐姿锁 `sofa_root`；ASMR zoom 用源表 3.5/2.5。
 此前（09-06）：**姿态/相机/表情补全**（AUDIT §9）——塔奥家门前
 （`stage_01_002_01`，包里唯一同时给坐、站两套中景的舞台）的四个症状一次修完：
@@ -192,10 +193,10 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 
 ### 渲染与交互
 
-#### `web/js/nsfw.js` — 玩家 NSFW 意图（与服装 id 解耦）
+#### `web/js/nsfw.js` — 着衣状态（LLM 标签，与服装 id 解耦）
 
-只决定变体开/关。贴图解析在 `Avatar.variantPageUrls`（任何 `crf_skn_*` 的
-`{id}nsfw.png` 都会被捡到）。`App.say` 调 `NsfwIntent.onTurn`；新对话 `reset`。
+只记画面是否已脱，`screenFact` 一行进 system。`App.say` 回复后 `Nsfw.onTurn`。
+规则写在 `api.js` 出力形式一次。不扫玩家关键词。
 
 #### `web/js/avatar.js` — Spine 渲染
 

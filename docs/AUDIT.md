@@ -702,17 +702,17 @@ node scripts/expression_coverage.js    # 新增：表情/动作可达性与引�
 源 APK **有**换装逻辑（`features/skin`：`SkinSwitchController` / `switchSkin` /
 `skin_switch_veil` / 5 槽预览），但那是 **整包 skel+atlas 切换**，不是同一骨架
 热换 PNG。包内可穿骨骼只有 `0001_01`（坐）和 `0001_99`（站）；`0002–0004` 只有
-预览图。因此「检测到 NSFW 意图就换贴图、意图结束换回来」是**本地加的演出**，
+预览图。因此「LLM 在标签行写 `nsfw:on` 才换贴图」是**本地加的演出**，
 不能接到源 `switchSkin` 上，否则会和 5 槽换装、坐/站后缀抢同一条 `loadSkin`。
 
 ### 10.1 模块边界（以后加别的服装的 nsfw 版只丢文件）
 
 | 模块 | 职责 | 不做什么 |
 |---|---|---|
-| `web/js/nsfw.js` `NsfwIntent` | 玩家意图 on/off/hold；滞回；调用 `Avatar.setAtlasVariant('nsfw'\|'default')` | 不写服装 id、不碰 GL、不改 Config.skin |
+| `web/js/nsfw.js` `Nsfw` | 画面着衣；`screenFact` 一行；只套用回复里的 `nsfw` 字段 | 不扫关键词、不写规则长文、不写服装 id、不碰 GL |
 | `Avatar.variantPageUrls` / `setAtlasVariant` | 按**当前已加载皮肤**解析变体页并换 GLTexture | 不认关键词、不 reload skel |
-| `api.js` | 标签行可选 `nsfw:on\|off`（所有 `\|` 都拆，以前只 replace 第一处） | 不决定贴图 |
-| `app.js` | `say()` 里 `NsfwIntent.onTurn`；新对话 `reset()` | 不解析路径 |
+| `api.js` | 标签行解析 `nsfw:on\|off`（与 emotion 同一行）；出力形式里写一次规则 | 不决定贴图 |
+| `app.js` | `say()` 传入 `screenFact`，回复后 `Nsfw.onTurn(reply)`；新对话 `reset` | 不解析路径 |
 
 路径约定（对任何 `crf_skn_*` 都一样，坐/站/未来 0002 通用）：
 
@@ -720,12 +720,14 @@ node scripts/expression_coverage.js    # 新增：表情/动作可达性与引�
 2. 同目录 `{pageBase}{name}.png`（现有站姿：`crf_skn_002_0001_99nsfw.png`）
 3. 同目录 `{pageBase}_{name}.png`
 
-没有文件 → 保持默认页，**意图仍保持**；切到有文件的那套皮肤时 `loadSkin` 末尾
+没有文件 → 保持默认页，**状态仍保持**；切到有文件的那套皮肤时 `loadSkin` 末尾
 再 `_applyAtlasVariant`。变体加载走自己的 `Image`+`GLTexture`，**不**走
 `AssetManager.loadTexture`（404 会脏 `errors`，下次 `loadSkin` 会误报素材失败）。
 
-意图结束切回的是**该骨架的默认 atlas 页**（切换前的皮肤），不是换一套 outfit。
-不进存档；新对话 `NsfwIntent.reset()`。
+**谁决定脱衣**：LLM，不是关键词。方式与 emotion 相同——回复第一行
+`[emotion:shy|nsfw:on]`，解析字段、台词里剥掉，不是扫「脱掉」也不是 OpenAI tools
+（自填的兼容接口不一定有 function call，且会多一套协议）。省略标签＝画面不变。
+`screenFact` 每轮告诉模型现在穿着还是已经裸着。新对话 `Nsfw.reset()`。
 
 ### 10.2 取景：源 APK 怎么做的（不要再缩小去塞全身）
 

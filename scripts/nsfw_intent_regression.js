@@ -1,4 +1,4 @@
-/* NsfwIntent + atlas-variant path convention. No WebGL.
+/* Nsfw clothing state + atlas-variant path convention. No WebGL.
    Run: node scripts/nsfw_intent_regression.js */
 'use strict';
 const fs = require('fs');
@@ -29,35 +29,27 @@ function load(f) {
 load('nsfw.js');
 load('api.js');
 
-const N = sandbox.NsfwIntent;
-ok(!!N && N.VARIANT === 'nsfw', 'NsfwIntent exported');
-
-ok(N.detect('把衣服脱掉') === 'on', 'zh undress → on');
-ok(N.detect('我们做爱吧') === 'on', 'zh sex → on');
-ok(N.detect('nsfw mode') === 'on', 'nsfw keyword → on');
-ok(N.detect('naked please') === 'on', 'naked → on');
-ok(N.detect('脱いで') === 'on', 'ja undress → on');
-ok(N.detect('穿上衣服') === 'off', 'zh dress → off');
-ok(N.detect('get dressed') === 'off', 'en dress → off');
-ok(N.detect('今天天气真好') === 'hold', 'small talk → hold');
-ok(N.detect('性格很开朗') === 'hold', '性格 is not NSFW');
-ok(N.detect('') === 'hold', 'empty → hold');
-
-ok(N.decide(false, '脱掉', null) === true, 'player on wins');
-ok(N.decide(true, '穿上衣服', true) === false, 'player off beats llm on');
-ok(N.decide(false, '你好', true) === true, 'llm on when player hold');
-ok(N.decide(true, '你好', false) === false, 'llm off when player hold');
-ok(N.decide(true, '你好', null) === true, 'omitted tag keeps previous');
-ok(N.decide(false, '你好', null) === false, 'omitted tag keeps off');
+const N = sandbox.Nsfw;
+ok(!!N && N.VARIANT === 'nsfw', 'Nsfw exported');
+ok(typeof N.detect !== 'function', 'no keyword detector');
+ok(typeof N.decide !== 'function', 'no keyword decide');
+ok(typeof N.promptSection !== 'function', 'policy is not duplicated in nsfw.js');
 
 N.reset();
-ok(N.active() === false && sandbox.Avatar._calls.pop() === 'default', 'reset → default variant');
-N.onTurn('把衣服脱掉', { nsfw: null });
-ok(N.active() === true && sandbox.Avatar._calls.pop() === 'nsfw', 'onTurn player on');
-N.onTurn('今天去哪玩', { nsfw: null });
-ok(N.active() === true, 'hold keeps nsfw on');
-N.onTurn('穿上衣服聊天吧', { nsfw: null });
-ok(N.active() === false && sandbox.Avatar._calls.pop() === 'default', 'onTurn player off');
+ok(/着ている/.test(N.screenFact()), 'screenFact: dressed');
+N.onTurn({ nsfw: null });
+ok(N.active() === false, 'omitted tag does not strip');
+N.onTurn({ nsfw: true });
+ok(N.active() === true && sandbox.Avatar._calls.pop() === 'nsfw', 'tag nsfw:on');
+ok(/肌が見えている/.test(N.screenFact()), 'screenFact: undressed');
+N.onTurn({ nsfw: null });
+ok(N.active() === true, 'omitted tag keeps undressed');
+N.onTurn({ nsfw: false });
+ok(N.active() === false && sandbox.Avatar._calls.pop() === 'default', 'tag nsfw:off');
+N.onTurn({ nsfw: true });
+ok(N.active() === true, 'llm can initiate');
+N.reset();
+ok(N.active() === false && sandbox.Avatar._calls.pop() === 'default', 'reset → default');
 
 const A = sandbox.Api;
 if (A && A.parseTaggedReply) {
@@ -67,6 +59,10 @@ if (A && A.parseTaggedReply) {
   ok(off.nsfw === false, 'tag nsfw:off');
   const omit = A.parseTaggedReply('[emotion:happy|attitude:agree]\nhi');
   ok(omit.nsfw == null, 'tag omitted → null');
+  const sys = A.buildSystemPrompt('chat', 'voice', '', 'ja', N.screenFact());
+  ok(/普段の服/.test(sys) && /nsfw:on/.test(sys) && /すぐ脱がなくて/.test(sys),
+     'one prompt: screen fact + tag rules (no keyword list)');
+  ok((sys.match(/すぐ脱がなくて/g) || []).length === 1, 'undress rules appear once');
 } else {
   bad('Api.parseTaggedReply missing');
 }
