@@ -77,13 +77,19 @@
        1 and rely on the fluid full-viewport layout. */
     /* How much of the screen the bottom log panel covers — the camera's
        plate clamp lets the window sink below the painted art by exactly
-       this much (the panel hides the seam). Recomputed on init/resize and
-       after the ⇧ collapse transition. */
+       this much (the panel hides the seam). FROZEN at the expanded height:
+       tracking the collapsed strip re-solved the window on every toggle —
+       the background zoomed and she slid ~180px down (worse than the seam
+       it hid). At the current framing factors the hideout's collapsed
+       exposure is a ~4% sliver right above the strip, dressed by the
+       #stage bottom gradient. The hideout is the ONLY stage with a seam
+       to hide: its art is split far_bg (ends at world 629) + floor
+       (starts at −1064) with a 1693u gap; every other scene ships one
+       full-coverage backdrop quad. */
     _syncPanelFrac: function () {
-      var p = document.getElementById('log-panel');
+      if (!window.Avatar || Avatar._panelFrac) return;   // measure once
       var vh = window.innerHeight || 1;
-      var f = (p && p.offsetHeight) ? Math.min(0.55, p.offsetHeight / vh) : 0.34;
-      if (window.Avatar) Avatar._panelFrac = f;
+      Avatar._panelFrac = Math.min(0.55, Math.min(340, Math.max(240, 0.34 * vh)) / vh);
     },
 
     _fitUi: function () {
@@ -384,9 +390,7 @@
         var open = phone.classList.toggle('panel-collapsed');
         var arrow = document.querySelector('#btn-log-toggle img');
         if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
-        /* the panel height feeds the camera's bottom slack — re-sync after
-           the 220ms collapse transition so the framing re-solves */
-        setTimeout(function () { App._syncPanelFrac(); if (window.Avatar) Avatar.resize(); }, 260);
+        /* no camera re-solve — the window is frozen (see _syncPanelFrac) */
       };
       var bubEl = document.getElementById('bubble');
       if (bubEl) bubEl.onclick = function () { App._toggleLogHistory(); };

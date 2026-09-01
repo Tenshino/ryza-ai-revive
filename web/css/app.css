@@ -32,6 +32,17 @@ input,select,textarea{font:inherit;color:inherit}
 #scene-canvas,#avatar-hit{position:absolute;inset:0;width:100%;height:100%;display:block}
 #scene-canvas{background:#0b0810}
 #avatar-hit{background:transparent}
+/* Synthetic ground strip — 隠れ家前 (stage_01_002_01) is the ONLY shipped
+   scene whose art is two disconnected quads: far_bg (wall, ends at world
+   Y 629) + floor (starts at −1064) with a 1693u never-painted band between
+   them. The official sitting camera looks into that band; the official app
+   just keeps its bottom panel always on to hide it. We fill the band with
+   a shadow-floor gradient instead, positioned by _applyCamera from the
+   plate's bottom edge down to the window's bottom edge — so it reads as
+   shadowed floor in EVERY panel state and the camera never trades her lap
+   against a black strip. */
+#stage-gap{position:absolute;left:0;right:0;display:none;z-index:1;pointer-events:none;
+  background:linear-gradient(180deg,#241b17 0px,rgba(19,14,13,.97) 26%,#0c090c 100%)}
 /* touch_ripple_overlay.dart: the tap ring that answers a poke */
 #ripple-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
 .tap-ripple{position:absolute;width:86px;height:86px;margin:-43px 0 0 -43px;border-radius:50%;
@@ -47,6 +58,13 @@ input,select,textarea{font:inherit;color:inherit}
 #scene-curtain{position:absolute;inset:0;z-index:4;background:#0a0608;opacity:0;pointer-events:none;
   transition:opacity .35s}
 #scene-curtain.on{opacity:.72}
+/* Bottom fade: light dusk dressing ONLY. The panel-slack camera keeps the
+   painted plate covering the visible window in BOTH panel states (collapsing
+   glides the window bottom back to the plate edge), so nothing has to be
+   hidden here anymore — a heavy scrim would just eat her thighs. */
+#stage::after{content:"";position:absolute;left:0;right:0;bottom:0;height:20%;
+  z-index:3;pointer-events:none;
+  background:linear-gradient(0deg,rgba(8,6,10,.45),rgba(8,6,10,.14) 55%,transparent)}
 
 /* ----------------------------------------------------------- topbar
    Official single row (2026-09-07 UI pass, from the shipped screenshots):
@@ -209,7 +227,7 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
    (which walled off the stage and faded itself away). */
 #log-panel{position:absolute;left:0;right:0;bottom:0;height:var(--panel-h);z-index:15;
   display:flex;flex-direction:column;padding:0 16px calc(6px + var(--safe-b));
-  background:linear-gradient(180deg,rgba(10,7,12,.55),rgba(10,7,12,.88) 22%,rgba(10,7,12,.94));
+  background:linear-gradient(180deg,rgba(10,7,12,.88),rgba(10,7,12,.94) 30%,rgba(10,7,12,.96));
   backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
   border-top:1px solid rgba(232,180,92,.16);pointer-events:auto;
   transition:height .22s ease}

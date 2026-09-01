@@ -601,7 +601,17 @@
          the authored table values. */
       if (!a) {
         var pk = postureKey || Avatar.postureKey();
-        if (pk === 'posture_standing') worldH *= 1.42;
+        /* Face-size calibration against the official shots (menu screenshot:
+           head box ≈ 18% of screen height, rabbit-bow top ~1%, thigh bottom
+           ~89% — everything fits ONLY at that size; at our earlier 1.42 the
+           face was ~31% and bow-vs-thighs became a zero-sum choice).
+           Screen face = BB_head box × scale / (authored window × factor):
+           standing 617×1.488/(2289×1.68)=0.239; the sitting factor keeps
+           parity through the skins' world-box ratio (655/617 × 1.488/1.0):
+           655/(1720×1.60)=0.238. LOCAL calibration — the official
+           zoom→world-height mapping is not in the package. */
+        if (pk === 'posture_standing') worldH *= 1.68;
+        else if (pk === 'posture_sitting') worldH *= 1.60;
       }
       var L = Avatar.scene || Avatar.avatar;
       var aspect = (L && L.cssW && L.cssH) ? L.cssW / L.cssH : 0.5;
@@ -660,6 +670,23 @@
         worldW: win.worldW, worldH: win.worldH, cssW: L.cssW, cssH: L.cssH
       };
       Avatar._viewAuth = active;
+      /* Fill the band below the painted plate with a synthetic shadow floor
+         (see #stage-gap). The hideout's sitting camera looks into its art's
+         1693u gap; every other scene's plate already covers the window, so
+         this stays hidden there. */
+      var gap = document.getElementById('stage-gap');
+      if (gap) {
+        var plateBottom = cover ? cover.y0 : null;
+        var exposed = plateBottom != null && win.bottom < plateBottom - 1;
+        if (exposed) {
+          var topPx = L.cssH - (plateBottom - win.bottom) / win.worldH * L.cssH;
+          gap.style.display = 'block';
+          gap.style.top = Math.max(0, topPx).toFixed(1) + 'px';
+          gap.style.height = Math.max(0, L.cssH - topPx).toFixed(1) + 'px';
+        } else {
+          gap.style.display = 'none';
+        }
+      }
       host.mvp.ortho2d(win.left, win.bottom, win.worldW, win.worldH);
       if (host.gl) host.gl.viewport(0, 0, host.canvas.width, host.canvas.height);
       Avatar._placeCharacter();
@@ -706,22 +733,19 @@
       var sx, sy, sc = cam.scale * k;
       if (Avatar._seatedOnMid()) {
         sx = x;
-        sy = y;
+        sy = y;        /* furniture-locked: she sits ON the sofa, no lift —
+                          the source's whole point (sitting stays on sofa) */
       } else {
         sx = (v && a) ? v.left + (x - a.left) * k : x;
         sy = (v && a) ? v.bottom + (y - a.bottom) * k : y;
-        /* Eyeline only when she is not locked to furniture. The shipped
-           screenshots settle the framing: sitting head ~0.70 of the window
-           (the table's own value — no push fires there), standing is framed
-           HIGHER — belt at ~78% of screen, shins live behind the bottom log
-           panel and only appear when the UI is hidden (the official
-           キャラ表示/全画面 view). 0.68 for standing cropped her at mid-thigh
-           and read as "zoomed in vs the original"; 0.80 matches the shots.
-           Authored SIZE (scale × zoom) is never touched — shrinking to force
-           feet on screen is not what the APK did. Hit parts are torso (BB_*). */
+        /* Eyeline only when she is not locked to furniture. Target = the
+           head-BONE fraction of the window (measured live): standing 0.67
+           lands the BB_head box top ≈ 118px with the rabbit-bow fully in
+           frame; sitting keeps the table's own 0.70 (no push fires within
+           ±0.10). ASMR keeps its tight 0.50 close-up. */
         if (Avatar._headLocal != null && v && v.worldH > 0) {
           var target = Avatar._asmrOn() ? 0.50
-            : (Avatar._loadedPosture() === 'posture_standing' ? 0.74 : 0.68);
+            : (Avatar._loadedPosture() === 'posture_standing' ? 0.67 : 0.71);
           var frac = (sy + Avatar._headLocal * sc - v.bottom) / v.worldH;
           if (Math.abs(frac - target) > 0.10) sy += (target - frac) * v.worldH;
         }

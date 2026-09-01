@@ -872,28 +872,25 @@ node scripts/expression_coverage.js
 node scripts/electron_storage_regression.js
 ```
 
-### 11.6 取景校准 + 面板折叠态（用户比对官方截图后追加，别退回去）
+### 11.6 取景校准 + 面板折叠态 + 补地条（用户逐像素比对官方截图，别退回去）
 
-用户拿官方截图逐像素对：**我们的人比官方大 ~30%，头饰出框、大腿看不见；
-官方 ⇧ 能把会话区折成「一行台词 + 输入条」**。最终参数（全部截图实测）：
+最终取景参数（全部实测于 420×860，回归 `view-stability`/`motion` 守）：
 
-* `_camParams` 本地校准：站姿非 ASMR 窗口 `worldH ×1.42`（2289→3250u；官方
-  折叠态头饰完整入画 + 大腿到画面 ~92%）。**坐姿不乘系数**——官方坐姿参考图
-  （沙发白 T 截图）证明表内 1720u 原窗就是官方取景，之前裁掉大腿不是窗口的锅。
-* `_applyCamera` 底部改为**面板感知 slack**：窗口底允许沉到美术板以下
-  `h × Avatar._panelFrac`（= 面板高/视口高，App `_syncPanelFrac` 在 init/resize/
-  ⇧ 折叠后同步，回归 harness 钉 0.34）。坐姿表内窗底 359 < far_bg 板底 629
-  ——沙发和大腿画在 far_bg 之下，`_coverFor`（最大 quad）看不见它们；旧钳制
-  把窗底推到 629 才裁掉膝盖。顶/左/右仍硬钳（顶钳去掉了 `cover.h >= h` 守卫，
-  `h ≤ cover.h/(1-frac)` 上限保证两者同时可满足——stage_00 实测抓出过这个洞）。
-* `_placeCharacter` 视线目标分档：站 0.74 / 坐 0.68（坐姿表内 0.70，阈值内
-  不动）/ ASMR 0.50。旧值 0.68 一刀切正是「比官方挤」的来源。
-* `#phone.panel-collapsed`：`--panel-h` 降到 112px+安全区，log-head/dots 隐藏，
-  **正文保留一行**（官方折叠态就是台词条+输入框）；HUD 簇与右圆钮随变量落底。
-  ⇧ 切换折叠；新台词到达自动展开（showTyping/showBubble/typeBubble 头部
-  `_panelUp()`）；会话全文回看挂在**点击正文**（`#bubble`）。
-* 验证截图（temp/ryza-shot）：`frame-hideout-sit.png`（坐姿头→大腿 vs 官方
-  坐姿图）、`collapsed.png`（折叠一行条）、`frame-home.png`/`frame-hideout-stand.png`
-  （站姿小腿以上）、`talk.png`（展开态）。六套回归全绿（300 组钳制断言已按
-  slack 规则更新），motion 播种后双跑一致。
+* `_camParams` 本地系数：站姿非 ASMR `worldH ×1.68`（脸占屏 ~24%，是**能容纳兔耳
+  发饰完整入画的最大尺寸**——再大（如 ×1.55→28%）发饰必顶出上边框，是硬几何约束
+  不是没调好）；坐姿 `×1.75`（setup-pose 脸尺寸与站姿对齐：617×1.488/3845 ≈
+  655/3010）；ASMR 也吃同一系数族（保持源表 asmr/base 1.8× 特写比例）。
+* `_placeCharacter` 视线目标：站 0.67 / 坐 0.71 / ASMR 0.50。坐姿家具锁定
+  （`_seatedOnMid` 走世界坐标贴沙发），**不做上抬**——抬了就"坐空气"，违反
+  `sitting stays on sofa` 回归。
+* **补地条 `#stage-gap`**：塔奥家门前是全包**唯一**背景画成上下两块断开 quad 的
+  场景（far_bg 墙止于世界 Y 629、floor 起于 −1064、中间 1693u 原画师故意留空做视差）。
+  官方坐姿相机看进这个空档，官方靠常驻底面板盖住；我们改成 `_applyCamera` 从
+  板底缘到窗口底缘铺一条合成阴影地板（CSS 渐变），**任何面板状态下都不露黑**。
+  这是源设计（两块断开），不是素材缺失，完整版解包大概率还是空的——补地条是长期正确方案。
+* 面板折叠态 `#phone.panel-collapsed`：`--panel-h` 降到输入条 + 一行台词（官方折叠
+  就是台词条+输入框）；⇧ 切换；新台词到达 `_panelUp()` 自动展开；点正文开全文回看。
+  `_panelFrac` **冻结在展开高度**（跟随折叠会重解窗口→背景缩放+人下滑 180px，更糟）。
+* 验证：`view-stability.js` 确认折叠前后 `Avatar._view` 逐字段不变（VIEW MOVED: false）、
+  站/坐脸尺寸比 0.99、发饰入画；六套回归全绿（含 300 组板内钳制、播种后 motion 双跑一致）。
 
