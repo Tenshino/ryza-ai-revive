@@ -42,7 +42,10 @@ input,select,textarea{font:inherit;color:inherit}
    shadowed floor in EVERY panel state and the camera never trades her lap
    against a black strip. */
 #stage-gap{position:absolute;left:0;right:0;display:none;z-index:1;pointer-events:none;
-  background:linear-gradient(180deg,#241b17 0px,rgba(19,14,13,.97) 26%,#0c090c 100%)}
+  /* top edge matches far_bg's stone platform lip (~#c8b487), then the room's
+     mid-depth falls off into the wooden floor tone (#8a5a34) the floor region
+     uses — reads as the floor receding behind her, NOT a black void. */
+  background:linear-gradient(180deg,#c3ac80 0px,#9c6f43 22%,#6e4526 55%,#3a2416 100%)}
 /* touch_ripple_overlay.dart: the tap ring that answers a poke */
 #ripple-layer{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:2}
 .tap-ripple{position:absolute;width:86px;height:86px;margin:-43px 0 0 -43px;border-radius:50%;
