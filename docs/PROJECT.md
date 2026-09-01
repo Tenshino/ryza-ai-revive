@@ -216,7 +216,8 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 
 - `init()`：Game→Daily→Quests 顺序装载，`Game.on` 订阅刷 HUD。
 - `say()`：体力门槛（不足弹 overlay）→ `Api.chat`（带 `_rpgContext()`：
-  Game+人物+Quests 三块，ASMR/テキスト不注入）→ `applyDelta` → 扣体力 →
+  Game+地点+人物+Quests 四块，ASMR/テキスト不注入）→ `applyDelta` +
+  `_applySceneDelta`（`current_stage`/`tod`，源 `detectEntryMapMove`）→ 扣体力 →
   任务进度 → 气泡/朗读。失败出「重试」条（源 reconnect 语义的本地化）。
 - `gotoStage()`：换景 + `meetCharas`（met_charas/met_pairs 记录 + 记忆行）+
   explore 任务进度。
@@ -246,6 +247,7 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 `world_hierarchy.json`（5 区域/38 场景块/120 舞台）+ `npc_placement.json`
 （34 NPC：bases + move(area/field/stage) + companions，按 `resolveOrder`、按天哈希）。
 `World.locked(areaId)`：未出航时 area_02–05 上锁；`npcsInArea/npcName` 供人物面板。
+`promptBlock` 把当前舞台 + 可去 id 表喂给 LLM；`resolveStage` 认 id 或官方译名。
 
 #### `web/js/audio.js` / `alarm.js` / `fx.js` / `shell.js`
 

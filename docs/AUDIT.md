@@ -288,8 +288,8 @@ settle`（淡出 70% 处肢体已还原且 `_aimSm` 每帧 <25u）、`tap chaini
 - `quests.js`：任务生命周期 + 离线行动表 + 动态生成 + 完成演出 + Welcome 瓦片。
 - `daily.js`：连续登录。奖励只通过 `Game` 发放。
 - `api.js`：只认协议（拼提示词、剥 `<state>`），不认识玩法。
-- `app.js`：编排层。上下文注入 = `Game.promptBlock + App._peopleBlock + Quests.promptBlock`，
-  人物块由 App 拼（World 的名字表只有 App 会同时拿到 World 和 Game，模块间不互相 import）。
+- `app.js`：编排层。上下文注入 = `Game.promptBlock + World.promptBlock + App._peopleBlock + Quests.promptBlock`，
+  人物块由 App 拼。换景走 `App._applySceneDelta` → `gotoStage`，**不**进 `Game.applyDelta`。
 - 事件：`Game.on(cb)` 单向广播，HUD/面板只读不写。
 
 **2026-09-03 整理**（为后续加内容腾结构）：删除全仓零引用的死函数
@@ -317,6 +317,11 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   **本地**：localStorage 权威；玩家自填 OpenAI 兼容接口；机器块换成回复尾部
   `<state>{json}</state>`（显示/朗读前剥除）。协议在系统提示词里给了白名单和
   「无事发生不要发」约束，实测弱模型漏发/错发时 reducer 钳位兜底。
+  源对话搬家是 `entry_map_move.dart` 的 `detectEntryMapMove` + marionette
+  `scene.current_stage` / `scene.map_moved` / `scene.time_bucket`（官方 websocket
+  会把当前舞台塞进会话）。本地：每轮 prompt 带现在的地点和可去舞台 id 表，
+  LLM 用 `<state>{"current_stage":"stage_…"}</state>`；App 解析后 `gotoStage`
+  （未出航仍锁 area_02–05）。`tod` 对应 `scene.time_bucket`。
 - 官方任务推进主要靠 LLM 回包；本地双通道（LLM `<state>` + 离线行动按钮），
   talk 类同轮不双计（`app.js say()` 里判 `reply.state.quest`）。
 

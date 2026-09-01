@@ -253,6 +253,99 @@
       return (window.I18n && I18n.tc) ? I18n.tc('place.' + id, base) : base;
     },
 
+    isTod: function (t) { return TODS.indexOf(t) >= 0; },
+
+    _fold: function (s) {
+      return String(s || '').toLowerCase().replace(/[\s'"’`・·。，、]/g, '');
+    },
+
+    _labels: function (id, base) {
+      var out = [], seen = {};
+      function add(v) {
+        v = String(v || '').trim();
+        if (!v || seen[v]) return;
+        seen[v] = 1; out.push(v);
+      }
+      add(base); add(id);
+      add(World.placeLabel(id, base));
+      if (window.I18n && typeof I18n.all === 'function') {
+        I18n.all('place.' + id).forEach(add);
+      }
+      return out;
+    },
+
+    /* Talk-side map move (source: entry_map_move.dart / detectEntryMapMove /
+       scene.current_stage). Resolves a stage id, a field/area id, or a
+       displayed name in any shipped language. Locked areas still resolve —
+       the caller decides whether to refuse. */
+    resolveStage: function (token) {
+      var q = String(token || '').trim();
+      if (!q || !World.hierarchy) return null;
+      if (World.find(q)) return q;
+      var field = World.findField(q);
+      if (field && field.field.stages && field.field.stages[0]) {
+        return field.field.stages[0].id;
+      }
+      var area = World.areas().filter(function (a) { return a.id === q; })[0];
+      if (area && area.fields && area.fields[0] && area.fields[0].stages[0]) {
+        return area.fields[0].stages[0].id;
+      }
+      var nq = World._fold(q);
+      if (nq.length < 2) return null;
+      var best = null, bestScore = 0;
+      World.areas().forEach(function (a) {
+        a.fields.forEach(function (f) {
+          f.stages.forEach(function (s) {
+            var labels = World._labels(s.id, s.name)
+              .concat(World._labels(f.id, f.name))
+              .concat(World._labels(a.id, a.name));
+            labels.forEach(function (lab) {
+              var nl = World._fold(lab);
+              if (!nl) return;
+              var score = 0;
+              if (nl === nq) score = 3;
+              else if (nl.indexOf(nq) >= 0) score = 2;
+              else if (nq.indexOf(nl) >= 0 && nl.length >= 4) score = 1;
+              if (score > bestScore) { bestScore = score; best = s.id; }
+            });
+          });
+        });
+      });
+      return best;
+    },
+
+    /* Injected into the talk system prompt so the model knows where she is
+       and which stage ids she may write into <state>.current_stage. */
+    promptBlock: function (st) {
+      st = st || {};
+      var here = World.find(st.stage);
+      if (!here) return '';
+      var L = ['## いまの場所（画面の事実。地名は下の一覧の表記を使う）'];
+      L.push('- 場所：' + World.placeLabel(here.stageId, here.stage) +
+             '（' + here.stageId + '）／' +
+             World.placeLabel(here.fieldId, here.field) + '／' +
+             World.placeLabel(here.areaId, here.area));
+      L.push('- 時間帯：' + (st.tod || 'aft') +
+             '（mor=朝 aft=昼 eve=夕 ngt=夜）');
+      L.push('- 画面を動かすときだけ <state>{"current_stage":"stage_xx_xxx_xx"}</state>。id は下の一覧。時間帯は tod。省略＝今の場所のまま。');
+      var sailed = window.Game && Game.s && Game.s.sailed;
+      if (!sailed) {
+        L.push('- 船ができるまでクーケン島（area_01）以外は行けない。');
+      }
+      L.push('- 行ける場所：');
+      World.areas().forEach(function (a) {
+        if (World.locked(a.id)) return;
+        a.fields.forEach(function (f) {
+          var bits = f.stages.map(function (s) {
+            var loc = World.placeLabel(s.id, s.name);
+            return s.id + ' ' + s.name + (loc !== s.name ? '/' + loc : '');
+          });
+          L.push('  ' + f.name + '：' + bits.join('；'));
+        });
+      });
+      return L.join('\n');
+    },
+
     /* --------------------------------------------------------- pin map */
     /* Source flow: the world beyond クーケン島 (area_01) opens when the
        ship quest finishes (`sailed` in game.js — entry_map_move.dart). */

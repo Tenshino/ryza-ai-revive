@@ -947,6 +947,14 @@
       return (key in d) ? d[key] : (T.en[key] || key);
     },
     /* Content lookup with a Japanese fallback (the shipped wording). */
+    all: function (key) {
+      var out = [], seen = {};
+      Object.keys(T).forEach(function (lg) {
+        var v = T[lg] && T[lg][key];
+        if (v && !seen[v]) { seen[v] = 1; out.push(v); }
+      });
+      return out;
+    },
     tc: function (key, fallback) {
       var v = I18n.t(key);
       return (v === key) ? (fallback == null ? key : fallback) : v;

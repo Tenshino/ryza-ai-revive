@@ -59,13 +59,19 @@ sandbox.I18n = {
   t: (k) => k,
   tc: (k, fb) => fb,
   tf: (k, fb) => fb,
+  all: (k) => {
+    if (k === 'place.stage_01_002_01') return ['塔奥家门前', 'In front of Tao’s house'];
+    if (k === 'place.stage_01_001_04') return ['莱莎家', 'Ryza’s Home'];
+    return [];
+  },
   LANG_NAMES: { ja: '日本語', zh: '简体中文' }
 };
 load('quests.js');
 load('daily.js');
 load('api.js');
+load('world.js');
 
-const { Game, Quests, Daily, Config, Api } = sandbox;
+const { Game, Quests, Daily, Config, Api, World } = sandbox;
 
 /* ------------------------------------------------------------ basics */
 console.log('# Game basics');
@@ -233,6 +239,29 @@ const snap = Game.snapshot();
 Game.reset();
 Game.restoreSnapshot(snap);
 ok(JSON.stringify(Game.snapshot()) === JSON.stringify(snap), 'snapshot round-trips');
+
+console.log('# talk map move (entry_map_move / current_stage)');
+World.hierarchy = JSON.parse(fs.readFileSync(
+  path.join(__dirname, '..', 'web', 'assets', '_index', 'world_hierarchy.json'), 'utf8'));
+ok(World.resolveStage('stage_01_002_01') === 'stage_01_002_01', 'stage id resolves');
+ok(World.resolveStage('隠れ家前') === 'stage_01_002_01', 'ja stage name resolves');
+ok(World.resolveStage('ライザの家') === 'stage_01_001_04', 'home ja name resolves');
+ok(World.resolveStage('塔奥家门前') === 'stage_01_002_01', 'zh official name resolves');
+ok(World.resolveStage('莱莎家') === 'stage_01_001_04', 'zh home name resolves');
+ok(World.locked('area_05') === true, 'capital locked before sail');
+Game.s.sailed = true;
+ok(World.locked('area_05') === false, 'capital open after sail');
+Game.s.sailed = false;
+const pb = World.promptBlock({ stage: 'stage_01_001_04', tod: 'aft', day: 1 });
+ok(/stage_01_001_04/.test(pb) && /ライザの家/.test(pb), 'prompt names current place');
+ok(/current_stage/.test(pb) && /stage_01_002_01/.test(pb), 'prompt lists reachable ids');
+ok(!/stage_05_/.test(pb), 'locked areas omitted from catalog');
+const moved = Api.parseTaggedReply(
+  '[emotion:happy|attitude:agree]\n行こっ！' +
+  '<state>{"current_stage":"stage_01_002_01","tod":"eve"}</state>');
+ok(moved.state.current_stage === 'stage_01_002_01' && moved.state.tod === 'eve',
+   'current_stage + tod parse');
+ok(moved.text.indexOf('<state>') === -1, 'map-move state stripped from speech');
 
 console.log(failures ? '\n' + failures + ' FAILURES' : '\nALL PASS');
 process.exit(failures ? 1 : 0);

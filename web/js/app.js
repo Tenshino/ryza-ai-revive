@@ -337,19 +337,7 @@
         };
       });
       document.getElementById('btn-tod').onclick = function () {
-        var s = Config.section('state');
-        var prev = s.tod;
-        var next = World.nextTod(s.tod);
-        Config.set('state.tod', next);
-        /* 安全な場所で寝ると回復するよ — sleeping home at dawn refills. */
-        if (prev === 'ngt' && next === 'mor' && s.stage === HOME_STAGE) {
-          Game.refill();
-          Game.remember('安全なおうちでぐっすり眠った。');
-          App.toast(I18n.t('stamina.slept'));
-        }
-        App._loadSceneFor(s.stage, next);
-        Sound.setPlace(s.stage, next, World.backgroundFor(s.stage));
-        App.updateHud();
+        App._setTod(World.nextTod(Config.section('state').tod));
       };
       document.getElementById('world-area').onchange = function (e) {
         World.jumpArea(e.target.value, Config.section('state').stage, App.gotoStage);
@@ -495,6 +483,55 @@
       if (names.length) Game.remember(names.join('、') + ' と出会った。');
       Quests.progressEvent('explore');
       App.showView('talk');
+    },
+
+    _setTod: function (tod) {
+      if (!World.isTod(tod)) return;
+      var s = Config.section('state');
+      var prev = s.tod;
+      if (tod === prev) return;
+      Config.set('state.tod', tod);
+      if (prev === 'ngt' && tod === 'mor' && s.stage === HOME_STAGE) {
+        Game.refill();
+        Game.remember('安全なおうちでぐっすり眠った。');
+        App.toast(I18n.t('stamina.slept'));
+      }
+      App._loadSceneFor(s.stage, tod);
+      Sound.setPlace(s.stage, tod, World.backgroundFor(s.stage));
+      App.updateHud();
+    },
+
+    /* Talk → map / time of day. Source: detectEntryMapMove,
+       scene.current_stage, scene.time_bucket. Game.applyDelta does not
+       know World, so App applies this after the numeric reducer. */
+    _applySceneDelta: function (d) {
+      if (!d || typeof d !== 'object' || !window.World) return;
+      var scene = (d.scene && typeof d.scene === 'object') ? d.scene : {};
+      var raw = d.current_stage || d.stage || d.map_move || scene.current_stage;
+      var tod = d.tod || d.time_bucket || scene.time_bucket;
+      var s = Config.section('state');
+      var fromStage = s.stage, fromTod = s.tod;
+      var dest = fromStage;
+      if (raw != null && String(raw).trim()) {
+        var id = World.resolveStage(String(raw).trim());
+        if (id) {
+          if (World.locked(World.areaOf(id))) App.toast(I18n.t('world.lockedToast'), true);
+          else dest = id;
+        }
+      }
+      var nextTod = (tod && World.isTod(tod)) ? tod : fromTod;
+      if (fromTod === 'ngt' && nextTod === 'mor' && dest === HOME_STAGE) {
+        Game.refill();
+        Game.remember('安全なおうちでぐっすり眠った。');
+        App.toast(I18n.t('stamina.slept'));
+      }
+      if (nextTod !== fromTod) Config.set('state.tod', nextTod);
+      if (dest !== fromStage) App.gotoStage(dest);
+      else if (nextTod !== fromTod) {
+        App._loadSceneFor(fromStage, nextTod);
+        Sound.setPlace(fromStage, nextTod, World.backgroundFor(fromStage));
+        App.updateHud();
+      }
     },
 
     renderWorld: function () {
@@ -779,7 +816,11 @@
     _rpgContext: function () {
       var st = Config.section('state');
       if (!RPG_MODES[st.mode]) return '';
-      return Game.promptBlock() + '\n\n' + App._peopleBlock(st) + '\n\n' + Quests.promptBlock();
+      var parts = [Game.promptBlock()];
+      if (window.World && World.promptBlock) parts.push(World.promptBlock(st));
+      parts.push(App._peopleBlock(st));
+      parts.push(Quests.promptBlock());
+      return parts.filter(Boolean).join('\n\n');
     },
 
     /* met_charas / npcs here — the official game state fed these to the
@@ -789,7 +830,9 @@
       var L = ['## この世界の人々（ライザ以外）'];
       var here = World.npcsAt(st.stage, st.day || 1);
       L.push('- いま同じ場所にいる人：' +
-        (here.length ? here.map(function (n) { return n.name; }).join('、') : 'いない'));
+        (here.length ? here.map(function (n) {
+          return World.npcName(n.id) + (n.note ? '（' + n.note + '）' : '');
+        }).join('、') : 'いない'));
       var known = {};
       (World.npcs.npcs || []).forEach(function (n) { known[n.id] = n; });
       var met = (Game.s.met_charas || [])
@@ -797,7 +840,7 @@
         .filter(Boolean).slice(0, 16);
       if (met.length) {
         L.push('- これまでに会った人：' + met.map(function (n) {
-          return n.name + (n.note ? '（' + n.note + '）' : '');
+          return World.npcName(n.id) + (n.note ? '（' + n.note + '）' : '');
         }).join('、'));
       }
       return L.join('\n');
@@ -922,6 +965,7 @@
 
           if (reply.state && typeof reply.state === 'object') {
             Game.applyDelta(reply.state, 'llm');
+            App._applySceneDelta(reply.state);
           }
           var cost = Game.turnCost(st.mode, st.style);
           Game.spend(cost, 'talk');

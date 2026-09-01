@@ -138,12 +138,13 @@
       L.push('## 状態更新プロトコル（RPG）');
       L.push('セリフの中で実際に探索・採集・調合・戦闘・買い物・製作・移動などの成果が出たら、');
       L.push('セリフの最後に1行だけ次の機械可読ブロックを付けてください（プレイヤーには見えない）：');
-      L.push('<state>{"stamina_delta":-2,"exp_delta":10,"money_delta":30,"inventory_added":[{"id":"emeralia","count":1}],"quest":{"step_add":1}}</state>');
+      L.push('<state>{"stamina_delta":-2,"exp_delta":10,"money_delta":30,"inventory_added":[{"id":"emeralia","count":1}],"quest":{"step_add":1},"current_stage":"stage_01_002_01"}</state>');
       L.push('使用できる key：stamina_delta / exp_delta / money_delta / inventory_added /');
       L.push('inventory_removed / ryza_inventory_added / ryza_inventory_removed /');
-      L.push('memory_add / quest{step_add,complete,desc,goal} のみ。');
+      L.push('memory_add / quest{step_add,complete,desc,goal} / current_stage / tod のみ。');
       L.push('採れた素材・できた品物は inventory_added に {id,count} で入れる（既存IDを優先）。');
       L.push('クエスト目標を1つ満たすたびに quest.step_add、目標達成で quest.complete:true。');
+      L.push('場所を変えたターンは current_stage に上の一覧の stage id。時間帯は tod（mor/aft/eve/ngt）。');
       L.push('スタミナを消費する行動には必ず stamina_delta のマイナス値を付ける。');
       L.push('何も発生しない普通の会話には <state> を付けない。');
     }
