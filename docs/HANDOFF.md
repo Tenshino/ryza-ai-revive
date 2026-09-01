@@ -35,7 +35,7 @@ ASMR zoom **就是源表** sitting 3.5 / standing 2.5（相对底栏 1.93 / 1.45
 `IndexSizeError` 把淡入淡出打死）。新增第四套回归 `expression_coverage.js`；
 `motion_regression.js` 加 50 舞台×3 视口×2 姿态=300 组「相机必须落在绘制框内」断言。
 版本单一来源 `config/version.json` + `scripts/stamp_version.js`；打包双闸门
-`scripts/privacy_check.py`（暂存前 + 成品，命中私人标识直接中止构建）。exe/APK 重出 **1.2.7**。
+`scripts/privacy_check.py`（暂存前 + 成品，命中私人标识直接中止构建）。exe/APK 重出 **1.2.8**（对话搬家 + ASMR 也带地点表）。
 此前（09-05）：
 模式化 TTS + 气泡自动淡出已完成（AUDIT §8，不要退回去）：每个聊天模式有自己的
 TTS 语音指导（api.js MODE_TTS 叠加在 tts.styleHint 基底上；tts.modeHints[mode]
