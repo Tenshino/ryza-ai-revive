@@ -292,5 +292,27 @@ ok(moved.state.current_stage === 'stage_01_002_01' && moved.state.tod === 'eve',
    'current_stage + tod parse');
 ok(moved.text.indexOf('<state>') === -1, 'map-move state stripped from speech');
 
+console.log('# time passage (real / flow / manual)');
+/* hourToTod bands match the alarm voice table */
+ok(World.hourToTod(3) === 'ngt' && World.hourToTod(7) === 'mor' &&
+   World.hourToTod(13) === 'aft' && World.hourToTod(18) === 'eve' &&
+   World.hourToTod(22) === 'ngt', 'hourToTod bands');
+ok(World.hourToTod(-2) === 'ngt' && World.hourToTod(26) === 'ngt',
+   'hourToTod wraps out-of-range hours (26→02, -2→22, both night)');
+ok(World.todStartHour('mor') === 6 && World.hourToTod(World.todStartHour('eve')) === 'eve',
+   'todStartHour snaps back to its own band');
+/* flow clock: speed = in-game minutes per real minute */
+var at = 1000000;
+ok(World.flowHour(10, at, at + 60000, 60) === 11,
+   'flow: 60 game-min/real-min advances one hour per real minute');
+ok(World.flowHour(23, at, at + 600000, 60) === 9,
+   'flow: wraps past midnight (23 + 10 real min @60 = +10h = 09)');
+ok(World.flowHour(12, 0, 999999, 60) === 12,
+   'flow: unsynced clock (at=0) is a no-op, never a time jump');
+ok(World.flowHour(12, at, at, 60) === 12, 'flow: zero elapsed = no advance');
+/* LLM time_advance / game_hour parse through the state protocol */
+const adv = Api.parseTaggedReply('おやすみ<state>{"time_advance":3}</state>');
+ok(adv.state && Number(adv.state.time_advance) === 3, 'LLM time_advance parses');
+
 console.log(failures ? '\n' + failures + ' FAILURES' : '\nALL PASS');
 process.exit(failures ? 1 : 0);

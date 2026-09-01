@@ -896,3 +896,16 @@ node scripts/electron_storage_regression.js
 * 验证：`view-stability.js` 确认折叠前后 `Avatar._view` 逐字段不变（VIEW MOVED: false）、
   站/坐脸尺寸比 0.99、发饰入画；六套回归全绿（含 300 组板内钳制、播种后 motion 双跑一致）。
 
+
+## 12. 时间流逝 + 长回复滚动（2026-09-08）
+
+官方有 `AppServerClock` + `scene_time_band.dart`（时段跟真实时钟走）+ `sendSceneState`/
+`scene.time_bucket`（把时段推给 marionette LLM）。我们之前只有手动 🌤 按钮 + LLM `<state>.tod`，
+**没有自动时间流逝**。补上：
+
+* `app.timeMode`：`real`（跟随本机时钟，复刻官方）/ `flow`（游戏内时钟按倍速走）/ `manual`（纯手动）。默认 real。
+* 纯函数在 `world.js`：`hourToTod`（分带与闹钟 `todForHour` 一致）、`todStartHour`、`flowHour`（speed=游戏分钟/真实分钟，默认 60=1真实分=1游戏时）。`game_logic_regression` 8 条断言守。
+* `App._tickTime`：init（Avatar 就绪后）+ 30s 定时 + 回前台各跑一次；real 取本机小时、flow 推进 gameHour，变了走 `_setTod`（含夜→晨回体力）。`state.todManualUntil` 给手动 🌤 30 分钟优先窗口，不被自动同步抢。
+* **flow 模式 LLM 可拨钟**（用户要求）：`_applySceneDelta` 在 flow 下把 `<state>` 的 `game_hour`/`time_advance`/`tod` 统一作用到 gameHour，再反推 tod；`_sleepHome` 同步拨到早上。提示词 `_clockBlock` 每轮喂"第几天+时段+约几点"，flow 模式额外教 LLM 这套时间接口（对应官方 scene.time_bucket 双向）。
+
+长回复溢出面板读不全（删掉旧滚动全文的副作用）：`#log-body` 改 `overflow-y:auto`，打字时 `_scrollLog()` 跟随底部、点圆点切换则回到顶部。**滚动=读这一条，圆点=切换最近几条**，不再是两套冲突的历史机制。回归全绿。

@@ -143,6 +143,11 @@
         App._syncPanelFrac();
         Avatar.init(function () {
           App._loadSceneFor(st.stage, st.tod);
+          App._tickTime();          // adopt the wall/flow clock once the scene is up
+        });
+        setInterval(App._tickTime, 30000);
+        document.addEventListener('visibilitychange', function () {
+          if (!document.hidden) App._tickTime();
         });
         App.updateHud();
         App.renderWorld();
@@ -419,7 +424,13 @@
         };
       });
       document.getElementById('btn-tod').onclick = function () {
-        App._setTod(World.nextTod(Config.section('state').tod));
+        var next = World.nextTod(Config.section('state').tod);
+        App._setTod(next);
+        Config.set('state.todManualUntil', Date.now() + 30 * 60000);  // don't auto-clobber for 30 min
+        if ((Config.section('app').timeMode) === 'flow') {
+          Config.set('state.gameHour', World.todStartHour(next));
+          Config.set('state.gameClockAt', Date.now());
+        }
       };
       document.getElementById('world-area').onchange = function (e) {
         World.jumpArea(e.target.value, Config.section('state').stage, App.gotoStage);
@@ -594,6 +605,47 @@
       App.updateHud();
     },
 
+    /* Time passage. 'real' mirrors the official AppServerClock (the scene
+       follows the device wall clock); 'flow' runs an in-game clock that ticks
+       at app.flowSpeed in-game minutes per real minute and that the LLM can
+       also push (see _applySceneDelta); 'manual' leaves it to the 🌤 button.
+       A manual tap suppresses auto-sync briefly so a hand-set time isn't
+       immediately clobbered. */
+    _tickTime: function () {
+      if (!window.World || !window.Config) return;
+      var app = Config.section('app'), s = Config.section('state');
+      var mode = app.timeMode || 'real';
+      if (mode === 'manual') return;
+      var now = Date.now();
+      if ((s.todManualUntil | 0) > now) return;
+      var target;
+      if (mode === 'real') {
+        target = World.hourToTod(new Date().getHours());
+      } else {
+        var nh = World.flowHour(s.gameHour, s.gameClockAt, now, app.flowSpeed);
+        Config.set('state.gameHour', nh);
+        Config.set('state.gameClockAt', now);
+        target = World.hourToTod(nh);
+      }
+      if (target && target !== s.tod) App._setTod(target);
+    },
+
+    /* The clock line fed to the LLM every turn: day count + current band +
+       hour. In flow mode it also teaches the LLM it may move the in-game
+       clock (the official pushed scene.time_bucket over marionette; our wire
+       is the <state> block). */
+    _clockBlock: function (st) {
+      var mode = (Config.section('app').timeMode) || 'real';
+      var hour = mode === 'flow' ? Math.floor(Number(st.gameHour) || 12)
+                                 : new Date().getHours();
+      var L = ['## 現在時刻'];
+      L.push('- 同伴 ' + (st.day || 1) + '日目／' + World.todLabel(st.tod) + '（約' + hour + '時）');
+      if (mode === 'flow') {
+        L.push('- これはゲーム内の時計。場面で時間が動くなら <state>{"tod":"mor|aft|eve|ngt"}</state> か <state>{"time_advance":2}</state>（未来へN時間）で進めてよい。本当に時間が変わったときだけ使う。');
+      }
+      return L.join('\n');
+    },
+
     /* Talk → map / time of day / sleep. Source: detectEntryMapMove,
        scene.current_stage, scene.time_bucket. Game.applyDelta does not
        know World, so App applies this after the numeric reducer. */
@@ -620,6 +672,23 @@
         }
       }
       var nextTod = (tod && World.isTod(tod)) ? tod : fromTod;
+      /* flow mode: the LLM drives the in-game clock, and the band is DERIVED
+         from it (so time_advance / game_hour / tod all move one shared clock).
+         real/manual mode: a tod from the LLM is a one-off scene change only. */
+      if ((Config.section('app').timeMode) === 'flow') {
+        var gh = Number(d.game_hour != null ? d.game_hour : NaN);
+        var adv = Number(d.time_advance != null ? d.time_advance :
+                         (d.advance_hours != null ? d.advance_hours : NaN));
+        var cur = Number(s.gameHour); if (!(cur >= 0 && cur < 24)) cur = 12;
+        var nowMs = Date.now();
+        if (!isNaN(gh)) cur = ((gh % 24) + 24) % 24;
+        else if (!isNaN(adv)) cur = ((cur + adv) % 24 + 24) % 24;
+        else if (tod && World.isTod(tod)) cur = World.todStartHour(tod);
+        else cur = World.flowHour(cur, s.gameClockAt, nowMs, Config.section('app').flowSpeed);
+        Config.set('state.gameHour', cur);
+        Config.set('state.gameClockAt', nowMs);
+        nextTod = World.hourToTod(cur);
+      }
       if (fromTod === 'ngt' && nextTod === 'mor' && dest === HOME_STAGE) {
         Game.refill();
         Game.remember('安全なおうちでぐっすり眠った。');
@@ -785,6 +854,10 @@
       var st = Config.section('state');
       Config.set('state.stage', HOME_STAGE);
       Config.set('state.tod', 'mor');
+      if ((Config.section('app').timeMode) === 'flow') {
+        Config.set('state.gameHour', World.todStartHour('mor'));
+        Config.set('state.gameClockAt', Date.now());
+      }
       App._loadSceneFor(HOME_STAGE, 'mor');
       Sound.setPlace(HOME_STAGE, 'mor', World.backgroundFor(HOME_STAGE));
       Game.refill();
@@ -921,6 +994,7 @@
       var parts = [];
       if (window.World && World.promptBlock) parts.push(World.promptBlock(st));
       parts.push(App._peopleBlock(st));
+      if (window.World) parts.push(App._clockBlock(st));
       return parts.filter(Boolean).join('\n\n');
     },
 
@@ -1243,6 +1317,8 @@
         d.onclick = function () {
           App._pageSel = i;
           document.getElementById('bubble-text').textContent = App._pages[i];
+          var lb = document.getElementById('log-body');
+          if (lb) lb.scrollTop = 0;   // reviewing an older message: read from its top
           App._renderDots();
         };
         host.appendChild(d);
@@ -1329,8 +1405,15 @@
           return;
         }
         span.textContent = text.slice(0, ++i);
+        App._scrollLog();
         App._typeTimer = setTimeout(step, speed);
       })();
+    },
+    /* a long reply scrolls inside the panel (dots switch between messages;
+       scrolling reads THIS one when it overflows) — keeps up with the typewriter */
+    _scrollLog: function () {
+      var b = document.getElementById('log-body');
+      if (b) b.scrollTop = b.scrollHeight;
     },
 
     /* ------------------------------------------------------------ alarms */
@@ -1822,6 +1905,34 @@
         function (v) { Config.set('app.vibration', v); });
       App._switch(w, T('settings.rim'), Config.section('app').rim !== false,
         function (v) { Config.set('app.rim', v); });
+
+      /* ---------------- time passage (official drove it from AppServerClock) */
+      App._title(w, T('settings.time'));
+      App._select(w, T('settings.timeMode'), Config.section('app').timeMode || 'real', [
+        { v: 'real',   t: T('time.real') },
+        { v: 'flow',   t: T('time.flow') },
+        { v: 'manual', t: T('time.manual') }
+      ], function (v) {
+        Config.set('app.timeMode', v);
+        if (v === 'flow') {
+          Config.set('state.gameHour', new Date().getHours());
+          Config.set('state.gameClockAt', Date.now());
+          Config.set('state.todManualUntil', 0);
+        }
+        App.buildSettings();
+        App._tickTime();
+      });
+      if ((Config.section('app').timeMode) === 'flow') {
+        App._select(w, T('settings.flowSpeed'), String(Config.section('app').flowSpeed || 60), [
+          { v: '15',  t: T('speed.slow') },
+          { v: '60',  t: T('speed.mid') },
+          { v: '180', t: T('speed.fast') },
+          { v: '360', t: T('speed.vfast') }
+        ], function (v) {
+          Config.set('app.flowSpeed', Number(v));
+          App._tickTime();
+        });
+      }
 
       /* ---------------- game balance / cheat (user-side replacement for
          the official paywall: limits stay, but can be switched off freely) */

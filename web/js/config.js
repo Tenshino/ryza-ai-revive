@@ -94,6 +94,8 @@
       fullscreen: false,
       rim: true,
       showBubble: true,              // talk bubbles over the stage (auto-fade)
+      timeMode: 'real',              // real=跟随本机时钟 | flow=游戏内时钟 | manual=纯手动
+      flowSpeed: 60,                 // flow: in-game minutes per real minute (60 ⇒ 1 game hr / real min)
       cheat: false                   // 作弊模式：スタミナ無制限・全開放
     },
 
@@ -111,6 +113,12 @@
       posture: 'posture_standing',
       day: 1,
       lastDayDate: '',
+      /* flow-mode in-game clock: gameHour (0-24) + the real ms it was last
+         synced; tod is derived from it. todManualUntil = real ms a manual 🌤
+         tap suppresses auto-sync for (so a hand-set time isn't clobbered). */
+      gameHour: 12,
+      gameClockAt: 0,
+      todManualUntil: 0,
       onboardingDone: false,
       welcome: { talk: false, map: false, alarm: false, skin: false, quest: false }
     }
