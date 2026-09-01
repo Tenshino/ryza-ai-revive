@@ -237,12 +237,16 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
    state). --panel-h moves on #phone so the HUD cluster + round buttons ride
    the panel edge. The official collapsed strip KEEPS the last line above the
    input (see the sitting reference shot) — head/dots go, one text line stays. */
-#phone.panel-collapsed{--panel-h:calc(112px + var(--safe-b))}
+#phone.panel-collapsed{--panel-h:calc(128px + var(--safe-b))}
 #phone.panel-collapsed #log-panel{background:linear-gradient(0deg,rgba(10,7,12,.86),transparent);
   border-top:0;backdrop-filter:none;-webkit-backdrop-filter:none;padding-top:0}
 #phone.panel-collapsed #log-head,
 #phone.panel-collapsed #log-dots{display:none}
-#phone.panel-collapsed #log-body{padding-top:4px;max-height:2.9em;overflow:hidden}
+#phone.panel-collapsed #log-body{padding-top:4px;overflow:hidden}
+/* Clean two-line clamp — the old max-height:2.9em left the wrapped second
+   line half-cut mid-glyph. Ellipsis after two full lines instead. */
+#phone.panel-collapsed #bubble{display:-webkit-box;-webkit-line-clamp:2;
+  -webkit-box-orient:vertical;overflow:hidden;line-height:1.5}
 #log-head{display:flex;align-items:center;gap:10px;padding:10px 0 8px;
   border-bottom:1px solid rgba(232,180,92,.14);flex:0 0 auto;cursor:pointer}
 #log-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;
