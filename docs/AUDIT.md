@@ -694,3 +694,71 @@ node scripts/game_logic_regression.js
 node scripts/boot_smoke.js
 node scripts/expression_coverage.js    # 新增：表情/动作可达性与引用解析全量核对
 ```
+
+---
+
+## 10. 图集变体（NSFW）+ 按源表取景（2026-09-07）
+
+源 APK **有**换装逻辑（`features/skin`：`SkinSwitchController` / `switchSkin` /
+`skin_switch_veil` / 5 槽预览），但那是 **整包 skel+atlas 切换**，不是同一骨架
+热换 PNG。包内可穿骨骼只有 `0001_01`（坐）和 `0001_99`（站）；`0002–0004` 只有
+预览图。因此「检测到 NSFW 意图就换贴图、意图结束换回来」是**本地加的演出**，
+不能接到源 `switchSkin` 上，否则会和 5 槽换装、坐/站后缀抢同一条 `loadSkin`。
+
+### 10.1 模块边界（以后加别的服装的 nsfw 版只丢文件）
+
+| 模块 | 职责 | 不做什么 |
+|---|---|---|
+| `web/js/nsfw.js` `NsfwIntent` | 玩家意图 on/off/hold；滞回；调用 `Avatar.setAtlasVariant('nsfw'\|'default')` | 不写服装 id、不碰 GL、不改 Config.skin |
+| `Avatar.variantPageUrls` / `setAtlasVariant` | 按**当前已加载皮肤**解析变体页并换 GLTexture | 不认关键词、不 reload skel |
+| `api.js` | 标签行可选 `nsfw:on\|off`（所有 `\|` 都拆，以前只 replace 第一处） | 不决定贴图 |
+| `app.js` | `say()` 里 `NsfwIntent.onTurn`；新对话 `reset()` | 不解析路径 |
+
+路径约定（对任何 `crf_skn_*` 都一样，坐/站/未来 0002 通用）：
+
+1. `skins.json` 的 `entry.variants[name]`（`build_indexes.py` 扫描 `{id}{tag}.png`）
+2. 同目录 `{pageBase}{name}.png`（现有站姿：`crf_skn_002_0001_99nsfw.png`）
+3. 同目录 `{pageBase}_{name}.png`
+
+没有文件 → 保持默认页，**意图仍保持**；切到有文件的那套皮肤时 `loadSkin` 末尾
+再 `_applyAtlasVariant`。变体加载走自己的 `Image`+`GLTexture`，**不**走
+`AssetManager.loadTexture`（404 会脏 `errors`，下次 `loadSkin` 会误报素材失败）。
+
+意图结束切回的是**该骨架的默认 atlas 页**（切换前的皮肤），不是换一套 outfit。
+不进存档；新对话 `NsfwIntent.reset()`。
+
+### 10.2 取景：源 APK 怎么做的（不要再缩小去塞全身）
+
+源侧没有「fit full body」API。相机来自 `PostureCameraConfig` /
+`web/assets/data/posture_camera.json`：
+
+| | base zoom | ASMR zoom | scale | offsetY |
+|---|---|---|---|---|
+| sitting | **1.93** | **3.5** | 1.0 | +288.46 |
+| standing | **1.45** | **2.5** | 1.488 | −346.15 |
+
+ASMR 的 3.5 / 2.5 **就是包内原值**（约 1.8× 底栏），不是我们额外放大的。
+`asmr.cameraPanY` ~3200 不能当本套 `worldH=1720/(zoom/1.93)` 的正交中心
+（会把窗口架到骨架上头的空区），所以仍用朝脸的 pan 重映射；**zoom 本身按表**。
+
+点击热区是 `BB_head / breast / weast / arm / body`——上半身，没有脚。
+源取景保证这些部位在画面里，站姿脚被裁是表内构图，不是漏做。
+
+曾加过的 `_fitFullBody`（按 setup 盒缩小到头脚都进画面）**已撤回**：人变小，
+而且改写了 Y，塔奥家门前坐姿离开 `sofa_root` 像坐在空气上。
+
+坐姿适配中景：场景 JSON **不**随坐/站换一份背景；同一套 skel 里有 `chara_root`
+和 `sofa_root`。源符号 `chara_root_offset.dart` /
+`_currentSofaRootCompensationOffset`。现：坐姿且存在 `sofa_root` 时，角色用
+**世界坐标**（`offsetY + chara_root + Δsofa`），不再把 Y 经相机窗口重映射；
+视差挪沙发时人跟着坐垫走。站姿仍走原来的 k 映射 + 视线对齐（0.68 / ASMR 0.50）。
+
+黑边钳制（`_coverFor` / `_applyCamera`）不动。
+
+### 10.3 回归
+
+```
+node scripts/nsfw_intent_regression.js
+node scripts/motion_regression.js      # 坐姿锁沙发 + 变体 URL 与服装无关 + 300 组钳制
+node scripts/boot_smoke.js
+```

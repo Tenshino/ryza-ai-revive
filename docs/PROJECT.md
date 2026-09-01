@@ -4,7 +4,10 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-09-06）：**姿态/相机/表情补全**（AUDIT §9）——塔奥家门前
+状态（2026-09-07）：**图集变体（NSFW）+ 按源表取景**（AUDIT §10）。
+NSFW 按当前服装目录 `{id}{variant}.png` 换图集页，不写死 id。
+取景恢复表内 scale/zoom；坐姿锁 `sofa_root`；ASMR zoom 用源表 3.5/2.5。
+此前（09-06）：**姿态/相机/表情补全**（AUDIT §9）——塔奥家门前
 （`stage_01_002_01`，包里唯一同时给坐、站两套中景的舞台）的四个症状一次修完：
 默认开局改成**站姿 `_99`**（旧存档一次性迁移）、姿态 chip 换成**动作语义**
 （站着显示「坐下」）、黑边与切换时背景跳位由**板内钳制相机**根除
@@ -189,13 +192,19 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 
 ### 渲染与交互
 
-#### `web/js/avatar.js` — Spine 渲染（本轮未动，结论维持 AUDIT §3）
+#### `web/js/nsfw.js` — 玩家 NSFW 意图（与服装 id 解耦）
+
+只决定变体开/关。贴图解析在 `Avatar.variantPageUrls`（任何 `crf_skn_*` 的
+`{id}nsfw.png` 都会被捡到）。`App.say` 调 `NsfwIntent.onTurn`；新对话 `reset`。
+
+#### `web/js/avatar.js` — Spine 渲染
 
 路径：`ManagedWebGLRenderingContext` + 自建 `Matrix4` MVP + `PolygonBatcher` +
 `SkeletonRenderer`。单画布 `#scene-canvas`，点击层 `#avatar-hit`。
 `fixedBasePoseMode`；注视/张力/指尖/口型/Occupancy/rim 见 AUDIT §3.7；
 **点击热区（BB 多边形∩轮廓）与退出平滑见 AUDIT §3.9**；
-**相机/姿态/表情重掷见 AUDIT §9**（本轮重写的那一块）：
+**相机/姿态见 AUDIT §9 + §10.2**：表内 scale/zoom（ASMR 3.5/2.5 是源值）；
+坐姿有 `sofa_root` 时锁世界坐标，避免坐在空气上。
 `postureKey()` 决定穿 `_01` 还是 `_99`（默认站姿，`midgroundPostures` 只决定
 哪里允许切换），`_coverFor()` 量场景美术的绘制框，`_applyCamera()` 把背景窗口
 只缩不涨地钳进去（⇒ 任意视口无黑边、切姿态背景不动），

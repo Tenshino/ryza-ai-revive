@@ -117,7 +117,8 @@ const Avatar = {
   setTalkingEnvelope() {}, loadScene(id, tod, cb) { cb && cb(null); },
   loadSkin(id, cb) { cb && cb(); }, postureKey() { return 'posture_sitting'; },
   supportsBothPostures() { return false; }, hitPartAt() { return null; },
-  poke() { return null; }, outfitOf(id) { return String(id).replace(/_(01|99)$/, ''); }
+  poke() { return null; }, outfitOf(id) { return String(id).replace(/_(01|99)$/, ''); },
+  setAtlasVariant() {}, variantPageUrls() { return []; }
 };
 sandbox.Avatar = Avatar;
 sandbox.Onboarding = {
@@ -132,7 +133,7 @@ const load = (f) => vm.runInContext(fs.readFileSync(path.join(WEB, 'js', f), 'ut
 
 for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
                  'game.js', 'quests.js', 'daily.js', 'world.js', 'audio.js',
-                 'alarm.js', 'fx.js', 'app.js']) {
+                 'alarm.js', 'fx.js', 'nsfw.js', 'app.js']) {
   try { load(f); console.log('  loaded ' + f); }
   catch (e) { bad('load ' + f + ': ' + e.message); }
 }
@@ -182,6 +183,14 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
        'asmr playback shaping present');
     ok(A.isPlaceholderModel('tts-model') && !A.isPlaceholderModel('mimo-audio'),
        'placeholder-model check centralized');
+    const nsfwTag = A.parseTaggedReply('[emotion:shy|attitude:agree|nsfw:on]\nhi');
+    ok(nsfwTag.nsfw === true && nsfwTag.emotion === 'shy', 'nsfw:on parses with extra pipes');
+    ok(sandbox.NsfwIntent && sandbox.NsfwIntent.detect('把衣服脱掉') === 'on',
+       'NsfwIntent detects player undress intent');
+    sandbox.NsfwIntent.onTurn('把衣服脱掉', nsfwTag);
+    ok(sandbox.NsfwIntent.active(), 'onTurn latches nsfw');
+    sandbox.NsfwIntent.reset();
+    ok(!sandbox.NsfwIntent.active(), 'reset clears nsfw');
 
     /* bubble lifecycle: showBubble arms the auto-fade, keep cancels it */
     sandbox.App.showBubble('テスト');

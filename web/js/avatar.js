@@ -115,6 +115,10 @@
     sceneConfig: null,
     skinsIndex: null,
     _loadedSkelId: '',
+    /* atlas page variant currently requested ('default' or e.g. 'nsfw').
+       Resolved per-costume by variantPageUrls — never a hardcoded skin id. */
+    _atlasVariant: 'default',
+    _variantMiss: {},
     _emotion: 'neutral',
     _attitude: 'agree',
     _talking: false,
@@ -132,6 +136,8 @@
     _viewAuth: null,
     /* head bone's setup-pose local Y for the loaded skin (eyeline align) */
     _headLocal: null,
+    /* sofa_root (etc.) bind-pose world pos — sitting stays on the midground */
+    _midBind: null,
     _env: null,
     _look: { yaw: 0, pitch: 0, roll: 0, ty: 0, tp: 0, tr: 0, hold: 2, trans: 0.8, t: 0 },
     _pointer: { x: 0, y: 0, on: false },
@@ -334,6 +340,142 @@
       return skins.filter(function (x) { return x.hasSpine && x.skel; })[0] || null;
     },
 
+    _skinEntry: function (id) {
+      var skins = Avatar.skinsIndex || [], i;
+      for (i = 0; i < skins.length; i++) if (skins[i].id === id) return skins[i];
+      return null;
+    },
+
+    /* Sanitize a variant tag so it can only be a filename suffix. */
+    _cleanVariant: function (name) {
+      var n = String(name || 'default').toLowerCase();
+      if (!n || n === 'default' || n === 'off' || n === 'none') return '';
+      return /^[a-z0-9_]{1,32}$/.test(n) ? n : '';
+    },
+
+    /* Candidate URLs for one atlas page's variant texture.
+       Any future costume works the same way:
+         1. skins.json entry.variants[name] (string, or {pageName: url})
+         2. `{atlasDir}/{pageBase}{name}.png`   e.g. crf_skn_002_0001_99nsfw.png
+         3. `{atlasDir}/{pageBase}_{name}.png`  e.g. crf_skn_002_0002_01_nsfw.png
+       Avatar does not know which outfits exist — missing files stay on the
+       default page (intent can still be on, so a later wearable costume applies). */
+    variantPageUrls: function (atlasUrl, pageName, variant) {
+      variant = Avatar._cleanVariant(variant);
+      if (!variant) return [];
+      var dir = String(atlasUrl || '').replace(/[^/]+$/, '');
+      var page = String(pageName || '');
+      var dot = page.lastIndexOf('.');
+      var base = dot >= 0 ? page.slice(0, dot) : page;
+      var ext = dot >= 0 ? page.slice(dot) : '.png';
+      var out = [], seen = {};
+      function add(u) {
+        if (!u || seen[u]) return;
+        seen[u] = 1;
+        out.push(u);
+      }
+      var s = Avatar._skinEntry(Avatar._loadedSkelId);
+      var ov = s && s.variants && s.variants[variant];
+      if (typeof ov === 'string') add(ov);
+      else if (ov && typeof ov === 'object') add(ov[page] || ov[base] || ov['*']);
+      add(dir + base + variant + ext);
+      add(dir + base + '_' + variant + ext);
+      return out;
+    },
+
+    setAtlasVariant: function (name, cb) {
+      Avatar._atlasVariant = Avatar._cleanVariant(name) ? Avatar._cleanVariant(name) : 'default';
+      Avatar._applyAtlasVariant(cb);
+    },
+
+    _disposeVariantTex: function (L) {
+      if (!L || !L._atlasVarTex) return;
+      L._atlasVarTex.forEach(function (t) {
+        if (t && t.dispose) try { t.dispose(); } catch (e) { /* gl gone */ }
+      });
+      L._atlasVarTex = null;
+      L._atlasVarName = '';
+    },
+
+    /* Own Image+GLTexture path — must NOT go through AssetManager.loadTexture:
+       a 404 would stick in assets.errors and the next loadSkin poll would
+       treat the whole skeleton as failed. */
+    _loadPageImage: function (L, url, cb) {
+      if (!L || !url || typeof Image === 'undefined' || !spine || !spine.GLTexture) {
+        cb(null); return;
+      }
+      var img = new Image();
+      img.crossOrigin = 'anonymous';
+      img.onload = function () {
+        try { cb(new spine.GLTexture(L.ctx, img)); }
+        catch (e) { cb(null); }
+      };
+      img.onerror = function () { cb(null); };
+      img.src = url;
+    },
+
+    _tryPageUrls: function (L, urls, cb) {
+      var i = 0;
+      (function next() {
+        if (i >= urls.length) { cb(null); return; }
+        var url = urls[i++];
+        var miss = (Avatar._loadedSkelId || '') + '\0' + url;
+        if (Avatar._variantMiss[miss]) { next(); return; }
+        Avatar._loadPageImage(L, url, function (tex) {
+          if (tex) { cb(tex); return; }
+          Avatar._variantMiss[miss] = 1;
+          next();
+        });
+      })();
+    },
+
+    _applyAtlasVariant: function (cb) {
+      var L = Avatar.avatar;
+      var done = function () { cb && cb(null); };
+      if (!L || !L._atlas || !L.ctx) { done(); return; }
+      var pages = L._atlas.pages || [];
+      if (!pages.length) { done(); return; }
+      if (!L._atlasBaseTex) {
+        L._atlasBaseTex = pages.map(function (p) { return p.texture; });
+      }
+      var variant = Avatar._cleanVariant(Avatar._atlasVariant);
+      if (!variant) {
+        for (var i = 0; i < pages.length; i++) {
+          if (L._atlasBaseTex[i]) pages[i].setTexture(L._atlasBaseTex[i]);
+        }
+        done();
+        return;
+      }
+      if (L._atlasVarName === variant && L._atlasVarTex &&
+          L._atlasVarTex.length === pages.length) {
+        for (var j = 0; j < pages.length; j++) {
+          if (L._atlasVarTex[j]) pages[j].setTexture(L._atlasVarTex[j]);
+        }
+        done();
+        return;
+      }
+      var pending = pages.length, loaded = new Array(pages.length), any = false;
+      function finish() {
+        pending--;
+        if (pending > 0) return;
+        if (!any) { done(); return; }
+        Avatar._disposeVariantTex(L);
+        L._atlasVarName = variant;
+        L._atlasVarTex = loaded;
+        for (var k = 0; k < pages.length; k++) {
+          if (loaded[k]) pages[k].setTexture(loaded[k]);
+        }
+        done();
+      }
+      pages.forEach(function (page, idx) {
+        var urls = Avatar.variantPageUrls(L._atlasUrl, page.name, variant);
+        Avatar._tryPageUrls(L, urls, function (tex) {
+          if (tex) { loaded[idx] = tex; any = true; }
+          finish();
+        });
+      });
+    },
+
     /* ------------------------------------------------------------- camera */
     /* One orthographic window (Avatar._view) maps world units to the canvas
        and is shared by the scene plate and the character.
@@ -358,7 +500,8 @@
        aspect ratio, and because the window does not depend on the player's
        choice the background no longer moves on a posture toggle. The
        character is mapped through that window by `_placeCharacter` so she
-       keeps exactly the on-screen framing the table asks for. */
+       keeps the on-screen framing the table asks for. Sitting on a midground
+       (`sofa_root`) keeps world X/Y so she does not float off the furniture. */
     _coverFor: function (L) {
       if (!L || !L.skeleton) return null;
       if (L._coverDone) return L._cover || null;
@@ -438,8 +581,10 @@
       var a = (asmr === undefined ? Avatar._asmrOn() : asmr) && pack.asmr;
       if (a) {
         var az = Number(a.cameraZoom);
-        /* ASMR keeps the authored close-up zoom but not its panY (~3200 sits
-           above the skeleton): lift toward the face instead of empty sky. */
+        /* ASMR zoom is the APK table (sitting 3.5 / standing 2.5). Do not
+           invent a smaller zoom — the original close-up is that tight.
+           asmr.cameraPanY (~3200) is a different space and would aim at
+           empty sky, so we lift toward the face instead. */
         if (az > 0.2) { panY += (az / zoom - 1) * 280; zoom = az; }
         if (a.cameraPanX != null) panX = Number(a.cameraPanX) || 0;
       }
@@ -510,7 +655,9 @@
 
     /* Place the character so her on-screen framing is what the table asks
        for, whatever the plate did to the camera. Called every frame:
-       chara_root rides the scene's parallax. */
+       chara_root rides the scene's parallax. Sitting on sofa_root keeps
+       world-space X/Y (source: chara_root_offset / sofa compensation) —
+       remapping Y through the camera is what floated her off the seat. */
     _placeCharacter: function () {
       var L = Avatar.avatar, S = Avatar.scene;
       if (!L || !L.skeleton) return;
@@ -519,30 +666,56 @@
       if (S && S.skeleton) {
         var bone = S.skeleton.findBone('chara_root');
         if (bone) { x += bone.worldX; y += bone.worldY; }
+        if (Avatar._seatedOnMid()) {
+          var mid = S.skeleton.findBone(Avatar._midBind.name);
+          if (mid) {
+            x += mid.worldX - Avatar._midBind.x;
+            y += mid.worldY - Avatar._midBind.y;
+          }
+        }
       }
       var v = Avatar._view, a = Avatar._viewAuth;
       var k = (v && v.worldH && a && a.worldH) ? v.worldH / a.worldH : 1;
-      var sx = (v && a) ? v.left + (x - a.left) * k : x;
-      var sy = (v && a) ? v.bottom + (y - a.bottom) * k : y;
-      var sc = cam.scale * k;
-      /* Eyeline correction for framings the data cannot support.
-         posture_camera.json frames the SITTING head at 0.70 of the window
-         (upper third, the framing every home scene is composed around) but the
-         STANDING head at 0.37, and the ASMR close-up at 0.49 sitting vs 0.10
-         standing: the standing pair was authored against art taller than the
-         plate that ships here, so on screen she sank to the bottom of the
-         frame and the surplus camera fell off the plate as a black bar. Only
-         framings more than a tenth of the screen off the line are moved, so a
-         scene whose authored pan deliberately sits her lower or higher keeps
-         its composition. Her authored SIZE (scale × zoom) is never touched. */
-      if (Avatar._headLocal != null && v && v.worldH > 0) {
-        var target = Avatar._asmrOn() ? 0.50 : 0.68;
-        var frac = (sy + Avatar._headLocal * sc - v.bottom) / v.worldH;
-        if (Math.abs(frac - target) > 0.10) sy += (target - frac) * v.worldH;
+      var sx, sy, sc = cam.scale * k;
+      if (Avatar._seatedOnMid()) {
+        sx = x;
+        sy = y;
+      } else {
+        sx = (v && a) ? v.left + (x - a.left) * k : x;
+        sy = (v && a) ? v.bottom + (y - a.bottom) * k : y;
+        /* Eyeline only when she is not locked to furniture. The table frames
+           sitting at ~0.70 and standing at ~0.37; >0.10 off the line gets a
+           vertical nudge. Authored SIZE (scale × zoom) is never touched —
+           shrinking to force feet on screen is not what the APK did, and it
+           made her look tiny. Hit parts are torso (BB_*), not feet. */
+        if (Avatar._headLocal != null && v && v.worldH > 0) {
+          var target = Avatar._asmrOn() ? 0.50 : 0.68;
+          var frac = (sy + Avatar._headLocal * sc - v.bottom) / v.worldH;
+          if (Math.abs(frac - target) > 0.10) sy += (target - frac) * v.worldH;
+        }
       }
       L.skeleton.x = sx;
       L.skeleton.y = sy;
       L.skeleton.scaleX = L.skeleton.scaleY = sc;
+    },
+
+    _seatedOnMid: function () {
+      return Avatar._loadedPosture() === 'posture_sitting' &&
+             Avatar._midBind && Avatar._midBind.name;
+    },
+
+    /* Bind-pose world of the midground seat (sofa_root). Source
+       `_currentSofaRootCompensationOffset` — character follows the sofa
+       when parallax moves it, instead of sitting in empty air. */
+    _cacheMidBind: function (L) {
+      Avatar._midBind = null;
+      if (!L || !L.skeleton) return;
+      try {
+        L.skeleton.setToSetupPose();
+        L.skeleton.updateWorldTransform(spine.Physics.none);
+        var b = L.skeleton.findBone('sofa_root');
+        if (b) Avatar._midBind = { name: 'sofa_root', x: b.worldX, y: b.worldY };
+      } catch (e) { Avatar._midBind = null; }
     },
 
     screenToWorld: function (cssX, cssY) {
@@ -651,7 +824,14 @@
     /* ------------------------------------------------------- asset loading */
     _loadSpine: function (L, skelUrl, atlasUrl, done) {
       var a = L.assets;
+      if (L === Avatar.avatar) {
+        Avatar._disposeVariantTex(L);
+        L._atlas = null;
+        L._atlasUrl = '';
+        L._atlasBaseTex = null;
+      }
       a.removeAll();
+      a.errors = {};
       a.loadBinary(skelUrl);
       a.loadTextureAtlas(atlasUrl);
       var tries = 0;
@@ -671,7 +851,12 @@
             /* new skeleton ⇒ its painted plate box has to be re-measured */
             L._cover = null;
             L._coverDone = false;
-            if (L === Avatar.avatar) Avatar._skelHash = String(data.hash || '').toLowerCase();
+            if (L === Avatar.avatar) {
+              Avatar._skelHash = String(data.hash || '').toLowerCase();
+              L._atlas = atlas;
+              L._atlasUrl = atlasUrl;
+              L._atlasBaseTex = null;
+            }
             L.ready = true;
             done(null);
           } catch (e) { done(e); }
@@ -728,6 +913,7 @@
             Avatar.setEmotion(Avatar._emotion, Avatar._attitude, true);
             Avatar._playWind();
             Avatar.resize();
+            if (Avatar._cleanVariant(Avatar._atlasVariant)) Avatar._applyAtlasVariant();
             cb && cb(null);
           });
         }).catch(function (e) {
@@ -765,6 +951,7 @@
                 tr.mixDuration = 0;
               }
               Avatar._applySceneConstraints(L, cfg);
+              Avatar._cacheMidBind(L);
               Avatar.resize();
               var outfit = (window.Config && Config.section('state').skin) || 'crf_skn_002_0001';
               Avatar.loadSkin(outfit, cb);

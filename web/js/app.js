@@ -872,6 +872,7 @@
         },
         onOk: function () {
           App.history = [];
+          if (window.NsfwIntent) NsfwIntent.reset();
           document.getElementById('bubble').classList.add('hidden');
           App.showView('talk');
           App.greet();
@@ -924,6 +925,7 @@
           var cost = Game.turnCost(st.mode, st.style);
           Game.spend(cost, 'talk');
 
+          if (window.NsfwIntent) NsfwIntent.onTurn(text, reply);
           Avatar.setEmotion(reply.emotion, reply.attitude);
           App.typeBubble(reply.text, function () {
             App.speakThen(reply.text, reply.emotion);

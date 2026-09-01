@@ -155,6 +155,7 @@
     if (rpgContext) L.push('<必要なら最後の行に <state>{...}</state>');
     L.push('- <emotion> は次のいずれか：' + EMOTIONS.join(' '));
     L.push('- <attitude> は次のいずれか：' + ATTITUDES.join(' '));
+    L.push('- 同じタグ行に nsfw:on / nsfw:off を付けてよい。プレイヤーが今ターン明確に色情・脱衣を求めているときだけ on、平常の着衣に戻すよう求めたときだけ off。判断できなければ書かない。');
     L.push('- タグ行以外に余計な行を出さないこと。');
     return L.join('\n');
   }
@@ -179,23 +180,27 @@
   }
 
   function parseTaggedReply(text) {
-    var emotion = 'neutral', attitude = 'agree', body = (text || '').trim();
+    var emotion = 'neutral', attitude = 'agree', nsfw = null, body = (text || '').trim();
     if (body.charAt(0) === '[') {
       var end = body.indexOf(']');
       if (end !== -1) {
         var tag = body.slice(1, end);
         body = body.slice(end + 1).trim();
-        tag.replace('|', ' ').split(/\s+/).forEach(function (part) {
+        tag.replace(/\|/g, ' ').split(/\s+/).forEach(function (part) {
           var i = part.indexOf(':');
           if (i === -1) return;
           var k = part.slice(0, i).trim(), v = part.slice(i + 1).trim().toLowerCase();
           if (k === 'emotion' && EMOTIONS.indexOf(v) !== -1) emotion = v;
           else if (k === 'attitude' && ATTITUDES.indexOf(v) !== -1) attitude = v;
+          else if (k === 'nsfw') {
+            if (v === 'on' || v === '1' || v === 'true') nsfw = true;
+            else if (v === 'off' || v === '0' || v === 'false') nsfw = false;
+          }
         });
       }
     }
     var ex = extractState(body);
-    return { emotion: emotion, attitude: attitude, text: ex.text, state: ex.state };
+    return { emotion: emotion, attitude: attitude, text: ex.text, state: ex.state, nsfw: nsfw };
   }
 
   function upstreamUrl(baseUrl, path) {

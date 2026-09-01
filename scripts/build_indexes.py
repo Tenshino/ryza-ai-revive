@@ -76,22 +76,60 @@ print("     -> %d stages x %s" % (len(SCENES), sorted(
     {t for v in SCENES.values() for t in v})))
 
 # -------------------------------------------------------------------- skins
-SKINS = []
-kroot = os.path.join(ASSETS, "spine", "crf_chr_002")
-if os.path.isdir(kroot):
-    for d in sorted(os.listdir(kroot)):
-        full = os.path.join(kroot, d)
-        if not os.path.isdir(full):
+def discover_variants(full, sid, chr_id):
+    """Extra atlas pages next to a skin: `{sid}nsfw.png` → variants.nsfw.
+
+    Any future costume drops `{id}{tag}.png` (optional `_`/`-` before tag)
+    in its own folder and the runtime picks it up — no code change.
+    """
+    variants = {}
+    try:
+        names = os.listdir(full)
+    except OSError:
+        return variants
+    for fn in names:
+        if not fn.lower().endswith(".png"):
             continue
-        SKINS.append({
-            "id": d,
-            "hasSpine": os.path.isfile(os.path.join(full, d + ".skel")),
-            "preview": "assets/images/skins/%s.png" % d
-            if os.path.isfile(os.path.join(ASSETS, "images", "skins", d + ".png")) else None,
-            "skel": "assets/spine/crf_chr_002/%s/%s.skel" % (d, d),
-            "atlas": "assets/spine/crf_chr_002/%s/%s.atlas" % (d, d),
-            "gesture": "assets/spine/crf_chr_002/%s/%s_gesture.json" % (d, d),
-        })
+        stem = fn[:-4]
+        if stem == sid or not stem.startswith(sid):
+            continue
+        tag = stem[len(sid):]
+        if tag[:1] in "_-":
+            tag = tag[1:]
+        tag = tag.strip().lower()
+        if not tag or not re.match(r"^[a-z0-9_]{1,32}$", tag):
+            continue
+        variants[tag] = "assets/spine/%s/%s/%s" % (chr_id, sid, fn)
+    return variants
+
+
+SKINS = []
+spine_root = os.path.join(ASSETS, "spine")
+if os.path.isdir(spine_root):
+    for chr_id in sorted(os.listdir(spine_root)):
+        if not chr_id.startswith("crf_chr_"):
+            continue
+        kroot = os.path.join(spine_root, chr_id)
+        if not os.path.isdir(kroot):
+            continue
+        for d in sorted(os.listdir(kroot)):
+            full = os.path.join(kroot, d)
+            if not os.path.isdir(full):
+                continue
+            entry = {
+                "id": d,
+                "chr": chr_id,
+                "hasSpine": os.path.isfile(os.path.join(full, d + ".skel")),
+                "preview": "assets/images/skins/%s.png" % d
+                if os.path.isfile(os.path.join(ASSETS, "images", "skins", d + ".png")) else None,
+                "skel": "assets/spine/%s/%s/%s.skel" % (chr_id, d, d),
+                "atlas": "assets/spine/%s/%s/%s.atlas" % (chr_id, d, d),
+                "gesture": "assets/spine/%s/%s/%s_gesture.json" % (chr_id, d, d),
+            }
+            variants = discover_variants(full, d, chr_id)
+            if variants:
+                entry["variants"] = variants
+            SKINS.append(entry)
 # Preview-only outfits that ship as images without a skeleton in the APK.
 seen = {s["id"] for s in SKINS}
 skindir = os.path.join(ASSETS, "images", "skins")

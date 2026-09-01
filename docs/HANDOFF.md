@@ -2,8 +2,19 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
-【当前状态（2026-09-06）】
-姿态/相机/表情补全已完成（AUDIT §9，不要退回去）：默认开局**站姿 `_99`**
+【当前状态（2026-09-07）】
+NSFW 图集变体（AUDIT §10.1）+ **按源表取景、坐姿锁中景**（§10.2，不要退回去）：
+上一轮把角色缩小去「塞全身」是错的——源 APK 用 `posture_camera.json` 的
+scale/offset/zoom，点击部位是 BB_head/breast/weast/arm/body（上半身），
+本来就不是整脚入画。缩小还会把塔奥家门前的坐姿从沙发上抬走。
+现已撤回 `_fitFullBody`；坐姿若场景有 `sofa_root`，世界坐标跟着沙发
+（源 `chara_root_offset` / `_currentSofaRootCompensationOffset`），不再经相机重映射 Y。
+ASMR zoom **就是源表** sitting 3.5 / standing 2.5（相对底栏 1.93 / 1.45），
+没有再额外放大；`asmr.cameraPanY`≈3200 不能当本套正交中心用（会瞄到天上），
+仍只做朝脸的 pan 重映射。
+源 APK 换装是整包 skel+atlas（`features/skin` / `switchSkin`），没有「同一骨架只换 PNG」。
+本轮 NSFW 是图集页变体：`{pageBase}{variant}.png`，不写死服装 id。
+此前（09-06）：姿态/相机/表情补全（AUDIT §9，不要退回去）：默认开局**站姿 `_99`**
 （旧存档一次性迁移 `state.postureMigrated`）；姿态 chip 改**动作语义**（站着显示
 「坐下」）；`midgroundPostures` 不再当皮肤约束（196/200 组场景只列 sitting），
 只决定哪里出切换 chip；黑边与切姿态背景跳位由**板内钳制相机**根除
@@ -192,6 +203,7 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
   node scripts/game_logic_regression.js   # 数值/任务链 1→8 通关/每日登录/reducer 钳位
   node scripts/boot_smoke.js              # App.init 用真实 index.html id 集全链路
   node scripts/expression_coverage.js     # 表情/动作可达性 + 引用解析全量核对
+  node scripts/nsfw_intent_regression.js  # NSFW 意图滞回 + 图集变体路径约定
   python scripts/privacy_check.py web     # 打包前隐私自查（构建脚本已自动跑）
 截图走查（UI 改动必做）：外部工具在 D:\agent\temp\ryza-shot（puppeteer-core + 本机 Edge），
   node shot.js title talk quest daily world people settings inv status faint tap
@@ -295,6 +307,10 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
     - `_coverFor` 取**最大** quad 而不是并集（并集把 `floor` 拉进来，假装空带被画了）；
       量时忽略 `slot.color.a`（淡入中途会判空）；`RegionAttachment` 的四角缓存
       首帧前可能是空的，那个「尺寸×骨骼矩阵」的兜底框别删。
+    - **不要**再做「非 ASMR 全身拟合」：源机位本来就裁脚、BB_* 热区在躯干。
+      把人缩小会让模型显得过小，还会把坐姿从沙发上抬到空气里。
+    - 坐姿有 `sofa_root` 时用世界坐标（不要走 `k` 映射）；ASMR zoom 用源表
+      3.5/2.5，不要拿 `cameraPanY≈3200` 当正交中心。
 17. 【模式化 TTS + 气泡生命周期（AUDIT §8，2026-09-05）不要退回去】
     - TTS 语音指导= `ttsStyleFor(mode)` 两层：`tts.styleHint`（基底，用户可改）
       + `MODE_TTS[mode]`（模式层，`tts.modeHints` 可覆盖）。别退回「所有模式

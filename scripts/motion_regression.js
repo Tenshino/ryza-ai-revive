@@ -169,7 +169,8 @@ function resetAvatar(skin) {
     _blinkMode: 'blink', _closedDur: 0, _closedHold: 0, _tension: 0,
     _rollSm: 0, _exprBand: '',
     _lookMul: 1, _lipOpen: 0, _lipHold: 0, _lookHist: [], _lookClock: 0,
-    _faceRef: null, _exitMixCache: null
+    _faceRef: null, _exitMixCache: null,
+    _midBind: null, _atlasVariant: 'default', _variantMiss: {}
   });
   Avatar._look = { yaw: 0, pitch: 0, roll: 0, ty: 0, tp: 0, tr: 0,
                    hold: 2, trans: 0.8, t: 0 };
@@ -796,6 +797,8 @@ console.log('\n' + passCount + ' skins + 5 invariant checks passed.');
     Config.set('state.posture', posturePref);
     Config.set('state.mode', 'chat');
     Avatar._loadedSkelId = skinId;
+    Avatar._applySceneConstraints(S, S.sceneConfig);
+    Avatar._cacheMidBind(S);
     Avatar._measureHeadLocal();
     Avatar.resize();
     return { L: L, S: S };
@@ -825,11 +828,27 @@ console.log('\n' + passCount + ' skins + 5 invariant checks passed.');
   /* 2. hideout: the background window must not depend on the posture, and
         must stay inside the painted plate (no black bars) */
   for (const [w, h] of [[360, 640], [420, 860], [900, 420], [1000, 700], [340, 560]]) {
-    const sit = setup(HIDEOUT, 'posture_sitting', 'crf_skn_002_0001_01', w, h);
-    const sitView = view(), sitHead = Avatar.avatar.skeleton.findBone('head').worldY;
+    setup(HIDEOUT, 'posture_sitting', 'crf_skn_002_0001_01', w, h);
+    const sitView = view();
+    const sitY = Avatar.avatar.skeleton.y;
+    const sitCam = Avatar._camParams(Avatar._loadedPosture());
+    const root = Avatar.scene.skeleton.findBone('chara_root');
+    let seatY = sitCam.offsetY + (root ? root.worldY : 0);
+    if (Avatar._midBind) {
+      const sofa = Avatar.scene.skeleton.findBone(Avatar._midBind.name);
+      if (sofa) seatY += sofa.worldY - Avatar._midBind.y;
+    }
+    if (Math.abs(sitY - seatY) > 8) {
+      fail(`sitting left the sofa at ${w}x${h}: y=${sitY.toFixed(1)} seat=${seatY.toFixed(1)}`);
+    }
+    const sitSc = sitCam.scale * (sitView.h / sitCam.worldH);
+    if (Math.abs(Avatar.avatar.skeleton.scaleX - sitSc) > 1e-4) {
+      fail(`sitting scale was shrunk at ${w}x${h}: ` +
+           Avatar.avatar.skeleton.scaleX.toFixed(4) + ' vs ' + sitSc.toFixed(4));
+    }
     const sitCov = Avatar._coverFor(Avatar.scene);
     setup(HIDEOUT, 'posture_standing', 'crf_skn_002_0001_99', w, h);
-    const stdView = view(), stdHead = Avatar.avatar.skeleton.findBone('head').worldY;
+    const stdView = view();
     for (const k of ['b', 't', 'l', 'r']) {
       if (Math.abs(sitView[k] - stdView[k]) > 0.5) {
         fail(`background window moves on posture toggle at ${w}x${h}: ${k} ` +
@@ -841,14 +860,8 @@ console.log('\n' + passCount + ' skins + 5 invariant checks passed.');
       fail(`camera escapes the painted plate at ${w}x${h}: view ` +
            JSON.stringify(sitView) + ' plate ' + JSON.stringify(sitCov));
     }
-    /* eyelines must agree, or the model slides when the posture changes */
-    const frac = y => (y - sitView.b) / sitView.h;
-    if (Math.abs(frac(sitHead) - frac(stdHead)) > 0.03) {
-      fail(`eyeline jumps on posture toggle at ${w}x${h}: ` +
-           frac(sitHead).toFixed(3) + ' vs ' + frac(stdHead).toFixed(3));
-    }
   }
-  console.log('OK   隠れ家前: plate-fitted camera, posture-independent window, matched eyeline (5 aspects)');
+  console.log('OK   隠れ家前: plate-fitted camera, posture-independent window, sitting stays on sofa');
 
   /* 3. leaving the stage must not carry the sitting skin or its scale */
   const away = setup(HOME, 'posture_sitting', 'crf_skn_002_0001_01', 420, 860);
@@ -903,4 +916,22 @@ console.log('\n' + passCount + ' skins + 5 invariant checks passed.');
     }
   }
   console.log('OK   ' + plates + ' scene × viewport × posture camera solves all stay inside the plate');
+
+  /* 6. atlas variant URLs are per-costume, not a hardcoded 0001_99 */
+  Avatar._loadedSkelId = 'crf_skn_002_0002_99';
+  Avatar.skinsIndex = [{ id: 'crf_skn_002_0002_99', variants: { nsfw: 'assets/custom/x.png' } }];
+  const ov = Avatar.variantPageUrls('assets/spine/crf_chr_002/crf_skn_002_0002_99/a.atlas',
+                                    'crf_skn_002_0002_99.png', 'nsfw');
+  if (ov[0] !== 'assets/custom/x.png') fail('variants override should win: ' + ov[0]);
+  Avatar.skinsIndex = [];
+  const conv = Avatar.variantPageUrls(
+    'assets/spine/crf_chr_002/crf_skn_002_0003_01/crf_skn_002_0003_01.atlas',
+    'crf_skn_002_0003_01.png', 'nsfw');
+  if (conv[0].indexOf('crf_skn_002_0003_01nsfw.png') < 0) {
+    fail('future sitting 0003 should resolve sibling nsfw page: ' + conv[0]);
+  }
+  if (Avatar.variantPageUrls('a.atlas', 'a.png', '../x').length) {
+    fail('path-like variant tags must be rejected');
+  }
+  console.log('OK   atlas variant URLs are costume-generic');
 })();
