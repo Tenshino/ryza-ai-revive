@@ -1,34 +1,15 @@
-/* Origin-independent save file for the Electron shell.
-
-   Chromium keys localStorage by origin, so http://127.0.0.1:8765 and
-   :54321 are different worlds. The HTTP port in this shell is only a
-   transport (and may be ephemeral). Progress lives in a JSON file under
-   userData, injected into index.html before any page script runs. */
+/* Desktop save file. The window origin is ryza://app/ (stable, no port).
+   Chromium localStorage is a cache: this JSON under userData is the copy
+   that survives upgrades. Browser debug via serve.py does not use this. */
 'use strict';
 
 const fs = require('fs');
 const path = require('path');
 
 const NAME = 'ryza-web-storage.json';
-const READY = 'ryza-web-storage.ready';
 
 function storePath(userData) {
   return path.join(userData, NAME);
-}
-
-function readyPath(userData) {
-  return path.join(userData, READY);
-}
-
-function harvestDone(userData) {
-  try {
-    if (fs.existsSync(readyPath(userData))) return true;
-  } catch (e) {}
-  return hasSnapshot(storePath(userData));
-}
-
-function markHarvestDone(userData) {
-  try { fs.writeFileSync(readyPath(userData), '1'); } catch (e) {}
 }
 
 function load(file) {
@@ -81,7 +62,6 @@ function flush() {
   }
 }
 
-/* Safe to embed in <script>: JSON.stringify does not escape '<' by itself. */
 function embedJson(obj) {
   return JSON.stringify(obj || {})
     .replace(/</g, '\\u003c')
@@ -111,21 +91,6 @@ function bootScript(store) {
     '})();</script>';
 }
 
-/* Served once on 8765 to copy Chromium's old origin-scoped localStorage
-   into the userData JSON. Must NOT clear storage. */
-function harvestHtml() {
-  return '<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>' +
-    '<script>(function(){var o={},i,k;for(i=0;i<localStorage.length;i++){' +
-      'k=localStorage.key(i);if(k)o[k]=localStorage.getItem(k);}' +
-      'if(window.ryzaShell&&window.ryzaShell.saveWebStorageSync)' +
-        'window.ryzaShell.saveWebStorageSync(o);' +
-    '})();</script></body></html>';
-}
-
-function hasSnapshot(file) {
-  return Object.keys(load(file)).length > 0;
-}
-
 function inject(html, store) {
   const boot = bootScript(store);
   const i = String(html || '').toLowerCase().indexOf('<head>');
@@ -136,7 +101,5 @@ function inject(html, store) {
 }
 
 module.exports = {
-  NAME, READY, storePath, readyPath, harvestDone, markHarvestDone,
-  load, save, queueSave, flush, embedJson, bootScript, inject,
-  harvestHtml, hasSnapshot
+  NAME, storePath, load, save, queueSave, flush, embedJson, bootScript, inject
 };

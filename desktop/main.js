@@ -1,32 +1,39 @@
 /* Ryza Chat — frameless desktop shell (Electron).
- *
- * Serves web/ over a private 127.0.0.1 HTTP port (Spine/fetch cannot use
- * file://) and exposes POST /_proxy?u=... for CORS-free LLM/TTS calls, the
- * same contract as scripts/serve.py. The window has no title bar or borders
- * (frame:false) so the phone column reads as one object; always-on-top is
- * toggled from the app's own control strip (preload: window.ryzaShell).
- *
- * Privacy: nothing personal is bundled. providers.json is NOT shipped; the
- * user fills keys in Settings. Saves are a JSON file under userData
- * (`ryza-web-storage.json`), not Chromium localStorage-by-origin, so a
- * random HTTP port (or colliding with serve.py on 8765) cannot wipe progress. */
+
+   The page is loaded as ryza://app/ (a privileged custom scheme), the usual
+   Electron way to ship a web UI without file:// limitations and without a
+   loopback HTTP port. fetch('/_proxy?u=https://…') stays same-origin.
+   Debug in a browser still uses scripts/serve.py on 8765; this process
+   never binds that port.
+
+   Progress is %AppData%/RyzaChat/ryza-web-storage.json (injected into
+   index.html before page scripts). Chromium localStorage is only a cache. */
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
-const http = require('http');
-const https = require('https');
+const { app, BrowserWindow, ipcMain, shell, protocol, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
-const { URL } = require('url');
+const { pathToFileURL } = require('url');
 const webStorage = require('./web-storage');
 
-/* web/ lives in resources/web when packaged, ../web in a dev checkout. */
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'ryza',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+    stream: true,
+    bypassCSP: true
+  }
+}]);
+
 function webRoot() {
   const candidates = app.isPackaged
     ? [path.join(process.resourcesPath, 'web')]
     : [path.join(__dirname, '..', 'web'), path.join(app.getAppPath(), '..', 'web')];
   for (const c of candidates) {
-    if (fs.existsSync(path.join(c, 'index.html'))) return c;
+    if (fs.existsSync(path.join(c, 'index.html'))) return path.resolve(c);
   }
   throw new Error('web/index.html not found');
 }
@@ -44,205 +51,90 @@ const MIME = {
   '.woff': 'font/woff', '.woff2': 'font/woff2'
 };
 
-function serveStatic(root, req, res) {
-  let pathname;
-  try { pathname = decodeURIComponent(new URL(req.url, 'http://127.0.0.1').pathname); }
-  catch (e) { res.writeHead(400); res.end('bad url'); return; }
-  if (pathname === '/') pathname = '/index.html';
-  const file = path.normalize(path.join(root, pathname));
-  if (!file.startsWith(root)) { res.writeHead(403); res.end('forbidden'); return; }
-  fs.stat(file, (err, st) => {
-    if (err || !st.isFile()) { res.writeHead(404); res.end('not found'); return; }
-    const ext = path.extname(file).toLowerCase();
-    /* index.html: inject the userData snapshot in <head> so config.js
-       reads progress even when this process bound an ephemeral port. */
-    if (ext === '.html' && path.basename(file) === 'index.html') {
-      let html = fs.readFileSync(file, 'utf8');
-      html = webStorage.inject(html, webStorage.load(storeFile));
-      const buf = Buffer.from(html, 'utf8');
-      res.writeHead(200, {
-        'Content-Type': MIME['.html'],
-        'Content-Length': buf.length,
-        'Cache-Control': 'no-store'
-      });
-      if (req.method === 'HEAD') { res.end(); return; }
-      res.end(buf);
-      return;
-    }
-    res.writeHead(200, {
-      'Content-Type': MIME[ext] || 'application/octet-stream',
-      'Content-Length': st.size,
-      'Cache-Control': ext === '.html' || ext === '.json' ? 'no-store' : 'public, max-age=3600'
-    });
-    if (req.method === 'HEAD') { res.end(); return; }
-    fs.createReadStream(file).pipe(res);
-  });
-}
-
-/* GET /_proxy?u=https://... — forwards a GET (Qwen TTS audio URLs). */
-function handleProxyGet(rawUrl, res) {
-  let target = '';
-  try { target = new URL(rawUrl, 'http://127.0.0.1').searchParams.get('u') || ''; } catch (e) {}
-  if (!target.startsWith('https://')) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'proxy target must be https' } }));
-    return;
+function resolveUnder(root, pathname) {
+  const rel = decodeURIComponent(pathname || '/').replace(/^\/+/, '').replace(/\\/g, '/');
+  if (!rel || rel.split('/').includes('..')) {
+    return path.join(root, 'index.html');
   }
-  https.get(target, (up) => {
-    const out = [];
-    up.on('data', (c) => out.push(c));
-    up.on('end', () => {
-      const buf = Buffer.concat(out);
-      res.writeHead(up.statusCode || 502, {
-        'Content-Type': up.headers['content-type'] || 'application/octet-stream',
-        'Content-Length': buf.length
-      });
-      res.end(buf);
-    });
-  }).on('error', (e) => {
-    const msg = Buffer.from(JSON.stringify({ error: { message: String(e && e.message || e) } }));
-    res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length });
-    res.end(msg);
+  const file = path.resolve(root, ...rel.split('/').filter(Boolean));
+  if (file !== root && !file.startsWith(root + path.sep)) return null;
+  return file;
+}
+
+function jsonError(status, message) {
+  return new Response(JSON.stringify({ error: { message: message } }), {
+    status: status,
+    headers: { 'content-type': 'application/json' }
   });
 }
 
-/* POST /_proxy?u=https://... — body + auth headers forwarded verbatim. */
-function handleProxy(req, res) {
-  let target;
+async function proxyRequest(request, targetUrl) {
+  if (!String(targetUrl || '').startsWith('https://')) {
+    return jsonError(400, 'proxy target must be https');
+  }
+  const headers = {};
+  const ct = request.headers.get('content-type');
+  const auth = request.headers.get('authorization');
+  const apiKey = request.headers.get('api-key');
+  if (ct) headers['Content-Type'] = ct;
+  if (auth) headers.Authorization = auth;
+  if (apiKey) headers['api-key'] = apiKey;
+  const init = { method: request.method, headers };
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    init.body = Buffer.from(await request.arrayBuffer());
+  }
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), 180000);
+  init.signal = ac.signal;
   try {
-    target = new URL(req.url, 'http://127.0.0.1').searchParams.get('u') || '';
-  } catch (e) { target = ''; }
-  if (!target.startsWith('https://')) {
-    res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: { message: 'proxy target must be https' } }));
-    return;
+    return await net.fetch(targetUrl, init);
+  } catch (e) {
+    return jsonError(502, String(e && e.message || e));
+  } finally {
+    clearTimeout(t);
   }
-  const chunks = [];
-  req.on('data', (c) => chunks.push(c));
-  req.on('end', () => {
-    const body = Buffer.concat(chunks);
-    const up = new URL(target);
-    const headers = {
-      'Content-Type': req.headers['content-type'] || 'application/json',
-      'Content-Length': body.length
-    };
-    if (req.headers['authorization']) headers.Authorization = req.headers.authorization;
-    if (req.headers['api-key']) headers['api-key'] = req.headers['api-key'];
-    const upReq = https.request({
-      method: 'POST', hostname: up.hostname, port: up.port || 443,
-      path: up.pathname + up.search, headers, timeout: 180000
-    }, (upRes) => {
-      const out = [];
-      upRes.on('data', (c) => out.push(c));
-      upRes.on('end', () => {
-        const buf = Buffer.concat(out);
-        res.writeHead(upRes.statusCode || 502, {
-          'Content-Type': upRes.headers['content-type'] || 'application/json',
-          'Content-Length': buf.length
-        });
-        res.end(buf);
-      });
-    });
-    upReq.on('error', (e) => {
-      const msg = Buffer.from(JSON.stringify({ error: { message: String(e && e.message || e) } }));
-      res.writeHead(502, { 'Content-Type': 'application/json', 'Content-Length': msg.length });
-      res.end(msg);
-    });
-    upReq.on('timeout', () => upReq.destroy(new Error('upstream timeout')));
-    upReq.end(body);
-  });
 }
 
-function startServer(root) {
-  return new Promise((resolve, reject) => {
-    const server = http.createServer((req, res) => {
-      res.setHeader('Access-Control-Allow-Origin', '*');
-      if (req.method === 'OPTIONS') {
-        res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, api-key');
-        res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, OPTIONS');
-        res.writeHead(204); res.end(); return;
-      }
-      if (req.method === 'POST' && req.url.startsWith('/_proxy')) { handleProxy(req, res); return; }
-      if (req.method === 'GET' && req.url.startsWith('/_proxy')) { handleProxyGet(req.url, res); return; }
-      if (req.method === 'GET' || req.method === 'HEAD') { serveStatic(root, req, res); return; }
-      res.writeHead(405); res.end();
+async function handleRyza(root, request) {
+  let u;
+  try { u = new URL(request.url); } catch (e) { return jsonError(400, 'bad url'); }
+  if (u.pathname === '/_proxy' || u.pathname.startsWith('/_proxy')) {
+    return proxyRequest(request, u.searchParams.get('u') || '');
+  }
+  let pathname = u.pathname;
+  if (pathname === '/' || pathname === '') pathname = '/index.html';
+  const file = resolveUnder(root, pathname);
+  if (!file) return new Response('forbidden', { status: 403 });
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+    return new Response('not found', { status: 404 });
+  }
+  const ext = path.extname(file).toLowerCase();
+  if (path.basename(file) === 'index.html') {
+    let html = fs.readFileSync(file, 'utf8');
+    html = webStorage.inject(html, webStorage.load(storeFile));
+    return new Response(html, {
+      headers: { 'content-type': MIME['.html'], 'cache-control': 'no-store' }
     });
-    let settled = false;
-    server.once('listening', () => { settled = true; resolve(server); });
-    server.on('error', (e) => {
-      if (settled) return;
-      settled = true;
-      reject(e);
-    });
-    /* Ephemeral port — never steal serve.py's 8765. Saves do not use this
-       origin; they go to userData/ryza-web-storage.json. */
-    server.listen(0, '127.0.0.1');
-  });
+  }
+  const type = MIME[ext] || 'application/octet-stream';
+  const resp = await net.fetch(pathToFileURL(file).href);
+  const headers = new Headers(resp.headers);
+  headers.set('content-type', type);
+  if (ext === '.json') headers.set('cache-control', 'no-store');
+  return new Response(resp.body, { status: resp.status, headers: headers });
 }
 
 let win = null;
 let topmost = false;
 let storeFile = '';
 
-function harvestLegacy(userData) {
-  if (webStorage.harvestDone(userData)) return Promise.resolve();
-  return new Promise((resolve) => {
-    const finish = () => {
-      webStorage.markHarvestDone(userData);
-      resolve();
-    };
-    const server = http.createServer((req, res) => {
-      const html = webStorage.harvestHtml();
-      const buf = Buffer.from(html, 'utf8');
-      res.writeHead(200, {
-        'Content-Type': 'text/html; charset=utf-8',
-        'Content-Length': buf.length,
-        'Cache-Control': 'no-store'
-      });
-      res.end(buf);
-    });
-    const abort = () => {
-      try { server.close(); } catch (e) {}
-      resolve();
-    };
-    server.once('error', abort);
-    server.listen(8765, '127.0.0.1', () => {
-      const hidden = new BrowserWindow({
-        show: false,
-        width: 100,
-        height: 100,
-        webPreferences: {
-          preload: path.join(__dirname, 'preload.js'),
-          contextIsolation: true,
-          nodeIntegration: false,
-          spellcheck: false
-        }
-      });
-      const t = setTimeout(() => { try { hidden.destroy(); } catch (e) {} abort(); }, 4000);
-      hidden.webContents.once('did-finish-load', () => {
-        clearTimeout(t);
-        setTimeout(() => {
-          try { hidden.destroy(); } catch (e) {}
-          try { server.close(); } catch (e) {}
-          finish();
-        }, 250);
-      });
-      hidden.loadURL('http://127.0.0.1:8765/').catch(() => {
-        clearTimeout(t);
-        try { hidden.destroy(); } catch (e) {}
-        abort();
-      });
-    });
-  });
-}
-
-function createWindow(url) {
+function createWindow() {
   win = new BrowserWindow({
     width: 420,
     height: 860,
     minWidth: 340,
     minHeight: 560,
-    frame: false,                 /* no title bar, no borders (桌宠美感) */
+    frame: false,
     transparent: false,
     backgroundColor: '#07050a',
     resizable: true,
@@ -256,8 +148,7 @@ function createWindow(url) {
     }
   });
   win.setMenuBarVisibility(false);
-  win.loadURL(url);
-  /* Dev self-check: RYZA_SHOT=path captures the window and exits. */
+  win.loadURL('ryza://app/');
   if (process.env.RYZA_SHOT) {
     const out = process.env.RYZA_SHOT;
     win.webContents.once('did-finish-load', () => {
@@ -271,7 +162,6 @@ function createWindow(url) {
       }, 9000);
     });
   }
-  /* External links leave the shell; app links stay inside. */
   win.webContents.setWindowOpenHandler(({ url: u }) => {
     if (/^https?:/i.test(u)) shell.openExternal(u);
     return { action: 'deny' };
@@ -280,7 +170,6 @@ function createWindow(url) {
   win.on('close', () => { webStorage.flush(); });
 }
 
-/* ------------------------------- IPC (window chrome controls) --------- */
 ipcMain.handle('shell:set-topmost', (_e, on) => {
   topmost = !!on;
   if (win) {
@@ -292,9 +181,7 @@ ipcMain.handle('shell:set-topmost', (_e, on) => {
 ipcMain.handle('shell:is-topmost', () => topmost);
 ipcMain.on('shell:minimize', () => { if (win) win.minimize(); });
 ipcMain.on('shell:close', () => { if (win) win.close(); });
-ipcMain.on('shell:fullscreen', (e, on) => {
-  if (win) win.setFullScreen(!!on);
-});
+ipcMain.on('shell:fullscreen', (_e, on) => { if (win) win.setFullScreen(!!on); });
 ipcMain.on('shell:quit', () => app.quit());
 ipcMain.on('storage:save', (_e, obj) => { webStorage.queueSave(storeFile, obj); });
 ipcMain.on('storage:save-sync', (e, obj) => {
@@ -307,15 +194,13 @@ if (!gotLock) {
   app.quit();
 } else {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-  app.whenReady().then(async () => {
+  app.whenReady().then(() => {
     try {
       storeFile = webStorage.storePath(app.getPath('userData'));
-      await harvestLegacy(app.getPath('userData'));
       const root = webRoot();
-      const server = await startServer(root);
-      const port = server.address().port;
-      createWindow('http://127.0.0.1:' + port + '/');
-      app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow('http://127.0.0.1:' + port + '/'); });
+      protocol.handle('ryza', (request) => handleRyza(root, request));
+      createWindow();
+      app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
     } catch (e) {
       const { dialog } = require('electron');
       dialog.showErrorBox('Ryza Chat', '启动失败：' + (e && e.message || e));

@@ -35,7 +35,7 @@ ASMR zoom **就是源表** sitting 3.5 / standing 2.5（相对底栏 1.93 / 1.45
 `IndexSizeError` 把淡入淡出打死）。新增第四套回归 `expression_coverage.js`；
 `motion_regression.js` 加 50 舞台×3 视口×2 姿态=300 组「相机必须落在绘制框内」断言。
 版本单一来源 `config/version.json` + `scripts/stamp_version.js`；打包双闸门
-`scripts/privacy_check.py`（暂存前 + 成品，命中私人标识直接中止构建）。exe/APK 重出 **1.2.9**（存档改走 userData JSON，不再绑 8765）。
+`scripts/privacy_check.py`（暂存前 + 成品，命中私人标识直接中止构建）。exe/APK 重出 **1.2.9**（`ryza://app/` + userData JSON 存档）。
 此前（09-05）：
 模式化 TTS + 气泡自动淡出已完成（AUDIT §8，不要退回去）：每个聊天模式有自己的
 TTS 语音指导（api.js MODE_TTS 叠加在 tts.styleHint 基底上；tts.modeHints[mode]
@@ -321,10 +321,9 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
       地名表在 `World.promptBlock`，经 `_sceneContext` **每个**对话模式都注入
       （不要再塞进只给 RPG 模式的 `_rpgContext`，否则 ASMR 不知道自己在哪）。
       换景在 `App._applySceneDelta`，不要写进 `Game.applyDelta`。
-    - 桌面壳存档是 `%AppData%\RyzaChat\ryza-web-storage.json`，**不要**再把进度
-      绑在 `http://127.0.0.1:端口` 的 localStorage 上。exe 的 HTTP 口必须是
-      随机空闲端口（8765 只给 `serve.py`）。换端口、和调试服抢口、升级安装，
-      都不能丢这份 JSON。
+    - 桌面壳用自定义协议 `ryza://app/`（Electron 常规做法），**不要**再起
+      `127.0.0.1:端口` 当页面地址。8765 只属于 `scripts/serve.py` 浏览器调试。
+      存档是 `%AppData%\RyzaChat\ryza-web-storage.json`，升级覆盖安装不能丢。
 17. 【模式化 TTS + 气泡生命周期（AUDIT §8，2026-09-05）不要退回去】
     - TTS 语音指导= `ttsStyleFor(mode)` 两层：`tts.styleHint`（基底，用户可改）
       + `MODE_TTS[mode]`（模式层，`tts.modeHints` 可覆盖）。别退回「所有模式

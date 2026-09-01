@@ -1,4 +1,4 @@
-/* Origin-independent Electron save file: inject-before-scripts + JSON embed. */
+/* Desktop save file: inject-before-scripts + JSON embed. */
 'use strict';
 const fs = require('fs');
 const os = require('os');
@@ -23,16 +23,12 @@ ok(evil.indexOf('</script>') === -1, 'embedded JSON cannot break out of <script>
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ryza-store-'));
 const file = webStorage.storePath(dir);
-ok(path.basename(file) === 'ryza-web-storage.json', 'filename is stable across ports');
+ok(path.basename(file) === 'ryza-web-storage.json', 'save file name is stable');
 webStorage.save(file, { 'ryza.settings.v1': '{"lang":"zh"}' });
 const round = webStorage.load(file);
 ok(round['ryza.settings.v1'] === '{"lang":"zh"}', 'save file round-trips');
-ok(webStorage.harvestHtml().indexOf('rawClr') === -1, 'harvest page does not wipe origin storage');
-ok(webStorage.harvestDone(dir), 'existing snapshot counts as harvested');
-const fresh = fs.mkdtempSync(path.join(os.tmpdir(), 'ryza-fresh-'));
-ok(!webStorage.harvestDone(fresh), 'empty profile is not yet harvested');
-webStorage.markHarvestDone(fresh);
-ok(webStorage.harvestDone(fresh), 'ready marker skips a second harvest');
+ok(Object.keys(webStorage.load(path.join(dir, 'missing.json'))).length === 0,
+   'missing file is empty, not throw');
 
 console.log(failures ? '\n' + failures + ' FAILURES' : '\nALL PASS');
 process.exit(failures ? 1 : 0);

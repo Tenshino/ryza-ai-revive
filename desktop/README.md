@@ -6,11 +6,9 @@ The app itself is the static web build in `../web`; this shell only provides:
   phone column reads as one object;
 - **always-on-top toggle**, minimize and close buttons (top-right, shown only
   inside Electron — the browser build never sees `window.ryzaShell`);
-- a private `127.0.0.1` HTTP server for `web/` plus `POST /_proxy`
-  (CORS-free LLM/TTS). The port is **ephemeral** — it is not 8765 (that
-  belongs to `scripts/serve.py`). Progress is **not** stored on that origin;
-  it is `%AppData%\RyzaChat\ryza-web-storage.json` and survives port changes
-  and upgrades (`deleteAppDataOnUninstall: false`).
+- serves `web/` as **`ryza://app/`** (privileged custom scheme — not `file://`,
+  not a loopback port). `GET/POST /_proxy` is handled on that scheme, same
+  contract as `scripts/serve.py` (which stays on 8765 for browser debug only);
 - drag-the-window-by-the-HUD (`-webkit-app-region`), single-instance lock.
 
 ## Run from source

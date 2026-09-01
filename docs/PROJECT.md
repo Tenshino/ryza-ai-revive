@@ -269,10 +269,9 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 `main.js`：`frame:false` 无边框窗（420×860，Win11 自动圆角），
 置顶开关 `setAlwaysOnTop('screen-saver')`，单实例锁，顶栏可拖窗
 （`-webkit-app-region`），外链走系统浏览器。内置 `127.0.0.1` 静态服务 +
-`POST /_proxy`（与 serve.py 同契约）。HTTP 绑 **随机空闲端口**，不占用调试口
-8765。进度写在 `%AppData%\RyzaChat\ryza-web-storage.json`，与端口无关；
-首次启动若 8765 空闲会把旧版 Chromium localStorage 迁进该文件。
-`preload.js` 暴露 `window.ryzaShell`。
+`POST /_proxy`（与 serve.py 同契约，写在自定义协议里）。窗口打开
+`ryza://app/`，**不监听任何本机端口**。进度写在
+`%AppData%\RyzaChat\ryza-web-storage.json`。`preload.js` 暴露 `window.ryzaShell`。
 `RYZA_SHOT=路径 npx electron .` 9 秒后自截图退出（开发自检）。
 打包：electron-builder NSIS —— 正常「添加或删除程序」安装/卸载，
 存档在 `%AppData%\RyzaChat`，卸载默认保留（要清就在应用内抹除或删目录）。
