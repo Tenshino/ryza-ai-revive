@@ -10,5 +10,7 @@ contextBridge.exposeInMainWorld('ryzaShell', {
   minimize: () => ipcRenderer.send('shell:minimize'),
   close: () => ipcRenderer.send('shell:close'),
   setFullscreen: (on) => ipcRenderer.send('shell:fullscreen', !!on),
-  quit: () => ipcRenderer.send('shell:quit')
+  quit: () => ipcRenderer.send('shell:quit'),
+  saveWebStorage: (obj) => ipcRenderer.send('storage:save', obj),
+  saveWebStorageSync: (obj) => ipcRenderer.sendSync('storage:save-sync', obj)
 });

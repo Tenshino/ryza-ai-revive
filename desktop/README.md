@@ -7,7 +7,10 @@ The app itself is the static web build in `../web`; this shell only provides:
 - **always-on-top toggle**, minimize and close buttons (top-right, shown only
   inside Electron — the browser build never sees `window.ryzaShell`);
 - a private `127.0.0.1` HTTP server for `web/` plus `POST /_proxy`
-  (CORS-free LLM/TTS), same contract as `scripts/serve.py`;
+  (CORS-free LLM/TTS). The port is **ephemeral** — it is not 8765 (that
+  belongs to `scripts/serve.py`). Progress is **not** stored on that origin;
+  it is `%AppData%\RyzaChat\ryza-web-storage.json` and survives port changes
+  and upgrades (`deleteAppDataOnUninstall: false`).
 - drag-the-window-by-the-HUD (`-webkit-app-region`), single-instance lock.
 
 ## Run from source
@@ -27,7 +30,7 @@ powershell -File scripts/build_desktop.ps1
 Output: `output/desktop/RyzaChat-Setup-<version>.exe` (NSIS).
 Standard install/uninstall: the installer creates Start-Menu/desktop shortcuts
 and an entry in "Apps & features"; uninstalling removes the program but keeps
-save data in `%AppData%\RyzaChat` (localStorage: settings, conversations,
+save data in `%AppData%\RyzaChat\ryza-web-storage.json` (settings, conversations,
 quests) — delete that folder to wipe everything, or use Settings →
 "抹除全部本地数据" inside the app.
 

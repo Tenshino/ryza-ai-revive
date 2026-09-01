@@ -7,8 +7,9 @@
  * toggled from the app's own control strip (preload: window.ryzaShell).
  *
  * Privacy: nothing personal is bundled. providers.json is NOT shipped; the
- * user fills keys in Settings (localStorage under userData, survives
- * uninstall unless the user deletes it). */
+ * user fills keys in Settings. Saves are a JSON file under userData
+ * (`ryza-web-storage.json`), not Chromium localStorage-by-origin, so a
+ * random HTTP port (or colliding with serve.py on 8765) cannot wipe progress. */
 'use strict';
 
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
@@ -17,8 +18,7 @@ const https = require('https');
 const fs = require('fs');
 const path = require('path');
 const { URL } = require('url');
-
-const PORT_PREFERENCE = 8765;
+const webStorage = require('./web-storage');
 
 /* web/ lives in resources/web when packaged, ../web in a dev checkout. */
 function webRoot() {
@@ -54,6 +54,21 @@ function serveStatic(root, req, res) {
   fs.stat(file, (err, st) => {
     if (err || !st.isFile()) { res.writeHead(404); res.end('not found'); return; }
     const ext = path.extname(file).toLowerCase();
+    /* index.html: inject the userData snapshot in <head> so config.js
+       reads progress even when this process bound an ephemeral port. */
+    if (ext === '.html' && path.basename(file) === 'index.html') {
+      let html = fs.readFileSync(file, 'utf8');
+      html = webStorage.inject(html, webStorage.load(storeFile));
+      const buf = Buffer.from(html, 'utf8');
+      res.writeHead(200, {
+        'Content-Type': MIME['.html'],
+        'Content-Length': buf.length,
+        'Cache-Control': 'no-store'
+      });
+      if (req.method === 'HEAD') { res.end(); return; }
+      res.end(buf);
+      return;
+    }
     res.writeHead(200, {
       'Content-Type': MIME[ext] || 'application/octet-stream',
       'Content-Length': st.size,
@@ -154,21 +169,72 @@ function startServer(root) {
     });
     let settled = false;
     server.once('listening', () => { settled = true; resolve(server); });
-    server.on('error', () => {
+    server.on('error', (e) => {
       if (settled) return;
-      /* preferred port busy — ephemeral fallback, once */
       settled = true;
-      server.removeAllListeners('error');
-      server.once('error', reject);
-      server.once('listening', () => resolve(server));
-      server.listen(0, '127.0.0.1');
+      reject(e);
     });
-    server.listen(PORT_PREFERENCE, '127.0.0.1');
+    /* Ephemeral port — never steal serve.py's 8765. Saves do not use this
+       origin; they go to userData/ryza-web-storage.json. */
+    server.listen(0, '127.0.0.1');
   });
 }
 
 let win = null;
 let topmost = false;
+let storeFile = '';
+
+function harvestLegacy(userData) {
+  if (webStorage.harvestDone(userData)) return Promise.resolve();
+  return new Promise((resolve) => {
+    const finish = () => {
+      webStorage.markHarvestDone(userData);
+      resolve();
+    };
+    const server = http.createServer((req, res) => {
+      const html = webStorage.harvestHtml();
+      const buf = Buffer.from(html, 'utf8');
+      res.writeHead(200, {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Content-Length': buf.length,
+        'Cache-Control': 'no-store'
+      });
+      res.end(buf);
+    });
+    const abort = () => {
+      try { server.close(); } catch (e) {}
+      resolve();
+    };
+    server.once('error', abort);
+    server.listen(8765, '127.0.0.1', () => {
+      const hidden = new BrowserWindow({
+        show: false,
+        width: 100,
+        height: 100,
+        webPreferences: {
+          preload: path.join(__dirname, 'preload.js'),
+          contextIsolation: true,
+          nodeIntegration: false,
+          spellcheck: false
+        }
+      });
+      const t = setTimeout(() => { try { hidden.destroy(); } catch (e) {} abort(); }, 4000);
+      hidden.webContents.once('did-finish-load', () => {
+        clearTimeout(t);
+        setTimeout(() => {
+          try { hidden.destroy(); } catch (e) {}
+          try { server.close(); } catch (e) {}
+          finish();
+        }, 250);
+      });
+      hidden.loadURL('http://127.0.0.1:8765/').catch(() => {
+        clearTimeout(t);
+        try { hidden.destroy(); } catch (e) {}
+        abort();
+      });
+    });
+  });
+}
 
 function createWindow(url) {
   win = new BrowserWindow({
@@ -211,6 +277,7 @@ function createWindow(url) {
     return { action: 'deny' };
   });
   win.on('closed', () => { win = null; });
+  win.on('close', () => { webStorage.flush(); });
 }
 
 /* ------------------------------- IPC (window chrome controls) --------- */
@@ -229,6 +296,11 @@ ipcMain.on('shell:fullscreen', (e, on) => {
   if (win) win.setFullScreen(!!on);
 });
 ipcMain.on('shell:quit', () => app.quit());
+ipcMain.on('storage:save', (_e, obj) => { webStorage.queueSave(storeFile, obj); });
+ipcMain.on('storage:save-sync', (e, obj) => {
+  webStorage.save(storeFile, obj);
+  e.returnValue = true;
+});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -237,6 +309,8 @@ if (!gotLock) {
   app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
   app.whenReady().then(async () => {
     try {
+      storeFile = webStorage.storePath(app.getPath('userData'));
+      await harvestLegacy(app.getPath('userData'));
       const root = webRoot();
       const server = await startServer(root);
       const port = server.address().port;
@@ -249,4 +323,5 @@ if (!gotLock) {
     }
   });
   app.on('window-all-closed', () => app.quit());
+  app.on('before-quit', () => { webStorage.flush(); });
 }

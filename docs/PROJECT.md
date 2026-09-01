@@ -27,8 +27,8 @@ NSFW 按当前服装目录 `{id}{variant}.png` 换图集页，不写死 id。
 版本单一来源 `config/version.json` + `scripts/stamp_version.js`；
 打包隐私闸门 `scripts/privacy_check.py`（命中私人标识直接中止构建）。
 桌面壳是 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK
-统一重出 **1.2.8**（`output/desktop/RyzaChat-Setup-1.2.8.exe`、
-`output/android/RyzaChat-1.2.8.apk`，两包出厂前都过了隐私闸门；
+统一重出 **1.2.9**（`output/desktop/RyzaChat-Setup-1.2.9.exe`、
+`output/android/RyzaChat-1.2.9.apk`，两包出厂前都过了隐私闸门；
 win-unpacked 自检截图=标题页正常渲染）。
 此前（09-05）：模式化 TTS + 气泡自动淡出（AUDIT §8）；（09-04）全视口布局 +
 桌面等比缩放（§7）；再前：点击交互精修（§3.9）、RPG 层按源数据补全（§6）。
@@ -269,7 +269,10 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 `main.js`：`frame:false` 无边框窗（420×860，Win11 自动圆角），
 置顶开关 `setAlwaysOnTop('screen-saver')`，单实例锁，顶栏可拖窗
 （`-webkit-app-region`），外链走系统浏览器。内置 `127.0.0.1` 静态服务 +
-`POST /_proxy`（与 serve.py 同契约）。`preload.js` 暴露 `window.ryzaShell`。
+`POST /_proxy`（与 serve.py 同契约）。HTTP 绑 **随机空闲端口**，不占用调试口
+8765。进度写在 `%AppData%\RyzaChat\ryza-web-storage.json`，与端口无关；
+首次启动若 8765 空闲会把旧版 Chromium localStorage 迁进该文件。
+`preload.js` 暴露 `window.ryzaShell`。
 `RYZA_SHOT=路径 npx electron .` 9 秒后自截图退出（开发自检）。
 打包：electron-builder NSIS —— 正常「添加或删除程序」安装/卸载，
 存档在 `%AppData%\RyzaChat`，卸载默认保留（要清就在应用内抹除或删目录）。
@@ -313,7 +316,7 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 | `chara` + `save_slot` | 角色卡、存档槽 | 设定表单 + 3 槽（含游戏态） |
 | `skin` | 5 预览、2 可穿、veil | 有；3 套无骨骼只有预览图，作弊也穿不了（数据缺失） |
 | `i18n` | UI 多语言 | 7 语（新系统全量 zh/ja/en） |
-| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.8）**，见 §5 条 5 |
+| 包装 | 可安装的桌面/安卓 | **exe 安装包与 APK 均已产出（1.2.9）**，见 §5 条 5 |
 | `onboarding` 序章背景 | `onboarding_prologue_bg.png` 作为序章底图 | **本轮接上**（之前是自己编的渐变 + 占位圆圈） |
 | `RouletteWheel`（折扣转盘） | 「ルーレットを回して」抽订阅折扣 | **不做**：属于付费墙/订阅，见下方「故意不用」表 |
 
@@ -356,14 +359,14 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 3. 主线 8 段的具体文案是**按源素材文案重建**，不是官方任务表（表在服务器，包里只有键名）。
 4. 等级曲线（`1+√(exp/30)`）、体力价目、背包容量档位是本地定的——源值在服务器。
 5. 安装包：`scripts/build_apk.ps1` 需要装了便携 JDK+SDK 的机器（`setup_android_tools.ps1`
-   一次性装到 D:\agent\tools）。**当前产物已出（1.2.8，版本单一来源 `config/version.json`）**：
-   - `output/desktop/RyzaChat-Setup-1.2.8.exe`（616.6MB，NSIS 走「应用和功能」正常安装/卸载；
-     `deleteAppDataOnUninstall:false` ⇒ 存档留在 %AppData%\RyzaChat，要彻底清就用设置页
+   一次性装到 D:\agent\tools）。**当前产物已出（1.2.9，版本单一来源 `config/version.json`）**：
+   - `output/desktop/RyzaChat-Setup-1.2.9.exe`（616.6MB，NSIS 走「应用和功能」正常安装/卸载；
+     `deleteAppDataOnUninstall:false` ⇒ 存档留在 %AppData%\RyzaChat\ryza-web-storage.json，要彻底清就用设置页
      「抹除全部本地数据」；win-unpacked 自检截图已核）
-   - `output/android/RyzaChat-1.2.8.apk`（563.6MB，自签，正常安装/卸载；
+   - `output/android/RyzaChat-1.2.9.apk`（563.6MB，自签，正常安装/卸载；
      `android:hasFragileUserData` ⇒ API29+ 卸载时询问是否保留数据）
    - 两包都由 `scripts/privacy_check.py` 在**暂存前 + 成品**各扫一遍（私人标识、密钥形状、
-     providers.json、keystore 命中即构建失败）；1.2.8 出厂扫描零命中。
+     providers.json、keystore 命中即构建失败）；1.2.9 出厂扫描零命中。
    - ⚠ 换签名的 keystore 就不能原地升级（必须先卸载），`android/keystore/` 要留着别丢。
 6. 标题/语音钮/彩纸是画布按 Lottie JSON 帧率播，不是 Lottie 运行时。
 7. `spine/objects/` 仍只有图集、没有完整 skel，无法加载。

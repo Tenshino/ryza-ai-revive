@@ -9,7 +9,7 @@ exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 增补：2026-09-04（**全视口布局 + 桌面等比缩放 + TTS 模型字段**：§7，重出 1.2.4）
 增补：2026-09-05（**模式化 TTS 提示词 + 气泡自动淡出**：§8，重出 1.2.5）
 增补：2026-09-06（**姿态/相机/表情补全**：§9，重出 1.2.6；§3.2 的镜头行已改写）
-增补：2026-09-07（**图集变体 + 按源表取景**：§10；对话搬家 1.2.8）
+增补：2026-09-07（**图集变体 + 按源表取景**：§10；对话搬家 1.2.8；exe 存档 1.2.9）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -356,7 +356,7 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
 ### 6.7 打包与隐私
 
 - 桌面：Electron `frame:false` + `setAlwaysOnTop('screen-saver')` 开关 + 顶栏拖拽；
-  NSIS 安装/卸载走系统「应用和功能」，存档在 `%AppData%\RyzaChat`（卸载默认保留）。
+  NSIS 安装/卸载走系统「应用和功能」，存档在 `%AppData%\RyzaChat\ryza-web-storage.json`（卸载默认保留）。
   产物 `output/desktop/RyzaChat-Setup-1.2.4.exe`（612MB，含全部素材；
   win-unpacked 自检截图=标题页正常渲染）。
 - 安卓：`AssetServer` 补 `/_proxy`（缺它手机端对话必 CORS 挂）、`config/*` 一律 404；
@@ -682,7 +682,7 @@ build_apk.ps1 `$Ver/$VC=8`、android Gradle）。
 
 ### 9.7 打包：版本单一来源 + 隐私闸门
 
-* `config/version.json`（`{"version":"1.2.8","code":11}`）是**唯一**版本源；
+* `config/version.json`（`{"version":"1.2.9","code":12}`）是**唯一**版本源；
   `scripts/stamp_version.js` 把它盖进 `desktop/package.json` 与
   `android/app/build.gradle`，两个 build 脚本都调用它。以前是三处手改（AUDIT §8 末），
   最容易出「exe 和 APK 版本不一致」。
@@ -693,7 +693,7 @@ build_apk.ps1 `$Ver/$VC=8`、android Gradle）。
   二进制扩展名只查名字不查内容，所以 570MB 素材树秒级过。
   调用点：`build_desktop.ps1`（暂存前 + `win-unpacked` 暂存包）、
   `build_apk.ps1`（打包前 + 签名后的 APK，按 zip 成员逐个查）。
-* 卸载语义：NSIS `deleteAppDataOnUninstall:false`（存档留在 `%AppData%\RyzaChat`，
+* 卸载语义：NSIS `deleteAppDataOnUninstall:false`（存档留在 `%AppData%\RyzaChat\ryza-web-storage.json`，
   要彻底清就用设置页的「抹除全部本地数据」）；APK 侧新增
   `android:hasFragileUserData="true"`（API29+ 卸载时询问是否保留数据），
   并且 keystore 必须复用——换 key 就不能原地升级，只能先卸载（丢存档）。
