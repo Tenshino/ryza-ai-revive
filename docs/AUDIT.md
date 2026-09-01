@@ -9,6 +9,7 @@ exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 增补：2026-09-04（**全视口布局 + 桌面等比缩放 + TTS 模型字段**：§7，重出 1.2.4）
 增补：2026-09-05（**模式化 TTS 提示词 + 气泡自动淡出**：§8，重出 1.2.5）
 增补：2026-09-06（**姿态/相机/表情补全**：§9，重出 1.2.6；§3.2 的镜头行已改写）
+增补：2026-09-07（**图集变体 + 按源表取景**：§10，重出 1.2.7）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -668,7 +669,7 @@ build_apk.ps1 `$Ver/$VC=8`、android Gradle）。
 
 ### 9.7 打包：版本单一来源 + 隐私闸门
 
-* `config/version.json`（`{"version":"1.2.6","code":9}`）是**唯一**版本源；
+* `config/version.json`（`{"version":"1.2.7","code":10}`）是**唯一**版本源；
   `scripts/stamp_version.js` 把它盖进 `desktop/package.json` 与
   `android/app/build.gradle`，两个 build 脚本都调用它。以前是三处手改（AUDIT §8 末），
   最容易出「exe 和 APK 版本不一致」。
