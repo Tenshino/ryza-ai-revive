@@ -477,7 +477,9 @@
       App.renderWorld();
       App.updateHud();
       var place = World.find(stageId);
-      if (place) App.toast('来到：' + World.placeLabel(stageId, place.stage));
+      if (place) App.toast(I18n.tf('talk.mapMove', '来到：{name}', {
+        name: World.placeLabel(stageId, place.stage)
+      }));
       var npcs = World.npcsAt(stageId, st.day || 1);
       var names = Game.meetCharas(npcs, st.day);
       if (names.length) Game.remember(names.join('、') + ' と出会った。');
@@ -501,13 +503,20 @@
       App.updateHud();
     },
 
-    /* Talk → map / time of day. Source: detectEntryMapMove,
+    /* Talk → map / time of day / sleep. Source: detectEntryMapMove,
        scene.current_stage, scene.time_bucket. Game.applyDelta does not
        know World, so App applies this after the numeric reducer. */
     _applySceneDelta: function (d) {
       if (!d || typeof d !== 'object' || !window.World) return;
       var scene = (d.scene && typeof d.scene === 'object') ? d.scene : {};
+      var sleep = d.sleep === true || d.sleep === 'true' || d.sleep === 1 ||
+                  scene.sleep === true;
+      if (sleep) {
+        App._sleepHome();
+        return;
+      }
       var raw = d.current_stage || d.stage || d.map_move || scene.current_stage;
+      if (d.map_moved && !raw) raw = scene.current_stage;
       var tod = d.tod || d.time_bucket || scene.time_bucket;
       var s = Config.section('state');
       var fromStage = s.stage, fromTod = s.tod;
@@ -812,15 +821,24 @@
       }
     },
 
-    /* --------------------------------------------------------------- LLM */
+    /* Scene facts every talk mode gets (source marionette_injection:
+       scene.current_stage / time_bucket / cast). Location is on screen
+       even in ASMR — without this block the model cannot name a place
+       or emit current_stage. */
+    _sceneContext: function () {
+      var st = Config.section('state');
+      var parts = [];
+      if (window.World && World.promptBlock) parts.push(World.promptBlock(st));
+      parts.push(App._peopleBlock(st));
+      return parts.filter(Boolean).join('\n\n');
+    },
+
+    /* Numeric RPG (stamina / bags / quests) — chat/story/immersive only.
+       ASMR/text still receive _sceneContext so they can travel/sleep. */
     _rpgContext: function () {
       var st = Config.section('state');
       if (!RPG_MODES[st.mode]) return '';
-      var parts = [Game.promptBlock()];
-      if (window.World && World.promptBlock) parts.push(World.promptBlock(st));
-      parts.push(App._peopleBlock(st));
-      parts.push(Quests.promptBlock());
-      return parts.filter(Boolean).join('\n\n');
+      return [Game.promptBlock(), Quests.promptBlock()].filter(Boolean).join('\n\n');
     },
 
     /* met_charas / npcs here — the official game state fed these to the
@@ -952,7 +970,9 @@
       Welcome.mark('talk');
 
       Api.chat(App.history, text, {
-        mode: st.mode, style: st.style, rpgContext: App._rpgContext(),
+        mode: st.mode, style: st.style,
+        rpgContext: App._rpgContext(),
+        sceneSection: App._sceneContext(),
         nsfwSection: window.Nsfw ? Nsfw.screenFact() : ''
       })
         .then(function (reply) {

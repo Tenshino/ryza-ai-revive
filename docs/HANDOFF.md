@@ -15,8 +15,9 @@ ASMR zoom **就是源表** sitting 3.5 / standing 2.5（相对底栏 1.93 / 1.45
 源 APK 换装是整包 skel+atlas（`features/skin` / `switchSkin`），没有「同一骨架只换 PNG」。
 本轮 NSFW 是图集页变体：`{pageBase}{variant}.png`，不写死服装 id。
 脱衣只认回复标签行的 `nsfw:on/off`（和 emotion 同一栏），不是关键词、也不是 tools。
-对话搬家：源 `detectEntryMapMove` / `scene.current_stage`；本地 prompt 带地点表，
-`<state>{"current_stage":"stage_…"}</state>` 后 `gotoStage`（未出航锁外岛）。
+对话搬家：源 `detectEntryMapMove` / `scene.current_stage` / `scene.time_bucket`；
+地点表在 `_sceneContext`（**所有**模式，含 ASMR），`<state>{"current_stage":…}`
+或 `{"sleep":true}` 后 `gotoStage` / `_sleepHome`（未出航锁外岛）。
 此前（09-06）：姿态/相机/表情补全（AUDIT §9，不要退回去）：默认开局**站姿 `_99`**
 （旧存档一次性迁移 `state.postureMigrated`）；姿态 chip 改**动作语义**（站着显示
 「坐下」）；`midgroundPostures` 不再当皮肤约束（196/200 组场景只列 sitting），
@@ -316,8 +317,10 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
       3.5/2.5，不要拿 `cameraPanY≈3200` 当正交中心。
     - NSFW 脱衣只认标签行 `nsfw:on/off`（和 emotion 同一栏）。不要再做玩家关键词
       立刻换图，也不要为这一下接 OpenAI tools（自填接口不一定支持，且会多一套协议）。
-    - 对话搬家只认 `<state>.current_stage`（源 `detectEntryMapMove`）。地名表在
-      `World.promptBlock`，换景在 `App._applySceneDelta`，不要写进 `Game.applyDelta`。
+    - 对话搬家认 `<state>.current_stage` / `sleep`（源 `detectEntryMapMove`）。
+      地名表在 `World.promptBlock`，经 `_sceneContext` **每个**对话模式都注入
+      （不要再塞进只给 RPG 模式的 `_rpgContext`，否则 ASMR 不知道自己在哪）。
+      换景在 `App._applySceneDelta`，不要写进 `Game.applyDelta`。
 17. 【模式化 TTS + 气泡生命周期（AUDIT §8，2026-09-05）不要退回去】
     - TTS 语音指导= `ttsStyleFor(mode)` 两层：`tts.styleHint`（基底，用户可改）
       + `MODE_TTS[mode]`（模式层，`tts.modeHints` 可覆盖）。别退回「所有模式

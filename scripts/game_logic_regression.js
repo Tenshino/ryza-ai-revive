@@ -254,7 +254,16 @@ ok(World.locked('area_05') === false, 'capital open after sail');
 Game.s.sailed = false;
 const pb = World.promptBlock({ stage: 'stage_01_001_04', tod: 'aft', day: 1 });
 ok(/stage_01_001_04/.test(pb) && /ライザの家/.test(pb), 'prompt names current place');
-ok(/current_stage/.test(pb) && /stage_01_002_01/.test(pb), 'prompt lists reachable ids');
+ok(World.resolveStage('塔奥家') === 'stage_01_002_01', 'short zh alias 塔奥家');
+ok(World.resolveStage('回家') === 'stage_01_001_04', 'colloquial 回家 → home');
+ok(/塔奥家门前/.test(pb) && /隠れ家前/.test(pb), 'catalog lists ja + zh names');
+ok(/sleep/.test(pb), 'prompt teaches sleep');
+const asmrSys = Api.buildSystemPrompt('asmr', 'voice', '', 'zh', '', pb);
+ok(/current_stage/.test(asmrSys) && !/stamina_delta/.test(asmrSys),
+   'asmr gets scene travel without RPG grind protocol');
+const slept = Api.parseTaggedReply(
+  '[emotion:cuddle|attitude:agree]\nおやすみ<state>{"sleep":true}</state>');
+ok(slept.state && slept.state.sleep === true, 'sleep flag parses');
 ok(!/stage_05_/.test(pb), 'locked areas omitted from catalog');
 const moved = Api.parseTaggedReply(
   '[emotion:happy|attitude:agree]\n行こっ！' +

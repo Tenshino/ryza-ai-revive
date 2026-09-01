@@ -215,9 +215,9 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 #### `web/js/app.js` — 主控制器（只编排，不存状态）
 
 - `init()`：Game→Daily→Quests 顺序装载，`Game.on` 订阅刷 HUD。
-- `say()`：体力门槛（不足弹 overlay）→ `Api.chat`（带 `_rpgContext()`：
-  Game+地点+人物+Quests 四块，ASMR/テキスト不注入）→ `applyDelta` +
-  `_applySceneDelta`（`current_stage`/`tod`，源 `detectEntryMapMove`）→ 扣体力 →
+- `say()`：体力门槛（不足弹 overlay）→ `Api.chat`（`_sceneContext` 每模式都给地点/人物；
+  `_rpgContext` 仅 chat/story/immersive 给数值+任务）→ `applyDelta` +
+  `_applySceneDelta`（`current_stage`/`tod`/`sleep`，源 `detectEntryMapMove`）→ 扣体力 →
   任务进度 → 气泡/朗读。失败出「重试」条（源 reconnect 语义的本地化）。
 - `gotoStage()`：换景 + `meetCharas`（met_charas/met_pairs 记录 + 记忆行）+
   explore 任务进度。

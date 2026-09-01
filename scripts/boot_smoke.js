@@ -196,6 +196,12 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
     sandbox.Nsfw.reset();
     ok(!sandbox.Nsfw.active(), 'reset clears nsfw');
 
+    sandbox.Config.set('state.mode', 'asmr');
+    ok(!sandbox.App._rpgContext(), 'asmr skips numeric RPG block');
+    ok(/current_stage/.test(sandbox.App._sceneContext()),
+       'asmr still gets place catalog (marionette scene.*)');
+    sandbox.Config.set('state.mode', 'chat');
+
     /* bubble lifecycle: showBubble arms the auto-fade, keep cancels it */
     sandbox.App.showBubble('テスト');
     ok(!!sandbox.App._bubbleTimer, 'showBubble arms the bubble auto-hide timer');

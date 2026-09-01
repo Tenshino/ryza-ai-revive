@@ -147,6 +147,7 @@
       'talk.retryHint': '连接失败了', 'talk.retry': '重试',
       'toast.staminaOut': '体力不足，让莱莎睡一觉吧',
       'world.lockedToast': '还没有船，去不了库肯岛以外（完成主线8「造船出海」）',
+      'talk.mapMove': '来到：{name}',
       'toast.sailed': '出航成功！世界地图已解锁',
       'lang.auto': '跟随界面语言', 'lang.zh': '简体中文', 'lang.zh-tw': '繁體中文',
       'lang.ja': '日本語', 'lang.en': 'English', 'lang.hi': 'हिन्दी',
@@ -305,6 +306,7 @@
       'talk.retryHint': 'つながなかった…', 'talk.retry': 'もう一回',
       'toast.staminaOut': 'スタミナ不足。ライザを寝かせてあげて',
       'world.lockedToast': '船がないとクーケン島の外へは出られない（メイン8をクリア！）',
+      'talk.mapMove': 'ここだよ：{name}',
       'toast.sailed': '出航成功！世界の扉が開いたよ',
       'lang.auto': 'UI に従う', 'lang.zh': '简体中文', 'lang.zh-tw': '繁體中文',
       'lang.ja': '日本語', 'lang.en': 'English', 'lang.hi': 'हिन्दी',
@@ -463,6 +465,7 @@
       'talk.retryHint': 'Connection failed', 'talk.retry': 'Retry',
       'toast.staminaOut': 'Not enough stamina — let Ryza sleep',
       'world.lockedToast': 'No ship, no leaving Kurken Island (finish Main Quest 8)',
+      'talk.mapMove': 'Arrived: {name}',
       'toast.sailed': 'You sailed! The world map is open',
       'lang.auto': 'Follow UI language', 'lang.zh': '简体中文', 'lang.zh-tw': '繁體中文',
       'lang.ja': '日本語', 'lang.en': 'English', 'lang.hi': 'हिन्दी',
@@ -535,6 +538,7 @@
     'settings.eraseOk': '全部刪除',
     'talk.retryHint': '連線失敗了', 'talk.retry': '重試',
     'world.lockedToast': '還沒有船，去不了庫肯島以外（完成主線8「造船出海」）',
+    'talk.mapMove': '來到：{name}',
     'quest.side': '支線', 'quest.cleared': '任務完成', 'quest.history': '已完成的委託'
   });
 

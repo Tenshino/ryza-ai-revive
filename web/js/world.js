@@ -253,6 +253,22 @@
       return (window.I18n && I18n.tc) ? I18n.tc('place.' + id, base) : base;
     },
 
+    /* Player/LLM colloquialisms → official stage ids. Keys are _fold()'d.
+       Only shortenings of names that exist in the pack (or "go home"). */
+    TALK_ALIASES: {
+      'home': 'stage_01_001_04',
+      'おうち': 'stage_01_001_04',
+      'うち': 'stage_01_001_04',
+      '回家': 'stage_01_001_04',
+      '家里': 'stage_01_001_04',
+      '回家睡觉': 'stage_01_001_04',
+      '莱莎的家': 'stage_01_001_04',
+      'ライザの家': 'stage_01_001_04',
+      '塔奥家': 'stage_01_002_01',
+      'タオの家': 'stage_01_002_01',
+      'tao': 'stage_01_002_01'
+    },
+
     isTod: function (t) { return TODS.indexOf(t) >= 0; },
 
     _fold: function (s) {
@@ -281,6 +297,8 @@
     resolveStage: function (token) {
       var q = String(token || '').trim();
       if (!q || !World.hierarchy) return null;
+      var alias = World.TALK_ALIASES[World._fold(q)];
+      if (alias && World.find(alias)) return alias;
       if (World.find(q)) return q;
       var field = World.findField(q);
       if (field && field.field.stages && field.field.stages[0]) {
@@ -327,7 +345,8 @@
              World.placeLabel(here.areaId, here.area));
       L.push('- 時間帯：' + (st.tod || 'aft') +
              '（mor=朝 aft=昼 eve=夕 ngt=夜）');
-      L.push('- 画面を動かすときだけ <state>{"current_stage":"stage_xx_xxx_xx"}</state>。id は下の一覧。時間帯は tod。省略＝今の場所のまま。');
+      L.push('- 画面を動かすときだけ <state>{"current_stage":"stage_xx_xxx_xx"}</state>。id は下の一覧（日/中/英どれで書いてもよい）。時間帯は tod。省略＝今の場所のまま。');
+      L.push('- 安全な場所で寝る：<state>{"sleep":true}</state>（ライザの家の朝になりスタミナ全回復）。');
       var sailed = window.Game && Game.s && Game.s.sailed;
       if (!sailed) {
         L.push('- 船ができるまでクーケン島（area_01）以外は行けない。');
@@ -337,10 +356,12 @@
         if (World.locked(a.id)) return;
         a.fields.forEach(function (f) {
           var bits = f.stages.map(function (s) {
-            var loc = World.placeLabel(s.id, s.name);
-            return s.id + ' ' + s.name + (loc !== s.name ? '/' + loc : '');
+            var labs = World._labels(s.id, s.name).filter(function (x) {
+              return x !== s.id;
+            });
+            return s.id + ' ' + labs.join('/');
           });
-          L.push('  ' + f.name + '：' + bits.join('；'));
+          L.push('  ' + World.placeLabel(f.id, f.name) + '：' + bits.join('；'));
         });
       });
       return L.join('\n');

@@ -288,8 +288,12 @@ settle`（淡出 70% 处肢体已还原且 `_aimSm` 每帧 <25u）、`tap chaini
 - `quests.js`：任务生命周期 + 离线行动表 + 动态生成 + 完成演出 + Welcome 瓦片。
 - `daily.js`：连续登录。奖励只通过 `Game` 发放。
 - `api.js`：只认协议（拼提示词、剥 `<state>`），不认识玩法。
-- `app.js`：编排层。上下文注入 = `Game.promptBlock + World.promptBlock + App._peopleBlock + Quests.promptBlock`，
-  人物块由 App 拼。换景走 `App._applySceneDelta` → `gotoStage`，**不**进 `Game.applyDelta`。
+  `sceneSection`（地点/人物，**所有**对话模式）与 `rpgContext`（数值/任务，仅
+  chat/story/immersive）分开注入，对应源 `marionette_injection` 每轮都带
+  `scene.*`、ASMR 不刷任务 JSON。
+- `app.js`：编排层。上下文注入 = `_sceneContext`（World.promptBlock + 人物）+
+  可选 `_rpgContext`（Game + Quests）。换景/睡觉走 `App._applySceneDelta` →
+  `gotoStage` / `_sleepHome`，**不**进 `Game.applyDelta`。
 - 事件：`Game.on(cb)` 单向广播，HUD/面板只读不写。
 
 **2026-09-03 整理**（为后续加内容腾结构）：删除全仓零引用的死函数
@@ -319,9 +323,13 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   「无事发生不要发」约束，实测弱模型漏发/错发时 reducer 钳位兜底。
   源对话搬家是 `entry_map_move.dart` 的 `detectEntryMapMove` + marionette
   `scene.current_stage` / `scene.map_moved` / `scene.time_bucket`（官方 websocket
-  会把当前舞台塞进会话）。本地：每轮 prompt 带现在的地点和可去舞台 id 表，
-  LLM 用 `<state>{"current_stage":"stage_…"}</state>`；App 解析后 `gotoStage`
-  （未出航仍锁 area_02–05）。`tod` 对应 `scene.time_bucket`。
+  会把当前舞台塞进会话）。本地：每轮 `_sceneContext` 带现在的地点和可去舞台
+  （日/中/英别名，ASMR/テキスト也给，不只 RPG 模式）；LLM 用
+  `<state>{"current_stage":"stage_…"}</state>` 或 `{"sleep":true}`；App 解析后
+  `gotoStage` / `_sleepHome`（未出航仍锁 area_02–05）。`tod` 对应
+  `scene.time_bucket`。`scene.cast`/`roster` 没有别的立绘可切，用
+  `_peopleBlock`（同地 NPC + met_charas）近似。换装仍是玩家菜单 `switchSkin`，
+  不接 LLM（NSFW 贴图变体是本地加的）。`talk.mapMoveNarration` → 换景 toast。
 - 官方任务推进主要靠 LLM 回包；本地双通道（LLM `<state>` + 离线行动按钮），
   talk 类同轮不双计（`app.js say()` 里判 `reply.state.quest`）。
 

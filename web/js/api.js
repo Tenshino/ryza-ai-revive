@@ -111,7 +111,7 @@
     return (window.I18n && I18n.LANG_NAMES && I18n.LANG_NAMES[lg]) || lg;
   }
 
-  function buildSystemPrompt(mode, style, rpgContext, outLang, nsfwSection) {
+  function buildSystemPrompt(mode, style, rpgContext, outLang, nsfwSection, sceneSection) {
     var L = [persona()];
     L.push('');
     L.push('## 出力言語（厳守）');
@@ -131,6 +131,13 @@
       L.push('音声で読み上げる。短く、話し言葉だけで書く。');
     }
     if (mode === 'asmr') L.push('一文は短く。息づかいを意識して、ゆっくり。');
+    /* Scene facts (place / who's here) are always true on screen — same
+       channel as official marionette scene.current_stage / scene.cast.
+       Numeric RPG grinding stays optional so ASMR does not dump quest JSON. */
+    if (sceneSection) {
+      L.push('');
+      L.push(sceneSection);
+    }
     if (rpgContext) {
       L.push('');
       L.push(rpgContext);
@@ -141,12 +148,15 @@
       L.push('<state>{"stamina_delta":-2,"exp_delta":10,"money_delta":30,"inventory_added":[{"id":"emeralia","count":1}],"quest":{"step_add":1},"current_stage":"stage_01_002_01"}</state>');
       L.push('使用できる key：stamina_delta / exp_delta / money_delta / inventory_added /');
       L.push('inventory_removed / ryza_inventory_added / ryza_inventory_removed /');
-      L.push('memory_add / quest{step_add,complete,desc,goal} / current_stage / tod のみ。');
+      L.push('memory_add / quest{step_add,complete,desc,goal} / current_stage / tod / sleep のみ。');
       L.push('採れた素材・できた品物は inventory_added に {id,count} で入れる（既存IDを優先）。');
       L.push('クエスト目標を1つ満たすたびに quest.step_add、目標達成で quest.complete:true。');
-      L.push('場所を変えたターンは current_stage に上の一覧の stage id。時間帯は tod（mor/aft/eve/ngt）。');
+      L.push('場所を変えたターンは current_stage に上の一覧の stage id。時間帯は tod（mor/aft/eve/ngt）。寝るは sleep:true。');
       L.push('スタミナを消費する行動には必ず stamina_delta のマイナス値を付ける。');
       L.push('何も発生しない普通の会話には <state> を付けない。');
+    } else if (sceneSection) {
+      L.push('');
+      L.push('場所・時間を変えたターンだけセリフ末尾に <state>{"current_stage":"stage_…"}</state> または <state>{"sleep":true}</state>。');
     }
     if (nsfwSection) {
       L.push('');
@@ -157,7 +167,7 @@
     L.push('先頭にタグ行を1行だけ置くこと：');
     L.push('[emotion:<emotion>|attitude:<attitude>]');
     L.push('<セリフ本文>');
-    if (rpgContext) L.push('<必要なら最後の行に <state>{...}</state>');
+    if (rpgContext || sceneSection) L.push('<必要なら最後の行に <state>{...}</state>');
     L.push('- <emotion> は次のいずれか：' + EMOTIONS.join(' '));
     L.push('- <attitude> は次のいずれか：' + ATTITUDES.join(' '));
     L.push('- 同じタグ行の nsfw:on / nsfw:off は画面の服を切る（emotion と同じ機械欄。プレイヤーには見えない）。このターンのセリフで実際に脱いだ／脱がせたときだけ on、着直したときだけ off。求められてもすぐ脱がなくてよい。自分から脱いでもよい。省略＝現状維持。台詞と画面を矛盾させない。');
@@ -289,7 +299,8 @@
       var st = Config.section('state');
       var outLang = opts.lang || Api.replyLang();
       var system = buildSystemPrompt(opts.mode || st.mode, opts.style || st.style,
-                                     opts.rpgContext || '', outLang, opts.nsfwSection || '');
+                                     opts.rpgContext || '', outLang, opts.nsfwSection || '',
+                                     opts.sceneSection || '');
       var keep = Math.max(0, (llm.historyTurns || 12) * 2);
       var msgs = [{ role: 'system', content: system }]
         .concat(history.slice(-keep))
