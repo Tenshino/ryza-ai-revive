@@ -591,6 +591,18 @@
       var tight = zoom / REF_ZOOM;
       if (tight > 1.05) panY = panY + (tight - 1) * 140;
       var worldH = REF_H / Math.max(0.45, tight);
+      /* Normal-mode framing corrections (LOCAL calibration, same family as
+         the REF_H derivation — the official zoom→world-height mapping is
+         not in the package). Measured against the shipped screenshots:
+         standing must fit headwear→knees with margin (×1.42 of the derived
+         2289u); sitting rides ×1.25 so she doesn't fill the frame head→chest
+         next to the standing shot (she is sofa-locked in world space, so
+         only the window — not her placement — changes). ASMR close-ups keep
+         the authored table values. */
+      if (!a) {
+        var pk = postureKey || Avatar.postureKey();
+        if (pk === 'posture_standing') worldH *= 1.42;
+      }
       var L = Avatar.scene || Avatar.avatar;
       var aspect = (L && L.cssW && L.cssH) ? L.cssW / L.cssH : 0.5;
       var worldW = worldH * aspect;
@@ -618,11 +630,26 @@
       var cover = Avatar._coverFor(Avatar.scene);
       if (cover && cover.w > 0 && cover.h > 0) {
         var aspect = L.cssW / L.cssH;
-        var h = Math.min(win.worldH, Math.min(cover.h, cover.w / aspect));
+        /* Panel-aware slack: the bottom log panel (officially opaque) hides
+           art-less ground, so the window may extend below the painted plate
+           by exactly what the panel covers. This is what lets the SITTING
+           window keep its authored 1720u bottom (359) — the official sitting
+           shot shows her lap because the sofa is drawn below far_bg's edge,
+           and _coverFor (largest quad) doesn't see it. Top/left/right stay
+           hard-clamped; height may exceed the plate only by the covered
+           share. */
+        var frac = Avatar._panelFrac || 0;
+        var h = Math.min(win.worldH,
+          Math.min(cover.h / Math.max(0.4, 1 - frac), cover.w / aspect));
         var w = h * aspect;
         var bottom = win.bottom;
-        if (bottom < cover.y0) bottom = cover.y0;
-        if (cover.h >= h && bottom > cover.y1 - h) bottom = cover.y1 - h;
+        var floorY = cover.y0 - h * frac;
+        if (bottom < floorY) bottom = floorY;
+        /* h ≤ cover.h/(1-frac) above makes top+floor simultaneously
+           satisfiable, so the top clamp is unconditional now (the old
+           cover.h >= h guard skipped it for tall windows and let the top
+           edge poke above the art) */
+        if (bottom > cover.y1 - h) bottom = cover.y1 - h;
         var left = win.left + (win.worldW - w) / 2;
         if (left < cover.x0) left = cover.x0;
         if (cover.w >= w && left > cover.x1 - w) left = cover.x1 - w;
@@ -683,13 +710,18 @@
       } else {
         sx = (v && a) ? v.left + (x - a.left) * k : x;
         sy = (v && a) ? v.bottom + (y - a.bottom) * k : y;
-        /* Eyeline only when she is not locked to furniture. The table frames
-           sitting at ~0.70 and standing at ~0.37; >0.10 off the line gets a
-           vertical nudge. Authored SIZE (scale × zoom) is never touched —
-           shrinking to force feet on screen is not what the APK did, and it
-           made her look tiny. Hit parts are torso (BB_*), not feet. */
+        /* Eyeline only when she is not locked to furniture. The shipped
+           screenshots settle the framing: sitting head ~0.70 of the window
+           (the table's own value — no push fires there), standing is framed
+           HIGHER — belt at ~78% of screen, shins live behind the bottom log
+           panel and only appear when the UI is hidden (the official
+           キャラ表示/全画面 view). 0.68 for standing cropped her at mid-thigh
+           and read as "zoomed in vs the original"; 0.80 matches the shots.
+           Authored SIZE (scale × zoom) is never touched — shrinking to force
+           feet on screen is not what the APK did. Hit parts are torso (BB_*). */
         if (Avatar._headLocal != null && v && v.worldH > 0) {
-          var target = Avatar._asmrOn() ? 0.50 : 0.68;
+          var target = Avatar._asmrOn() ? 0.50
+            : (Avatar._loadedPosture() === 'posture_standing' ? 0.74 : 0.68);
           var frac = (sy + Avatar._headLocal * sc - v.bottom) / v.worldH;
           if (Math.abs(frac - target) > 0.10) sy += (target - frac) * v.worldH;
         }
@@ -2083,8 +2115,16 @@
         if (!sm || !isFinite(sm[0]) || !isFinite(sm[1])) {
           sm = Avatar._aimSm[k] = [t[0], t[1]];
         } else {
-          sm[0] += (t[0] - sm[0]) * aK;
-          sm[1] += (t[1] - sm[1]) * aK;
+          var dx = (t[0] - sm[0]) * aK, dy = (t[1] - sm[1]) * aK;
+          /* Slew-rate cap. Plain exponential smoothing bounds a step only to
+             aK×gap — a driver re-pick across the full yaw window still lands
+             as a >12u snap, the exact transient class §3.8 exists to kill
+             (the sweep gate flaked ~1-in-6 on it). 600 u/s ⇒ ~10 u/frame at
+             60 fps; normal ambient motion never comes close to the cap. */
+          var cap = 600 * dtL, mag = Math.hypot(dx, dy);
+          if (mag > cap) { dx *= cap / mag; dy *= cap / mag; }
+          sm[0] += dx;
+          sm[1] += dy;
         }
         if (k.charAt(0) === 'r') {
           var rb = Avatar._boneOf('rollSlots', k.slice(2));

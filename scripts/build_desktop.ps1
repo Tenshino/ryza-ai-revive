@@ -41,18 +41,28 @@ if (-not (Test-Path "node_modules/electron/dist/electron.exe")) {
   "electron already present"
 }
 
+$BuildStart = Get-Date
 npx electron-builder --win --x64
 if ($LASTEXITCODE -ne 0) { throw "electron-builder failed" }
 
 # The installer is a compressed NSIS container, so the artifact that can
 # actually be inspected is the staged app directory it was built from.
-$Unpacked = Join-Path $Root "output/desktop/win-unpacked"
-if (Test-Path $Unpacked) {
-  "== privacy gate on the staged package =="
+# electron-builder has been seen to stage under either output/desktop or
+# output/desktop-build depending on invocation; scanning a fixed path then
+# silently falling back let the 1.2.9 gate scan a stale 1.2.8 directory.
+# Scan every win-unpacked freshly written by THIS build; refuse to finish
+# the release if none exists.
+$Staged = @(Get-ChildItem (Join-Path $Root "output") -Directory |
+  ForEach-Object { Join-Path $_.FullName "win-unpacked" } |
+  Where-Object { Test-Path $_ } |
+  Where-Object { (Get-Item (Join-Path $_ "resources/app.asar")).LastWriteTime -ge $BuildStart })
+if (-not $Staged.Count) {
+  throw "PRIVACY GATE: no win-unpacked under output/ was written after the build started - the staged package cannot be inspected"
+}
+"== privacy gate on the staged package =="
+foreach ($Unpacked in $Staged) {
   python (Join-Path $PSScriptRoot "privacy_check.py") $Unpacked
   if ($LASTEXITCODE) { throw "PRIVACY: the built package contains developer-identifying data - do not distribute it" }
-} else {
-  "WARN: $Unpacked not found; skipping the post-build scan"
 }
 
-Get-ChildItem (Join-Path $Root "output/desktop/*.exe") | ForEach-Object { "Built: $($_.FullName)" }
+Get-ChildItem (Join-Path $Root "output/desktop*/RyzaChat-Setup-*.exe") | ForEach-Object { "Built: $($_.FullName)" }

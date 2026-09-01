@@ -89,8 +89,7 @@
       lang: 'zh',                    // zh | zh-tw | ja | en | hi | id | pt-br
       voice: true,
       volume: 0.9,
-      textSpeed: 28,                 // ms per character
-      autoAdvance: false,
+      textSpeed: 30,                 // ms per character (×1; see TEXT_SPEEDS)
       vibration: true,
       fullscreen: false,
       rim: true,
@@ -194,6 +193,8 @@
         if (k && k.indexOf('ryza.') === 0) doomed.push(k);
       }
       doomed.forEach(function (k) { localStorage.removeItem(k); });
+      data = deepMerge(DEFAULTS, {});          /* drop the in-memory copy too —
+        otherwise a stale Config.set() after a wipe resurrects the old save */
       Config._hydrated = Promise.resolve();   // never re-hydrate after a wipe
     },
 

@@ -202,11 +202,20 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
        'asmr still gets place catalog (marionette scene.*)');
     sandbox.Config.set('state.mode', 'chat');
 
-    /* bubble lifecycle: showBubble arms the auto-fade, keep cancels it */
+    /* log-panel lifecycle (2026-09-07 UI pass): the panel is persistent —
+       showBubble pushes a page + renders dots, nothing self-hides anymore,
+       and a second typeBubble chain supersedes the first via the gen token */
     sandbox.App.showBubble('テスト');
-    ok(!!sandbox.App._bubbleTimer, 'showBubble arms the bubble auto-hide timer');
-    sandbox.App._bubbleKeep();
-    ok(!sandbox.App._bubbleTimer, '_bubbleKeep cancels the auto-hide');
+    ok(sandbox.App._pages[sandbox.App._pages.length - 1] === 'テスト',
+       'showBubble pushes the line into the log pages');
+    ok(!sandbox.App._bubbleTimer, 'the panel no longer arms an auto-hide timer');
+    sandbox.App.showBubble('テスト');
+    ok(sandbox.App._pages.filter((x) => x === 'テスト').length === 1,
+       'back-to-back identical lines do not stack duplicate dots');
+    sandbox.App.typeBubble('一二三', null);
+    const genAfterStart = sandbox.App._typeGen;
+    sandbox.App.typeBubble('abc', null);
+    ok(sandbox.App._typeGen === genAfterStart + 1, 'second type chain bumps the gen token');
   } catch (e) {
     bad('runtime: ' + (e && e.stack || e));
   }

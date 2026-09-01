@@ -151,6 +151,26 @@ ok(Game.s.money <= moneyBefore + 2000 && Game.s.stamina >= 0 && Game.s.exp_total
 Game.applyDelta('nonsense'); Game.applyDelta(null);
 ok(true, 'garbage input survives');
 
+/* list-shaped garbage: the LLM sending inventory_added as an object/string
+   used to throw mid-reducer (half-applied state) — must degrade to no-op */
+Game.s.money = 500; Game.s.exp_total = 0;
+Game.applyDelta({ money_delta: 10, inventory_added: 'oops',
+                  ryza_inventory_removed: { id: 'emeralia' }, exp_delta: 5 }, 'llm');
+ok(Game.s.money === 510 && Game.s.exp_total === 5,
+   'non-array inventory lists skipped, rest of delta still applied');
+
+console.log('# battle economics (area used to be a string: NaN wiped gold)');
+Game.reset();
+Game.s.quest = null;
+Config.set('state.stage', 'stage_01_001_04');
+ok(Quests.startNo(5).type === 'battle', 'battle quest active for the action test');
+Game.s.money = 500;
+let bres = null, btry = 0;
+do { Game.s.stamina = Game.max(); bres = Quests.doAction('battle'); btry++; }
+while (!(bres.ok || bres.done) && btry < 90);
+ok(bres.ok && Number.isFinite(Game.s.money) && Game.s.money > 500,
+   'battle win PAYS gold (regression: NaN reward silently reset the purse to 0)');
+
 console.log('# main chain 1..8');
 Game.reset();
 Game.s.quest = null;

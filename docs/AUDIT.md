@@ -10,6 +10,7 @@ exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 增补：2026-09-05（**模式化 TTS 提示词 + 气泡自动淡出**：§8，重出 1.2.5）
 增补：2026-09-06（**姿态/相机/表情补全**：§9，重出 1.2.6；§3.2 的镜头行已改写）
 增补：2026-09-07（**图集变体 + 按源表取景**：§10；对话搬家 1.2.8；exe 存档 1.2.9）
+增补：2026-09-08（**官方 UI 对话页重构 + 桌面代理回归修复 + 审计修包**：§11，出 1.2.10）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -778,3 +779,121 @@ node scripts/nsfw_intent_regression.js
 node scripts/motion_regression.js      # 坐姿锁沙发 + 变体 URL 与服装无关 + 300 组钳制
 node scripts/boot_smoke.js
 ```
+
+---
+
+## 11. 官方 UI 对话页重构 + 桌面代理修复 + 审计修包（2026-09-08，1.2.10）
+
+依据用户提供的**官方运行截图**（对话页 + »侧边菜单展开态）把对话页 chrome 重排成官方样式；
+同时修掉一次全面审计（5 路并行：游戏层/渲染层/UI 接线/三端壳/移植完整性）里已证实的缺陷。
+
+### 11.1 桌面端两个线上故障（用户报告，已定位根因并修复）
+
+1. **「网络请求失败（跨域或未走本地代理）」（桌面端 1.2.9 起必现）**
+   根因：`0e08e30` 把页面 origin 从 `http://127.0.0.1:<port>` 迁到 `ryza://app`，
+   但 `api.js localProxy()` 只认 loopback 正则 → 桌面端 LLM/TTS 全部直连外网 → CORS 挂。
+   Android/浏览器不受影响（仍是 127.0.0.1）。
+   修复：`localProxy` 同时匹配 `ryza://app`；`nsfw_intent_regression.js` 加 4 条路由断言
+   （loopback/localhost/ryza://app 必须走 /_proxy，外部 origin 必须直连）；
+   真实 Electron 探针端到端验证 `Api._localProxy()` 在 ryza://app 下返回 /_proxy。
+2. **「每次打开都让填问卷」＝ 用户跑的是 `output/desktop/win-unpacked` 里的 1.2.8 旧包**
+   （实测该目录 app.asar version=1.2.8、无 web-storage.js；1.2.9 实际产物在
+   `output/desktop-build/`）。1.2.8 时代存档绑 `http://127.0.0.1:<port>` origin，
+   8765 被占（serve.py/双开）时回落随机端口 ⇒ 每次开都是新 origin ⇒ 空 localStorage ⇒ 问卷。
+   1.2.9 的 userData JSON + 固定 ryza://app 已根治；用**用户真实存档**在隔离 userData
+   里回放验证：`gate_isDone=true`、中文原样恢复、setItem→盘 往返干净（此前疑似乱码
+   是控制台 cp936 显示假象，盘上码点正常）。旧 1.2.8 staging 目录已删。
+   ⚠ 1.2.8 时代留在旧 origin 的对话历史无法自动迁移（origin 不同），需要的话手动导出设置 JSON。
+
+### 11.2 官方 UI 对话页（强制口径，别退回去）
+
+对照官方截图重排，全部用包内原版图标：
+
+| 官方元素 | 落地 |
+|---|---|
+| 单行透明顶栏：☰ 左，右侧胶囊+» | `#topbar` 一行；`#subbar`/`#hud`/`#talk-menu` 删除 |
+| 橙渐变「ボイス」⇄ 暗「テキスト」胶囊 | `#btn-voice` 胶囊 = `state.style` 开关（Fx 语音动画仍在 canvas 里）；主静音仍在设置 app.voice，开关联动胶囊 |
+| » 侧边菜单：ショップ/スキン/セーブデータ/全画面/キャラ切替/設定/ワールドマップにもどる（金） | `#side-menu`；セーブデータ→玩家档案页（槽在那）；点空白自动收 |
+| 左下 HUD：苹果行 + 金币胶囊（43,000 千分位）+ Lv | `#hud-cluster`；`refreshHud` 加千分位 |
+| 右下圆钮：⇧（历史）⚑（任务）👜（背包）；双姿态舞台多一枚坐/立 | `#quick-btns` |
+| 底部对话面板：头像+ライザ+模式描述+正文+页点 | `#log-panel`：`mode.sub.*`（ja 值=源包 conversationMode.*.description 挖出的原句 + 截图 ASMR 句）；点名字行开模式 sheet |
+| ⇧ 展开 = 会话全文回看 | `App._toggleLogHistory()`（补上 E 审计认定的 talk_conversation_log 缺口） |
+| 输入条：×N 圆钮 + 胶囊输入（✳=新对话）+ 橙色圆发送 | `#btn-speed`（循环 TEXT_SPEEDS）+ `#btn-newtalk` |
+| 占位文案 | 待机=官方「なんでも聞いてね」；等回复=官方「返信を待っています…」 |
+
+**气泡生命周期（§8.2）就此退役**：面板常驻不再自动淡出（官方行为），
+`_bubbleHold/_bubbleKeep` 保留为空接缝（playUrl 等调用点不动）；
+`typeBubble` 加代际令牌（旧链被打断时不再半句混排/漏播 TTS）；
+boot_smoke 的 7 条淡出断言换成 5 条面板断言（推页/去重/无自动隐藏/代际令牌）。
+
+### 11.3 审计修包（每条都有复现证据，回归已守）
+
+* `quests.js act_battle`：`ctx_area()` 返回 `'area_01'` 字符串与数字 `m.area` 恒不等
+  （区域选怪池全灭），且 `'area_01'*10=NaN` 进 `addMoney` 的 `(x+NaN)||0` 兜底
+  ⇒ **打赢一场战斗把金币清零**。已改数值 area；game_logic_regression 加 2 条断言。
+* `game.js applyDelta`：`inventory_added` 传字符串/对象时 `forEach` 直接 throw
+  （半套状态落盘）⇒ 列表形态一律 `Array.isArray` 守卫；回归加敌意列表用例。
+* `config.js eraseAll`：内存 `data` 未重置，擦完任何一次 set 都会把旧设置写回 ⇒ 已重置。
+* 死配置 `app.autoAdvance` 整链删除（`_pendingQuestion` 全仓无赋值，开关从未生效）。
+* 闹钟表单 `defTime` 直插 innerHTML（导入存档可注入）⇒ `/^\d{1,2}:\d{2}$/` 白名单。
+* `_relocalize` 漏重绘 皮肤/回忆/闹钟（切语言混排）⇒ 补齐；`drawer.days` 进 i18n。
+* `quests.js` 删死函数 `areaOfStage`；`Langs && I18n.LANG_NAMES` 守卫写反修正。
+* `game.js` 头注释诚实化：`exp_delta/memory_add/met_chara_add/tod/sleep/quest{}`
+  是**本地协议扩展**，不在 AOT 快照里（E 审计逐键核对；stamina_delta 等确为原键）。
+* `motion_regression` 抖动根治：harness 播种 xorshift32（avatar.js 10 处 Math.random
+  不再每次抽样不同序列，双跑输出逐行一致），`_aimSm` 加 600u/s 限速
+  （纯指数平滑对超大目标跳变不设上界，12u 门曾 ~1/6 概率红）。
+* `build_desktop.ps1` 成品闸门改扫**本次新写出**的 win-unpacked（旧实现扫固定路径，
+  1.2.9 实际扫到的是 1.2.8 的陈旧 staging）；`stamp_version.js` 新增 `--check`
+  且无参时自读 `config/version.json`（版本单一来源现在真的被脚本守着了）。
+
+### 11.4 已知未修（下轮候选，按优先级）
+
+1. `privacy_check.py`：嵌套容器（asar/zip 内的 zip）不递归、>12MB 文本静默跳过、
+   `.atlas` 被当二进制——成品闸门对 asar 是假通过（本轮 asar 手工解析过，干净）。
+2. 每日登录第 8 天起 `clamp(streak,0,6)` 语义未定（封顶 or 循环周）。
+3. `Api.chat` 无请求代际令牌（重试条快速连发理论上可乱序落账）。
+4. charm 战斗加成不消耗（设计歧义：被动饰品 or 漏洞）。
+5. NSFW 状态不持久（换肤/刷新回穿衣，`screenFact` 与剧情可能矛盾一轮）。
+6. 闹钟 `_snoozeUntil` 用 HH:MM 字符串，跨午夜贪睡+禁用重启用会提前响。
+7. 移植缺口（E 审计）：moderation 危机词干预、随包字体 @font-face、
+   world_map 区域图 8 张、default_alarm.wav 兜底、talk_intro 模式引导、法务屏登记。
+8. desktop `bypassCSP:true` + 零 CSP（key 存 localStorage，XSS 即泄漏——当前唯一
+   已知注入通道 11.3 已堵，但 CSP 该补）。
+
+### 11.5 回归
+
+```
+node scripts/game_logic_regression.js   # +列表垃圾 +战斗金币
+node scripts/boot_smoke.js              # 面板断言替换淡出断言
+node scripts/nsfw_intent_regression.js  # +/_proxy 路由 4 条
+node scripts/motion_regression.js       # 播种后双跑逐行一致
+node scripts/expression_coverage.js
+node scripts/electron_storage_regression.js
+```
+
+### 11.6 取景校准 + 面板折叠态（用户比对官方截图后追加，别退回去）
+
+用户拿官方截图逐像素对：**我们的人比官方大 ~30%，头饰出框、大腿看不见；
+官方 ⇧ 能把会话区折成「一行台词 + 输入条」**。最终参数（全部截图实测）：
+
+* `_camParams` 本地校准：站姿非 ASMR 窗口 `worldH ×1.42`（2289→3250u；官方
+  折叠态头饰完整入画 + 大腿到画面 ~92%）。**坐姿不乘系数**——官方坐姿参考图
+  （沙发白 T 截图）证明表内 1720u 原窗就是官方取景，之前裁掉大腿不是窗口的锅。
+* `_applyCamera` 底部改为**面板感知 slack**：窗口底允许沉到美术板以下
+  `h × Avatar._panelFrac`（= 面板高/视口高，App `_syncPanelFrac` 在 init/resize/
+  ⇧ 折叠后同步，回归 harness 钉 0.34）。坐姿表内窗底 359 < far_bg 板底 629
+  ——沙发和大腿画在 far_bg 之下，`_coverFor`（最大 quad）看不见它们；旧钳制
+  把窗底推到 629 才裁掉膝盖。顶/左/右仍硬钳（顶钳去掉了 `cover.h >= h` 守卫，
+  `h ≤ cover.h/(1-frac)` 上限保证两者同时可满足——stage_00 实测抓出过这个洞）。
+* `_placeCharacter` 视线目标分档：站 0.74 / 坐 0.68（坐姿表内 0.70，阈值内
+  不动）/ ASMR 0.50。旧值 0.68 一刀切正是「比官方挤」的来源。
+* `#phone.panel-collapsed`：`--panel-h` 降到 112px+安全区，log-head/dots 隐藏，
+  **正文保留一行**（官方折叠态就是台词条+输入框）；HUD 簇与右圆钮随变量落底。
+  ⇧ 切换折叠；新台词到达自动展开（showTyping/showBubble/typeBubble 头部
+  `_panelUp()`）；会话全文回看挂在**点击正文**（`#bubble`）。
+* 验证截图（temp/ryza-shot）：`frame-hideout-sit.png`（坐姿头→大腿 vs 官方
+  坐姿图）、`collapsed.png`（折叠一行条）、`frame-home.png`/`frame-hideout-stand.png`
+  （站姿小腿以上）、`talk.png`（展开态）。六套回归全绿（300 组钳制断言已按
+  slack 规则更新），motion 播种后双跑一致。
+

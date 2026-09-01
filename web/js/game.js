@@ -5,6 +5,9 @@
    real wire names recovered from the AOT snapshot:
      stamina_delta · exp_total · money_delta · inventory_added/removed ·
      ryza_inventory_added/removed · met_charas · met_pairs · memory
+   The <state> protocol also accepts exp_delta / memory_add / met_chara_add /
+   tod / sleep / quest{...} — those are LOCAL extensions (the official wire
+   went over the marionette websocket, whose shapes are not in the package).
    Here the state lives in localStorage and is reduced from two channels:
    deterministic quest actions (quests.js) and the player's own LLM replying
    with a trailing <state>{...}</state> block (api.js).
@@ -361,8 +364,8 @@
         applied.push('money' + (md >= 0 ? '+' : '') + md);
       }
       [['inventory_added', 'you'], ['ryza_inventory_added', 'ryza']].forEach(function (pair) {
-        (d[pair[0]] || []).forEach(function (it) {
-          if (!it) return;
+        ((Array.isArray(d[pair[0]]) && d[pair[0]]) || []).forEach(function (it) {
+          if (!it || (typeof it !== 'string' && typeof it !== 'object')) return;
           var id = typeof it === 'string' ? it : it.id;
           if (Game.addItem(pair[1], id, typeof it === 'object' ? it.count : 1)) {
             applied.push(pair[0] + ':' + id);
@@ -370,8 +373,8 @@
         });
       });
       [['inventory_removed', 'you'], ['ryza_inventory_removed', 'ryza']].forEach(function (pair) {
-        (d[pair[0]] || []).forEach(function (it) {
-          if (!it) return;
+        ((Array.isArray(d[pair[0]]) && d[pair[0]]) || []).forEach(function (it) {
+          if (!it || (typeof it !== 'string' && typeof it !== 'object')) return;
           var id = typeof it === 'string' ? it : it.id;
           if (Game.removeItem(pair[1], id, typeof it === 'object' ? it.count : 1)) {
             applied.push(pair[0] + ':' + id);

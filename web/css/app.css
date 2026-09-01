@@ -6,7 +6,8 @@
   --line:rgba(232,180,92,.22); --radius:14px;
   --safe-b:env(safe-area-inset-bottom,0px);
   --bar-h:calc(env(safe-area-inset-top,0px) + 52px);
-  --sub-h:40px; --bars-h:calc(var(--bar-h) + var(--sub-h));
+  --bars-h:var(--bar-h);   /* single-row chrome since the 2026-09-07 UI pass */
+  --panel-h:clamp(240px,34vh,340px);  /* conversation log panel height */
 }
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{margin:0;height:100%;overflow:hidden;background:#07050a;color:var(--ink);
@@ -48,19 +49,18 @@ input,select,textarea{font:inherit;color:inherit}
 #scene-curtain.on{opacity:.72}
 
 /* ----------------------------------------------------------- topbar
-   Two fixed rows so nothing wraps into the views below (topbar = place +
-   chrome, subbar = mode/status). Views clear both with --bars-h. */
+   Official single row (2026-09-07 UI pass, from the shipped screenshots):
+   transparent bar, hamburger left, voice/text pill + » right. The old
+   two-row topbar+subbar HUD moved to the stage edges (#hud-cluster left,
+   #quick-btns right, conversation in #log-panel). Views clear it via
+   --bars-h. */
 #topbar{position:absolute;top:0;left:0;right:0;height:var(--bar-h);z-index:30;
   display:flex;align-items:center;gap:8px;padding:calc(env(safe-area-inset-top,0px) + 6px) 10px 4px;
-  background:linear-gradient(180deg,rgba(10,7,12,.85),rgba(10,7,12,.45) 70%,transparent)}
-#subbar{position:absolute;top:var(--bar-h);left:0;right:0;height:var(--sub-h);z-index:30;
-  display:flex;align-items:center;gap:6px;padding:0 10px 4px;pointer-events:none}
-#subbar > *{pointer-events:auto}
-#hud{display:flex;gap:6px;flex-wrap:nowrap;min-width:0;overflow:hidden}
-#hud-rpg{display:flex;gap:6px;align-items:center;flex-wrap:nowrap}
+  background:linear-gradient(180deg,rgba(10,7,12,.72),rgba(10,7,12,.28) 70%,transparent)}
 .icon-btn{width:38px;height:38px;border-radius:11px;background:rgba(20,14,18,.6);
   border:1px solid var(--line);font-size:17px;display:grid;place-items:center;
   backdrop-filter:blur(8px);transition:.15s;flex:0 0 auto}
+.icon-btn.plain{background:rgba(20,14,18,.45);border-color:transparent}
 .icon-btn:active{transform:scale(.94)}
 .icon-btn img{width:18px;height:18px;display:block;filter:invert(90%) sepia(20%) saturate(400%) hue-rotate(330deg)}
 .drawer-list li img{width:18px;height:18px;filter:invert(85%) sepia(15%) saturate(400%) hue-rotate(330deg)}
@@ -72,6 +72,35 @@ input,select,textarea{font:inherit;color:inherit}
   border:1px solid var(--line);color:var(--dim);backdrop-filter:blur(8px);white-space:nowrap;
   flex:0 0 auto;max-width:46vw;overflow:hidden;text-overflow:ellipsis}
 .hud-chip.shrink{flex:0 1 auto;min-width:0}
+
+/* voice/text pill — orange gradient with the speaker lottie when she talks,
+   dark with the document glyph in text mode (both states are in the shots). */
+.voice-pill{display:flex;align-items:center;gap:6px;height:34px;padding:0 14px 0 9px;
+  border-radius:999px;font-size:13.5px;font-weight:700;letter-spacing:.04em;flex:0 0 auto;
+  background:rgba(24,17,21,.8);border:1px solid var(--line);color:var(--ink);
+  backdrop-filter:blur(8px);transition:.18s}
+.voice-pill:active{transform:scale(.95)}
+.voice-pill.on{background:linear-gradient(120deg,#ff9a3d,#f5b03d);border-color:transparent;
+  color:#3a2005;box-shadow:0 3px 14px rgba(255,150,60,.35)}
+.voice-pill.off{background:rgba(24,17,21,.82);color:var(--ink)}
+
+/* right side menu — the official » drawer: label left, round icon right */
+#side-menu{position:absolute;top:calc(var(--bar-h) + 4px);right:10px;z-index:34;
+  display:none;flex-direction:column;gap:8px;padding:4px 0}
+#side-menu.open{display:flex;animation:side-in .18s ease}
+@keyframes side-in{from{opacity:0;transform:translateY(-8px) scale(.96)}to{opacity:1;transform:none}}
+.side-item{display:flex;align-items:center;justify-content:flex-end;gap:10px;
+  padding:0 2px;background:none;border:0}
+.side-item span{font-size:12.5px;color:var(--ink);text-shadow:0 1px 4px rgba(0,0,0,.85);
+  letter-spacing:.02em;white-space:nowrap}
+.side-item .round{width:44px;height:44px;border-radius:50%;flex:0 0 auto;
+  background:rgba(26,18,22,.66);border:1px solid var(--line);backdrop-filter:blur(8px);
+  display:grid;place-items:center;transition:.15s}
+.side-item:active .round{transform:scale(.92)}
+.side-item .round img{width:20px;height:20px;display:block;
+  filter:invert(88%) sepia(22%) saturate(500%) hue-rotate(330deg)}
+.side-item .round.gold{background:linear-gradient(150deg,rgba(232,180,92,.92),rgba(201,143,60,.88))}
+.side-item .round.gold img{filter:none}
 
 /* ----------------------------------------------------------- drawer */
 /* Electron frameless shell: drag the window by the HUD strip; every
@@ -104,7 +133,8 @@ body.shell-electron #topbar .hud-chip{-webkit-app-region:no-drag}
 #scrim{position:absolute;inset:0;z-index:55;background:rgba(0,0,0,.5);opacity:0;pointer-events:none;transition:.2s}
 #scrim.on{opacity:1;pointer-events:auto}
 /* Title screen shows only the stage + title card (source title_screen). */
-body.boot #topbar,body.boot #subbar,body.boot #talk-menu,
+body.boot #topbar,body.boot #side-menu,body.boot #hud-cluster,
+body.boot #quick-btns,body.boot #log-panel,
 body.boot #input-bar,body.boot #retry-bar,body.boot .view.active{display:none}
 /* …but the frameless window keeps its controls (pin/min/close) on top. */
 body.boot #topbar{display:flex;background:none;pointer-events:none}
@@ -143,19 +173,81 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .mode-pill:active{transform:scale(.95)}
 .mode-pill.active{background:rgba(232,180,92,.22);border-color:var(--gold);color:var(--gold);font-weight:600}
 .mode-sep{width:1px;background:var(--line);margin:4px 3px;flex:0 0 auto}
-#bubble-wrap{flex:1;display:flex;align-items:flex-start;justify-content:center;
-  padding:0 16px;margin-top:6px;pointer-events:none}
-/* Semi-transparent bubble that fades itself out after the line is read
-   (App._bubbleHold → .fade-out → hidden). It used to be opaque and pinned,
-   walling off the avatar behind it. */
-#bubble{max-width:min(680px,94%);background:rgba(22,15,19,.52);border:1px solid var(--line);
-  border-radius:var(--radius);padding:13px 16px;line-height:1.75;font-size:16px;
-  backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);
-  box-shadow:0 8px 26px rgba(0,0,0,.38);animation:pop .22s ease;
-  transition:opacity .45s ease,transform .45s ease;text-shadow:0 1px 3px rgba(0,0,0,.8)}
-#bubble.fade-out{opacity:0;transform:translateY(-10px)}
-#bubble.speaking{border-color:var(--gold);box-shadow:0 0 26px rgba(232,180,92,.32)}
+/* scene row inside the mode sheet (place / tod / current mode / map) */
+.sheet-scene{display:flex;gap:6px;align-items:center;padding:6px 12px 2px;flex-wrap:wrap}
+.sheet-scene .icon-btn{width:32px;height:32px}
+
+/* RPG cluster — bottom-left of the stage, above the log panel (official:
+   apple row, then a dark coin pill with a thousands separator, then Lv). */
+#hud-cluster{position:absolute;left:12px;bottom:calc(var(--panel-h) + 14px);z-index:16;
+  display:flex;flex-direction:column;gap:6px;pointer-events:auto}
+.apple-row{display:flex;gap:2px;align-items:center;background:none;border:0;padding:2px 0}
+.apple-row img{width:26px;height:26px;display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,.55))}
+.apple-row b{font-size:12px;color:var(--ink);margin-left:6px;text-shadow:0 1px 3px rgba(0,0,0,.9)}
+.hud-line{display:flex;flex-direction:column;align-items:flex-start;gap:4px}
+.money-pill{display:flex;align-items:center;gap:8px;min-width:120px;
+  background:rgba(16,11,15,.72);border:1px solid var(--line);border-radius:999px;
+  padding:5px 14px 5px 6px;backdrop-filter:blur(8px)}
+.money-pill img{width:26px;height:26px;display:block}
+.money-pill b{font-size:14px;font-weight:700;letter-spacing:.03em}
+.lv-pill{align-self:flex-start;font-size:12px;color:var(--ink);background:none;border:0;
+  padding:0 4px;text-shadow:0 1px 4px rgba(0,0,0,.95);letter-spacing:.04em}
+
+/* right round buttons — posture (dual-posture stages only), history ⇧,
+   quest flag, bag (the official circle stack over the stage edge) */
+#quick-btns{position:absolute;right:12px;bottom:calc(var(--panel-h) + 14px);z-index:16;
+  display:flex;flex-direction:column;gap:9px;align-items:flex-end;pointer-events:auto}
+.round-btn{width:46px;height:46px;border-radius:50%;background:rgba(26,18,22,.62);
+  border:1px solid var(--line);backdrop-filter:blur(8px);display:grid;place-items:center;
+  font-size:13px;font-weight:700;color:var(--ink);transition:.15s;flex:0 0 auto}
+.round-btn:active{transform:scale(.92)}
+.round-btn img{width:20px;height:20px;display:block;
+  filter:invert(88%) sepia(22%) saturate(500%) hue-rotate(330deg)}
+
+/* conversation log panel — the official bottom sheet: avatar + name + mode
+   description, the line itself, page dots. Replaces the old floating bubble
+   (which walled off the stage and faded itself away). */
+#log-panel{position:absolute;left:0;right:0;bottom:0;height:var(--panel-h);z-index:15;
+  display:flex;flex-direction:column;padding:0 16px calc(6px + var(--safe-b));
+  background:linear-gradient(180deg,rgba(10,7,12,.55),rgba(10,7,12,.88) 22%,rgba(10,7,12,.94));
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);
+  border-top:1px solid rgba(232,180,92,.16);pointer-events:auto;
+  transition:height .22s ease}
+/* Collapsed (official: ⇧ hides the conversation area down to the input row —
+   the whole stage opens up; the shipped screenshots' menu shots are this
+   state). --panel-h moves on #phone so the HUD cluster + round buttons ride
+   the panel edge. The official collapsed strip KEEPS the last line above the
+   input (see the sitting reference shot) — head/dots go, one text line stays. */
+#phone.panel-collapsed{--panel-h:calc(112px + var(--safe-b))}
+#phone.panel-collapsed #log-panel{background:linear-gradient(0deg,rgba(10,7,12,.86),transparent);
+  border-top:0;backdrop-filter:none;-webkit-backdrop-filter:none;padding-top:0}
+#phone.panel-collapsed #log-head,
+#phone.panel-collapsed #log-dots{display:none}
+#phone.panel-collapsed #log-body{padding-top:4px;max-height:2.9em;overflow:hidden}
+#phone.panel-collapsed #log-panel.expanded #log-body{max-height:none;overflow:auto}
+#log-head{display:flex;align-items:center;gap:10px;padding:10px 0 8px;
+  border-bottom:1px solid rgba(232,180,92,.14);flex:0 0 auto;cursor:pointer}
+#log-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover;
+  border:1px solid var(--line);background:#2a1e24}
+#log-ident{min-width:0}
+#log-name{font-size:13.5px;font-weight:700;color:var(--gold);letter-spacing:.04em}
+#log-sub{font-size:11.5px;color:var(--dim);margin-top:2px;white-space:nowrap;
+  overflow:hidden;text-overflow:ellipsis}
+#log-body{flex:1;overflow:hidden;position:relative;padding-top:8px}
+#log-panel.expanded #log-body{overflow:auto}
+#bubble{max-width:min(680px,100%);line-height:1.75;font-size:16px;animation:pop .22s ease;
+  text-shadow:0 1px 3px rgba(0,0,0,.8);transition:opacity .3s ease}
+#bubble.speaking{color:#fff2dd}
 #bubble.typing{min-width:72px}
+#log-history{display:flex;flex-direction:column;gap:10px;padding-bottom:8px}
+.lh-row{font-size:13.5px;line-height:1.6}
+.lh-who{font-size:11px;color:var(--gold);letter-spacing:.06em;margin-bottom:2px}
+.lh-row.user .lh-who{color:var(--dim)}
+.lh-row.user .lh-text{color:var(--dim)}
+#log-dots{display:flex;gap:8px;justify-content:center;align-items:center;height:22px;flex:0 0 auto}
+#log-dots i{width:7px;height:7px;border-radius:50%;background:rgba(246,236,223,.28);
+  cursor:pointer;transition:.15s}
+#log-dots i.on{background:var(--gold);transform:scale(1.15)}
 .dots{display:inline-flex;gap:5px;align-items:center;height:1.2em;padding:0 4px}
 .dots i{width:7px;height:7px;border-radius:50%;background:var(--gold);opacity:.35;
   animation:dot 1s ease-in-out infinite}
@@ -167,15 +259,22 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 @keyframes pop{from{opacity:0;transform:translateY(10px) scale(.98)}to{opacity:1;transform:none}}
 #bubble-text{white-space:pre-wrap;word-break:break-word}
 
-#input-bar{display:flex;gap:9px;padding:10px 12px calc(10px + var(--safe-b));
-  background:linear-gradient(0deg,rgba(10,7,12,.86),transparent)}
-#input{flex:1;background:rgba(24,17,21,.9);border:1px solid var(--line);border-radius:12px;
-  padding:12px 15px;font-size:15px;outline:none;transition:.15s;user-select:text}
-#input:focus{border-color:var(--gold);background:rgba(30,21,26,.95)}
-#btn-send{width:46px;height:46px;border-radius:12px;background:linear-gradient(160deg,var(--gold),#c98f3c);
-  color:#2a1a08;font-size:18px;font-weight:700;transition:.15s;flex:0 0 auto}
-#btn-send:active{transform:scale(.93)}
-#btn-send:disabled{opacity:.45}
+/* input row — ×N speed circle, pill input with the ✳ (new talk) glyph,
+   orange round send (official bottom bar) */
+#input-bar{display:flex;gap:9px;align-items:center;padding:8px 0 2px;flex:0 0 auto}
+.speed-btn{width:44px;height:44px;font-size:13.5px}
+.input-pill{flex:1;display:flex;align-items:center;min-width:0;
+  background:rgba(24,17,21,.88);border:1px solid var(--line);border-radius:999px;
+  padding:0 6px 0 16px;transition:.15s}
+.input-pill:focus-within{border-color:var(--gold);background:rgba(30,21,26,.95)}
+#input{flex:1;min-width:0;background:none;border:0;padding:12px 0;font-size:15px;
+  outline:none;user-select:text}
+#btn-newtalk{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;flex:0 0 auto}
+#btn-newtalk img{width:17px;height:17px;filter:invert(80%) sepia(30%) saturate(500%) hue-rotate(330deg)}
+.send-btn{width:46px;height:46px;background:linear-gradient(160deg,#ff9a3d,#e08a2f);
+  border-color:transparent;box-shadow:0 3px 12px rgba(255,150,60,.35)}
+.send-btn img{filter:none}
+.send-btn:disabled{opacity:.45}
 
 /* -------------------------------------------------------- world view */
 #world-body{flex:1;display:flex;overflow:hidden}
@@ -290,7 +389,6 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .day-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 .day-chips .chip{min-width:36px;text-align:center;padding:7px 0}
 
-#talk-menu{display:flex;gap:8px;padding:0 12px 4px;pointer-events:auto}
 .hud-chip{cursor:pointer}
 
 .sheet{position:absolute;left:0;right:0;bottom:0;z-index:170;background:var(--panel-2);
@@ -309,6 +407,8 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .title-sub{color:var(--dim);margin:0 0 28px;letter-spacing:.2em}
 .title-sparkle img,.title-sparkle canvas{width:72px;height:72px;opacity:.9;display:block}
 #lottie-voice{width:22px;height:22px;display:block}
+#voice-text-ico{width:17px;height:17px;display:block}
+.voice-pill.on #voice-text-ico{filter:none}
 .lang-list{display:flex;flex-wrap:wrap;gap:8px}
 .lang-list .mode-pill{flex:1 1 42%;justify-content:center}
 .confetti-canvas{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
@@ -354,8 +454,9 @@ input[type=range]{width:100%;accent-color:var(--gold)}
 .skin-card.locked{cursor:not-allowed;opacity:.75}
 
 /* --------------------------------------------------- RPG HUD / quests */
-#hud-stamina img,.apple-mini{width:15px;height:15px;display:inline-block;vertical-align:-2px}
-#hud-money img{width:14px;height:14px;vertical-align:-2px;filter:invert(85%) sepia(40%) saturate(600%) hue-rotate(350deg)}
+/* (the visual rules live up in the talk-view block: .apple-row / .money-pill) */
+.apple-mini{width:15px;height:15px;display:inline-block;vertical-align:-2px}
+#hud-money img{filter:none}
 .hud-chip b{color:var(--gold);font-weight:700}
 
 .qcard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);

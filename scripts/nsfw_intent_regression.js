@@ -104,5 +104,23 @@ const shipped = path.join(WEB, 'assets', 'spine', 'crf_chr_002',
                           'crf_skn_002_0001_99', 'crf_skn_002_0001_99nsfw.png');
 ok(fs.existsSync(shipped), 'runtime nsfw page is next to the standing atlas');
 
+/* --- proxy routing (desktop shell regression: ryza://app must NOT bypass) ---
+   1.2.9 moved the desktop page from http://127.0.0.1:<port> to ryza://app.
+   localProxy keyed off the loopback origin only, so every LLM/TTS call
+   skipped /_proxy and died on CORS. All hosts that ship a /_proxy must
+   route; a foreign origin must go direct. */
+const PROXY_TARGET = 'https://example.test/v1/chat/completions';
+function routedFrom(origin) {
+  sandbox.location = { origin };
+  const u = sandbox.Api._localProxy(PROXY_TARGET);
+  return u === '/_proxy?u=' + encodeURIComponent(PROXY_TARGET);
+}
+ok(routedFrom('http://127.0.0.1:8765'), 'serve.py loopback routes through /_proxy');
+ok(routedFrom('http://localhost:8765'), 'localhost routes through /_proxy');
+ok(routedFrom('ryza://app'), 'desktop ryza://app routes through /_proxy (1.2.9 fix)');
+sandbox.location = { origin: 'https://elsewhere.test' };
+ok(sandbox.Api._localProxy(PROXY_TARGET) === PROXY_TARGET, 'foreign browser origin calls the endpoint direct');
+sandbox.location = { origin: 'http://127.0.0.1:8765' };
+
 console.log(failures ? '\nNSFW INTENT: ' + failures + ' FAILURES' : '\nNSFW INTENT: ALL PASS');
 process.exit(failures ? 1 : 0);

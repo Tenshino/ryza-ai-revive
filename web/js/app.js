@@ -23,7 +23,6 @@
     audio: null,
     speaking: false,
     _typeTimer: null,
-    _pendingQuestion: null,
     _ringAlarm: null,
     _inTutorial: false,
     _lastText: '',
@@ -76,6 +75,17 @@
        divides it back out via Avatar._cssZoom, and the canvas backing store
        multiplies dpr by it (see avatar.js). Electron-only: phones keep zoom
        1 and rely on the fluid full-viewport layout. */
+    /* How much of the screen the bottom log panel covers — the camera's
+       plate clamp lets the window sink below the painted art by exactly
+       this much (the panel hides the seam). Recomputed on init/resize and
+       after the ⇧ collapse transition. */
+    _syncPanelFrac: function () {
+      var p = document.getElementById('log-panel');
+      var vh = window.innerHeight || 1;
+      var f = (p && p.offsetHeight) ? Math.min(0.55, p.offsetHeight / vh) : 0.34;
+      if (window.Avatar) Avatar._panelFrac = f;
+    },
+
     _fitUi: function () {
       var el = document.getElementById('phone');
       if (!el) return;
@@ -124,6 +134,7 @@
         var st = Config.section('state');
         Sound.setPlace(st.stage, st.tod, World.backgroundFor(st.stage));
         App._tickDay();
+        App._syncPanelFrac();
         Avatar.init(function () {
           App._loadSceneFor(st.stage, st.tod);
         });
@@ -140,7 +151,10 @@
         Welcome.render(document.getElementById('welcome-body'));
         if (window.Fx) Fx.init();
         App._fitUi();
-        window.addEventListener('resize', App._fitUi);
+        window.addEventListener('resize', function () {
+          App._fitUi();
+          App._syncPanelFrac();
+        });
 
         Onboarding.showTitle(function () {
           if (!Onboarding.isDone()) {
@@ -285,25 +299,66 @@
           document.querySelectorAll('.mode-pill[data-style]').forEach(function (x) {
             x.classList.toggle('active', x === b);
           });
+          if (App._syncVoicePill) App._syncVoicePill();
         };
       });
 
+      /* Official voice/text pill (2026-09-07 UI pass): it toggles state.style
+         (voice ↔ text), exactly like the shipped screenshots — orange speaker
+         「ボイス」 while she talks, dark document 「テキスト」 in text mode.
+         The master mute stays where it always was: settings → app.voice. */
       var vbtn = document.getElementById('btn-voice');
-      var syncVoice = function () {
-        var on = Config.section('app').voice;
-        vbtn.classList.toggle('on', on);
-        vbtn.classList.toggle('off', !on);
-        if (window.Fx) Fx.setVoice(on);
+      var vcanvas = document.getElementById('lottie-voice');
+      var vsync = function () {
+        var a = Config.section('app'), st = Config.section('state');
+        var talking = !!a.voice && st.style === 'voice';
+        vbtn.classList.toggle('on', talking);
+        vbtn.classList.toggle('off', !talking);
+        var lab = document.getElementById('voice-pill-label');
+        if (lab) lab.textContent = I18n.t(talking ? 'voice.on' : 'voice.off');
+        if (vcanvas) vcanvas.classList.toggle('hidden', !talking);
+        var tico = document.getElementById('voice-text-ico');
+        if (tico) tico.classList.toggle('hidden', talking);
+        if (window.Fx) Fx.setVoice(!!a.voice);
       };
       vbtn.onclick = function () {
-        Config.set('app.voice', !Config.section('app').voice);
-        syncVoice();
-        if (!Config.section('app').voice && App.audio) App.audio.pause();
+        var st = Config.section('state');
+        Config.set('state.style', st.style === 'voice' ? 'text' : 'voice');
+        vsync();
+        document.querySelectorAll('.mode-pill[data-style]').forEach(function (x) {
+          x.classList.toggle('active', x.getAttribute('data-style') === st.style);
+        });
+        if (st.style !== 'voice' && App.audio) App.audio.pause();
       };
-      syncVoice();
+      App._syncVoicePill = vsync;
+      vsync();
 
-      document.getElementById('btn-settings').onclick = function () { App.showView('settings'); };
-      /* Posture chip — visible only on stages whose scene lists both sitting
+      /* » — the official right side menu. Each row jumps to the screen the
+         source names: shop/skin/save/fullscreen/chara-toggle/settings/map. */
+      var side = document.getElementById('side-menu');
+      var sideClose = function (fn) {
+        return function () { side.classList.remove('open'); fn(); };
+      };
+      document.getElementById('btn-expand').onclick = function () {
+        side.classList.toggle('open');
+      };
+      document.addEventListener('click', function (e) {
+        if (!side.classList.contains('open')) return;
+        if (e.target.closest && e.target.closest('#side-menu,#btn-expand')) return;
+        side.classList.remove('open');
+      }, true);
+      document.getElementById('sm-shop').onclick = sideClose(function () { App.showView('quest'); });
+      document.getElementById('sm-skin').onclick = sideClose(function () { App.showView('skin'); });
+      document.getElementById('sm-save').onclick = sideClose(function () {
+        /* the save slots live at the bottom of the player-profile form */
+        App.showView('chara');
+      });
+      document.getElementById('sm-full').onclick = sideClose(function () { App._toggleFullscreen(); });
+      document.getElementById('sm-chara').onclick = sideClose(function () { App._toggleChara(); });
+      document.getElementById('sm-settings').onclick = sideClose(function () { App.showView('settings'); });
+      document.getElementById('sm-map').onclick = sideClose(function () { App.showView('world'); });
+
+      /* Posture button — visible only on stages whose scene lists both sitting
          and standing midgroundPostures (e.g. stage_01_002_01). */
       var postureBtn = document.getElementById('btn-posture');
       if (postureBtn) postureBtn.onclick = function () {
@@ -312,13 +367,38 @@
       };
       var skinBtn = document.getElementById('btn-chara-skin');
       if (skinBtn) skinBtn.onclick = function () { App.showView('skin'); };
-      document.getElementById('hud-mode').onclick = function () {
-        document.getElementById('sheet-mode').classList.toggle('hidden');
-      };
+      /* place / tod / mode / map now live inside the mode sheet (the » row
+         of chips under the pills) */
+      var hudMode = document.getElementById('hud-mode');
+      if (hudMode) hudMode.onclick = function () { /* current-mode label */ };
       document.getElementById('hud-place').onclick = function () { App.showView('world'); };
       document.getElementById('btn-map').onclick = function () { App.showView('world'); };
       document.getElementById('btn-quest-sheet').onclick = function () { App.showView('quest'); };
-      document.getElementById('btn-log').onclick = function () { App.showView('memory'); };
+      /* ⇧ — official behaviour: collapse the conversation area down to the
+         input row (the whole stage opens up), tap again to bring it back.
+         The running transcript (talk_conversation_log) opens by tapping the
+         line itself. */
+      var logT = document.getElementById('btn-log-toggle');
+      if (logT) logT.onclick = function () {
+        var phone = document.getElementById('phone');
+        var open = phone.classList.toggle('panel-collapsed');
+        var arrow = document.querySelector('#btn-log-toggle img');
+        if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+        /* the panel height feeds the camera's bottom slack — re-sync after
+           the 220ms collapse transition so the framing re-solves */
+        setTimeout(function () { App._syncPanelFrac(); if (window.Avatar) Avatar.resize(); }, 260);
+      };
+      var bubEl = document.getElementById('bubble');
+      if (bubEl) bubEl.onclick = function () { App._toggleLogHistory(); };
+      var spd = document.getElementById('btn-speed');
+      if (spd) spd.onclick = function () { App._cycleTextSpeed(); };
+      var nt = document.getElementById('btn-newtalk');
+      if (nt) nt.onclick = function () { App._confirmNewTalk(); };
+      /* tapping her name/subtitle opens the mode sheet (mode lives there now) */
+      var logHead = document.getElementById('log-head');
+      if (logHead) logHead.onclick = function () {
+        document.getElementById('sheet-mode').classList.toggle('hidden');
+      };
       ['hud-stamina', 'hud-money', 'hud-level'].forEach(function (id) {
         var el = document.getElementById(id);
         if (el) el.onclick = function () { App.renderStatus(); document.getElementById('sheet-status').classList.remove('hidden'); };
@@ -444,7 +524,15 @@
       }
       var todBtn = document.getElementById('btn-tod-label');
       if (todBtn) todBtn.textContent = World.todLabel(st.tod);
-      document.getElementById('drawer-day').textContent = '同伴 ' + (st.day || 1) + ' 天';
+      var dd = document.getElementById('drawer-day');
+      if (dd) dd.textContent = I18n.tf('drawer.days', '同伴 {n} 天', { n: (st.day || 1) });
+      /* log panel identity line — official shows her name + the current
+         mode's description under the avatar (e.g. ASMR: 耳元で震える声で) */
+      var ln = document.getElementById('log-name');
+      if (ln) ln.textContent = I18n.tc('chara.ryza', 'ライザ');
+      var ls = document.getElementById('log-sub');
+      if (ls) ls.textContent = I18n.t('mode.sub.' + st.mode) || I18n.t('mode.' + st.mode) || st.mode;
+      App._syncSpeedBtn();
       App.refreshHud();
     },
 
@@ -462,7 +550,8 @@
         chip.innerHTML = html;
       }
       var m = document.getElementById('hud-money-n');
-      if (m) m.textContent = Game.s.money;
+      /* official purse pill groups thousands: 43,000 */
+      if (m) m.textContent = String(Game.s.money).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
       var lv = document.getElementById('hud-level');
       if (lv) lv.textContent = 'Lv' + Game.level();
       App._dailyBadge();
@@ -876,6 +965,16 @@
       Welcome.render(document.getElementById('welcome-body'));
       App.renderWorld();
       App.renderStatus();
+      /* the three panels that also carry UI strings (2026-09-07 audit fix:
+         these used to keep the old language until you happened to reopen them) */
+      if (document.getElementById('skin-grid')) App.renderSkins();
+      if (document.getElementById('memory-list')) App.renderMemory();
+      if (window.Alarm && Alarm.render) {
+        var al = document.getElementById('alarm-list');
+        if (al) Alarm.render(al, App.playFile);
+      }
+      if (App._syncVoicePill) App._syncVoicePill();
+      App._syncSpeedBtn();
     },
 
     _openLangSheet: function () {
@@ -934,7 +1033,17 @@
         onOk: function () {
           App.history = [];
           if (window.Nsfw) Nsfw.reset();
-          document.getElementById('bubble').classList.add('hidden');
+          App._pages = []; App._pageSel = -1;
+          var dots = document.getElementById('log-dots');
+          if (dots) dots.innerHTML = '';
+          var his = document.getElementById('log-history');
+          if (his) { his.innerHTML = ''; his.classList.add('hidden'); }
+          var panel = document.getElementById('log-panel');
+          if (panel) panel.classList.remove('expanded');
+          var bub = document.getElementById('bubble');
+          if (bub) bub.classList.remove('hidden');
+          var bt = document.getElementById('bubble-text');
+          if (bt) bt.textContent = '';
           App.showView('talk');
           App.greet();
         }
@@ -1057,10 +1166,6 @@
         Avatar.setTalking(false);
         URL.revokeObjectURL(url);
         App._bubbleHold(1600);   /* done talking → bubble steps aside */
-        if (Config.section('app').autoAdvance && App._pendingQuestion) {
-          App.say(App._pendingQuestion);
-          App._pendingQuestion = null;
-        }
       };
       Avatar.setTalking(true);
       App._bubbleKeep();         /* stay put while she talks */
@@ -1094,77 +1199,166 @@
       App.buzz();
     },
 
-    /* ---------------------------------------------------- bubble lifecycle
-       The bubble floats over the stage and used to sit there forever with
-       an opaque backing — hiding the avatar behind it. Now it shows, then
-       fades itself out once the line has been read; _bubbleKeep() pins it
-       while talking, _bubbleHold(ms) schedules the fade afterwards. */
+    /* ------------------------------------------------- log panel lifecycle
+       2026-09-07 UI pass: the floating auto-fading bubble is gone. The
+       official talk screen keeps a bottom log panel — avatar + name + mode
+       description, the current line, page dots for the last few replies, and
+       a ⇧ that expands the whole running conversation. _bubbleKeep/_bubbleHold
+       stay as no-op seams (playUrl/speakThen still call them); nothing
+       self-hides anymore, so the old fade race is structurally impossible. */
+    _pages: [],
+    _pageSel: -1,
+    _typeGen: 0,
     _bubbleKeep: function () {
       if (App._bubbleTimer) { clearTimeout(App._bubbleTimer); App._bubbleTimer = null; }
     },
-    _bubbleHold: function (ms) {
-      App._bubbleKeep();
-      if (Config.section('app').showBubble === false) return;
-      App._bubbleTimer = setTimeout(function () {
-        var b = document.getElementById('bubble');
-        if (!b || b.classList.contains('hidden')) return;
-        b.classList.add('fade-out');
-        App._bubbleTimer = setTimeout(function () {
-          b.classList.remove('fade-out');
-          b.classList.add('hidden');
-        }, 520);
-      }, ms != null ? ms : 5200);
+    _bubbleHold: function () { /* panel is persistent — no scheduled fade */ },
+    _bubbleReveal: function () { /* no-op seam */ },
+
+    /* the pill's own two official placeholder states (input.hint lives in
+       the CONTENT table → tc; input.waiting is a UI key → t) */
+    _inputHint: function (waiting) {
+      var inp = document.getElementById('input');
+      if (!inp) return;
+      inp.placeholder = waiting ? I18n.t('input.waiting')
+                                : I18n.tc('input.hint', inp.placeholder);
     },
-    _bubbleReveal: function (b) {
-      App._bubbleKeep();
-      b.classList.remove('hidden', 'fade-out');
+
+    _pushPage: function (text) {
+      if (!text) return;
+      var last = App._pages[App._pages.length - 1];
+      if (last === text) return;
+      App._pages.push(text);
+      if (App._pages.length > 5) App._pages.shift();
+      App._pageSel = App._pages.length - 1;
+      App._renderDots();
+    },
+    _renderDots: function () {
+      var host = document.getElementById('log-dots');
+      if (!host) return;
+      host.innerHTML = '';
+      if (App._pages.length < 2) return;
+      App._pages.forEach(function (t, i) {
+        var d = document.createElement('i');
+        if (i === App._pageSel) d.className = 'on';
+        d.onclick = function () {
+          App._pageSel = i;
+          document.getElementById('bubble-text').textContent = App._pages[i];
+          App._renderDots();
+        };
+        host.appendChild(d);
+      });
+    },
+    _toggleLogHistory: function () {
+      var panel = document.getElementById('log-panel');
+      var his = document.getElementById('log-history');
+      var bub = document.getElementById('bubble');
+      if (!panel || !his) return;
+      var open = panel.classList.toggle('expanded');
+      var arrow = document.querySelector('#btn-log-toggle img');
+      if (arrow) arrow.style.transform = open ? 'rotate(180deg)' : '';
+      if (open) {
+        his.innerHTML = '';
+        his.classList.remove('hidden');
+        if (bub) bub.classList.add('hidden');
+        var rows = (App.history || []).slice(-30);
+        var whoRyza = I18n.tc ? I18n.tc('chara.ryza', 'ライザ') : 'ライザ';
+        var whoYou = I18n.tc ? I18n.tc('chara.you', 'あなた') : 'あなた';
+        rows.forEach(function (m) {
+          var r = document.createElement('div');
+          r.className = 'lh-row ' + (m.role === 'user' ? 'user' : 'ryza');
+          var w = document.createElement('div');
+          w.className = 'lh-who';
+          w.textContent = m.role === 'user' ? whoYou : whoRyza;
+          var t = document.createElement('div');
+          t.className = 'lh-text';
+          t.textContent = m.content;
+          r.appendChild(w); r.appendChild(t);
+          his.appendChild(r);
+        });
+        his.scrollTop = his.scrollHeight;
+      } else {
+        his.classList.add('hidden');
+        if (bub) bub.classList.remove('hidden');
+      }
+    },
+    _cycleTextSpeed: function () {
+      var cur = Number(Config.section('app').textSpeed) || 28;
+      var idx = 0;
+      TEXT_SPEEDS.forEach(function (o, i) { if (o.v === cur) idx = i; });
+      var nxt = TEXT_SPEEDS[(idx + 1) % TEXT_SPEEDS.length];
+      Config.set('app.textSpeed', nxt.v);
+      App._syncSpeedBtn();
+    },
+    _syncSpeedBtn: function () {
+      var b = document.getElementById('btn-speed');
+      if (!b) return;
+      var cur = Number(Config.section('app').textSpeed) || 28;
+      var label = { 30: '×1', 18: '×1.5', 12: '×2', 8: '×3' };
+      b.textContent = label[cur] || (cur <= 10 ? '×3' : cur <= 15 ? '×2' : cur <= 24 ? '×1.5' : '×1');
+    },
+
+    /* a new line always brings the panel back (official: she never talks
+       into a collapsed strip) */
+    _panelUp: function () {
+      var phone = document.getElementById('phone');
+      if (phone && phone.classList.contains('panel-collapsed')) {
+        phone.classList.remove('panel-collapsed');
+        var arrow = document.querySelector('#btn-log-toggle img');
+        if (arrow) arrow.style.transform = '';
+      }
     },
 
     showTyping: function () {
+      App._panelUp();
       var b = document.getElementById('bubble');
       var vig = document.getElementById('vignette');
-      App._bubbleReveal(b);
-      b.classList.add('typing', 'speaking');
+      if (b) {
+        b.classList.remove('hidden');
+        b.classList.add('typing', 'speaking');
+      }
       document.getElementById('bubble-text').innerHTML =
         '<span class="dots" aria-hidden="true"><i></i><i></i><i></i></span>';
       if (vig) vig.classList.add('talk-glow');
+      App._inputHint(true);
     },
 
     showBubble: function (text) {
+      App._panelUp();
       var vig = document.getElementById('vignette');
       if (vig) vig.classList.remove('talk-glow');
       var b = document.getElementById('bubble');
-      b.classList.remove('typing', 'speaking');
-      if (!Config.section('app').showBubble) {
-        b.classList.add('hidden');
-        return;
-      }
-      App._bubbleReveal(b);
+      if (b) b.classList.remove('typing', 'speaking', 'hidden');
+      if (Config.section('app').showBubble === false) return;
       document.getElementById('bubble-text').textContent = text;
-      App._bubbleHold(6500);
+      App._pushPage(text);
+      App._inputHint(false);
     },
 
     typeBubble: function (text, done) {
+      App._panelUp();
       if (App._typeTimer) clearTimeout(App._typeTimer);
+      /* generation token: a second chain (retry/alarm while the first line is
+         still typing) kills the old one instead of interleaving writes */
+      var gen = ++App._typeGen;
       var b = document.getElementById('bubble');
       var span = document.getElementById('bubble-text');
       var vig = document.getElementById('vignette');
-      App._bubbleReveal(b);
-      b.classList.remove('typing');
-      b.classList.add('speaking');
+      if (b) {
+        b.classList.remove('hidden');
+        b.classList.remove('typing');
+        b.classList.add('speaking');
+      }
       if (vig) vig.classList.add('talk-glow');
       var speed = Number(Config.section('app').textSpeed) || 28;
       var i = 0;
       (function step() {
+        if (gen !== App._typeGen) return;
         if (i >= text.length) {
-          b.classList.remove('speaking');
+          if (b) b.classList.remove('speaking');
           if (vig) vig.classList.remove('talk-glow');
-          /* no voice coming (text style / voice off / TTS off) → the fade
-             is scheduled here; otherwise playUrl owns the timing. */
-          var st = Config.section('state');
-          if (st.style === 'text' || !Config.section('app').voice ||
-              Config.section('tts').mode === 'off') App._bubbleHold(5200);
-          else App._bubbleHold(12000);   /* fallback if TTS never returns */
+          App._pushPage(text);
+          App._inputHint(false);
           done && done();
           return;
         }
@@ -1259,6 +1453,13 @@
       var defSnooze = (existing && existing.snoozeMin != null) ? existing.snoozeMin : 5;
       var defVol = (existing && existing.volume != null) ? existing.volume : 1;
       var defVib = existing ? existing.vibrate !== false : true;
+      /* defTime is interpolated into the form's innerHTML — an imported save
+         slot could carry Alarm.items with arbitrary strings. Whitelist the
+         HH:MM shape before it reaches the DOM. */
+      if (!/^\d{1,2}:\d{2}$/.test(defTime)) {
+        defTime = String(now.getHours()).padStart(2, '0') + ':' +
+                  String(now.getMinutes()).padStart(2, '0');
+      }
 
       App.openModal({
         title: existing ? I18n.t('alarm.edit') : I18n.t('alarm.new'),
@@ -1648,11 +1849,9 @@
       sp.appendChild(seg);
       w.appendChild(sp);
       App._switch(w, T('settings.voice'), Config.section('app').voice,
-        function (v) { Config.set('app.voice', v); });
+        function (v) { Config.set('app.voice', v); if (App._syncVoicePill) App._syncVoicePill(); });
       App._switch(w, T('settings.bubble'), Config.section('app').showBubble !== false,
         function (v) { Config.set('app.showBubble', v); });
-      App._switch(w, T('settings.autoAdvance'), Config.section('app').autoAdvance,
-        function (v) { Config.set('app.autoAdvance', v); });
       App._switch(w, T('settings.vibration'), Config.section('app').vibration,
         function (v) { Config.set('app.vibration', v); });
       App._switch(w, T('settings.rim'), Config.section('app').rim !== false,

@@ -2,8 +2,21 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
-【当前状态（2026-09-07）】
-NSFW 图集变体（AUDIT §10.1）+ **按源表取景、坐姿锁中景**（§10.2，不要退回去）：
+【当前状态（2026-09-08）】
+官方 UI 对话页重构 + 桌面代理修复 + 取景校准（AUDIT §11，别退回去）：
+① localProxy 必须认 ryza://app（1.2.9 迁移漏了它 ⇒ 桌面 LLM/TTS 全挂，已修 + 4 条路由断言）；
+② 对话页 chrome = 官方样式：单行顶栏（☰/ボイス胶囊/»侧边菜单）、左下 HUD 簇（苹果+千分位金币+Lv）、
+   右下圆钮（⇧折叠/⚑任务/背包）、底部常驻会话面板（头像+ライザ+mode.sub.* 描述+正文+页点），
+   ⇧ 折叠到只剩输入条（#phone.panel-collapsed 驱动 --panel-h），点正文开全文回看（talk_conversation_log 补齐）；
+   旧「气泡自动淡出」生命周期退役（_bubbleHold/Keep 留空接缝），boot_smoke 断言已换；
+③ 站姿取景本地校准：_camParams 站姿非 ASMR worldH×1.30，视线目标 站0.74/坐0.68/ASMR0.50
+   （官方截图：头饰完整入画、大腿可见、折叠态小腿以上全部）；
+④ 战斗选怪 area 字符串比较恒 false + NaN 奖励把金币清零——已修，回归有守；reducer 列表形态垃圾已守卫；
+⑤ motion_regression 播种（xorshift32）+ _aimSm 600u/s 限速——守门从此可复现，别再说不稳定的 12u；
+⑥ 桌面「每次开都填问卷」= 用户跑的是 output/desktop/win-unpacked 里的 1.2.8 旧包（端口漂移换 origin 清档），
+   1.2.9 的 userData JSON + ryza://app 已根治，旧 staging 已删；build_desktop.ps1 成品闸门改扫本次新写的目录；
+   stamp_version.js 有 --check 且无参自读 config/version.json。exe/APK 重出 1.2.10。
+此前（09-07）：NSFW 图集变体（AUDIT §10.1）+ **按源表取景、坐姿锁中景**（§10.2，不要退回去）：
 上一轮把角色缩小去「塞全身」是错的——源 APK 用 `posture_camera.json` 的
 scale/offset/zoom，点击部位是 BB_head/breast/weast/arm/body（上半身），
 本来就不是整脚入画。缩小还会把塔奥家门前的坐姿从沙发上抬走。

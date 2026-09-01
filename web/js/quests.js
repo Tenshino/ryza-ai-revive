@@ -103,10 +103,6 @@
     return (window.I18n && I18n.tf) ? I18n.tf(key, fb, map) : fb;
   }
 
-  function areaOfStage(stageId) {
-    return (stageId || '').slice(6, 8) ? 'area_' + (stageId || '').slice(6, 8) : 'area_01';
-  }
-
   var Quests = {
     PRAISES: PRAISES,
     CHAIN: CHAIN,
@@ -165,7 +161,7 @@
         '{"type":"talk|explore|gather|craft|battle|shop","title":"...","desc":"...","goal":"...","need":2,"cost":3}',
         'type は talk/explore/gather/craft/battle/shop のいずれか1つ。',
         'need は2〜5、cost は1〜5。',
-        'title/desc/goal は ' + ((window.Langs && I18n.LANG_NAMES) ? I18n.LANG_NAMES[Langs.llm()] || Langs.llm() : '日本語') + 'で書くこと。'
+        'title/desc/goal は ' + ((window.I18n && I18n.LANG_NAMES && window.Langs) ? (I18n.LANG_NAMES[Langs.llm()] || Langs.llm()) : '日本語') + 'で書くこと。'
       ].join('\n'), { mode: 'chat', style: 'text' }).then(function (r) {
         var m = /\{[\s\S]*\}/.exec(r.text || '');
         if (!m) throw new Error('bad quest json');
@@ -343,7 +339,12 @@
         line: TF('qact.craft.ok', 'せーの… できた！ {item}！ あたしの調合、上達してない？', { item: itemName(made.out) }) };
     },
     act_battle: function (q) {
-      var area = ctx_area(q);
+      /* ctx_area returns the AREA ID ('area_01'); MONSTERS.area and the reward
+         maths below are numeric. Comparing them as strings never matched
+         (every mob came from the fallback pool), and 'area_01' * 10 = NaN
+         reached addMoney — whose (x+NaN)||0 guard then WIPED the player's
+         gold on every battle win. Convert once, use the number everywhere. */
+      var area = Number(/area_(\d+)/.exec(ctx_area(q))[1]) || 1;
       var mobs = MONSTERS.filter(function (m) { return m.area === area; });
       var mi = Math.floor(Math.random() * (mobs.length || MONSTERS.length));
       var mob = (mobs.length ? mobs : MONSTERS)[mi];

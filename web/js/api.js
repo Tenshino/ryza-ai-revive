@@ -222,8 +222,17 @@
     return String(baseUrl || '').replace(/\/+$/, '') + path;
   }
 
+  /* Three hosts ship a same-origin /_proxy: scripts/serve.py (loopback http),
+     the desktop shell (ryza://app — desktop/main.js protocol handler) and the
+     Android AssetServer (loopback http). The desktop scheme is a standard
+     custom scheme, so location.origin is "ryza://app" — matching only the
+     loopback regex silently disabled the proxy there and every LLM/TTS call
+     died with the CORS toast. Match both; a foreign origin in a real browser
+     still calls the endpoint directly. */
   function localProxy(target) {
-    if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(location.origin)) return target;
+    var or = String(location.origin || '');
+    if (!/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(or) &&
+        !/^ryza:\/\/app$/i.test(or)) return target;
     return '/_proxy?u=' + encodeURIComponent(target);
   }
 
@@ -259,6 +268,9 @@
     buildSystemPrompt: buildSystemPrompt,
     extractState: extractState,
     isPlaceholderModel: isPlaceholderModel,
+    /* test seam: which calls get rewritten onto the same-origin /_proxy
+       (nsfw_intent_regression asserts serve.py + ryza://app both route) */
+    _localProxy: localProxy,
     /* resolved per-mode TTS voice direction (base hint + mode layer) */
     ttsStyleFor: function (mode) { return ttsStyleFor(mode, Config.section('tts')); },
 
