@@ -32,10 +32,6 @@ This git repository is **source code only**. Original-game textures, Spine `.ske
 
 本仓库只放源码。原作贴图、Spine 骨骼二进制、语音 / BGM / 环境音 / SE、以及随包字体都不进 git，**历史提交里也没有**。
 
-Playable Windows and Android builds still include those files. Get them from [Releases](https://github.com/zeroa234/ryza-ai-revive/releases) — those packages were not changed.
-
-可玩的 Windows / 安卓包仍带完整素材，请从 [Releases](https://github.com/zeroa234/ryza-ai-revive/releases) 下载。Release 安装包没有改动。
-
 To run or rebuild from source, restore media into `web/assets/` (png / jpg / skel / m4a / wav / ttf). Do not commit them.
 
 从源码运行或打包前，把素材放回 `web/assets/`，不要提交：
