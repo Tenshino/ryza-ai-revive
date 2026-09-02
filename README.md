@@ -24,10 +24,6 @@ Current version: **1.2.15** — installer and APK: [Releases](https://github.com
 | 7 UI languages | 界面七语 |
 | Desktop frameless window + Android WebView APK | 无边框桌面窗 + 安卓 WebView |
 
-Clothing / undress changes only when the model writes `undress:on` (or the alias `nsfw:on`) on the tag line. Player keywords never force it.
-
-脱衣只认回复标签行的 `undress:on`（旧键 `nsfw` 仍能解析），不会扫玩家关键词。
-
 ---
 
 ## Privacy / 隐私
