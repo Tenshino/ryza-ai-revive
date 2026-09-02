@@ -5,7 +5,7 @@
   "private": true,
   "description": "Ryza Chat offline rebuild - frameless desktop shell",
   "main": "main.js",
-  "author": "ryza-revive",
+  "author": "zeroa234",
   "scripts": {
     "start": "electron .",
     "dist": "electron-builder --win"
