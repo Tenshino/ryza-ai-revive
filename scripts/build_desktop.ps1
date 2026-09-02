@@ -42,7 +42,7 @@ if (-not (Test-Path "node_modules/electron/dist/electron.exe")) {
 }
 
 $BuildStart = Get-Date
-npx electron-builder --win --x64
+npx electron-builder --win --x64 --publish never
 if ($LASTEXITCODE -ne 0) { throw "electron-builder failed" }
 
 # The installer is a compressed NSIS container, so the artifact that can
