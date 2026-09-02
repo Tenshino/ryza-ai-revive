@@ -86,7 +86,6 @@ Toolchain directory: set `RYZA_ANDROID_TOOLS`, or put a single path in gitignore
 ## Tests / 测试
 
 ```powershell
-node scripts/nsfw_intent_regression.js
 node scripts/boot_smoke.js
 node scripts/game_logic_regression.js
 node scripts/memory_regression.js
