@@ -68,8 +68,7 @@
 
     claim: function (idxOverride) {
       Daily.load();
-      var cheat = Game.cheat();
-      if (!cheat && !Daily.available()) return { ok: false, reason: 'done' };
+      if (!Daily.available()) return { ok: false, reason: 'done' };
       var idx = (idxOverride != null) ? Util.clamp(idxOverride | 0, 0, 6)
                                       : Util.clamp(Daily.streak(), 0, 6);
       var r = Daily.rewardFor(idx);
@@ -94,12 +93,10 @@
           msgs.push(rewardText(6));
           break;
       }
-      if (!cheat) {
-        Daily.s.streak = Daily.available() ? Daily.streak() + 1 : Daily.streak();
-        Daily.s.lastDate = todayStr();
-        if (Daily.s.claimedDays.indexOf(idx) === -1) Daily.s.claimedDays.push(idx);
-        Daily.save();
-      }
+      Daily.s.streak = Daily.available() ? Daily.streak() + 1 : Daily.streak();
+      Daily.s.lastDate = todayStr();
+      if (Daily.s.claimedDays.indexOf(idx) === -1) Daily.s.claimedDays.push(idx);
+      Daily.save();
       Game.remember('連続ログイン ' + Daily.streak() + ' 日目：' + msgs.join('、'));
       if (window.Sound) Sound.se('quest_clear');
       if (window.Fx) Fx.burstConfetti();
@@ -148,7 +145,7 @@
       var btn = document.createElement('button');
       btn.className = 'btn primary';
       btn.textContent = Daily.available() ? I18n.t('dl.cta') : I18n.t('dl.done');
-      btn.disabled = !Daily.available() && !Game.cheat();
+      btn.disabled = !Daily.available();
       btn.onclick = function () {
         var res = Daily.claim();
         if (!res.ok) { if (window.App) App.toast(I18n.t('dl.already')); return; }
@@ -159,23 +156,6 @@
         Daily.render(root);
       };
       root.appendChild(btn);
-
-      if (Game.cheat()) {
-        var row = document.createElement('div');
-        row.className = 'btn-row';
-        DAYS.forEach(function (d, i) {
-          var b = document.createElement('button');
-          b.className = 'mini-btn';
-          b.textContent = I18n.t('dl.week.' + d);
-          b.onclick = function () {
-            var res = Daily.claim(i);
-            if (window.App && res.ok) { App.toast(I18n.t('dl.got') + res.text); if (App.refreshHud) App.refreshHud(); }
-            Daily.render(root);
-          };
-          row.appendChild(b);
-        });
-        root.appendChild(row);
-      }
     },
 
     REWARDS: REWARDS,

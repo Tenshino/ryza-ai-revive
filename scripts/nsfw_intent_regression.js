@@ -53,16 +53,59 @@ ok(N.active() === false && sandbox.Avatar._calls.pop() === 'default', 'reset →
 
 const A = sandbox.Api;
 if (A && A.parseTaggedReply) {
-  const on = A.parseTaggedReply('[emotion:shy|attitude:agree|nsfw:on]\nやっ');
-  ok(on.nsfw === true && on.emotion === 'shy', 'tag nsfw:on + extra pipe');
-  const off = A.parseTaggedReply('[emotion:happy|attitude:agree|nsfw:off]\nhi');
-  ok(off.nsfw === false, 'tag nsfw:off');
+  const on = A.parseTaggedReply('[emotion:shy|attitude:agree|undress:on]\nやっ');
+  ok(on.nsfw === true && on.emotion === 'shy', 'tag undress:on + extra pipe');
+  const alias = A.parseTaggedReply('[emotion:shy|nsfw:on]\nやっ');
+  ok(alias.nsfw === true, 'nsfw:on still accepted as undress alias');
+  const off = A.parseTaggedReply('[emotion:happy|attitude:agree|undress:off]\nhi');
+  ok(off.nsfw === false, 'tag undress:off');
   const omit = A.parseTaggedReply('[emotion:happy|attitude:agree]\nhi');
   ok(omit.nsfw == null, 'tag omitted → null');
+  const spaced = A.parseTaggedReply('[emotion: shy | attitude: agree | undress: on]\nやっ');
+  ok(spaced.nsfw === true && spaced.emotion === 'shy', 'spaces after colons still parse');
+  const two = A.parseTaggedReply('[emotion:shy|attitude:agree]\n[undress:on]\nやっ');
+  ok(two.nsfw === true && two.emotion === 'shy', 'undress on its own machine line');
+  const think = A.parseTaggedReply('<think>keep clothes</think>\n[emotion:shy|undress:on]\nやっ');
+  ok(think.nsfw === true && think.text === 'やっ', 'think block before tag still parses');
+  const bare = A.parseTaggedReply('セリフだけ');
+  ok(bare.emotion == null && bare.attitude == null && bare.nsfw == null,
+     'no tag line → omit all (keep last on screen)');
   const sys = A.buildSystemPrompt('chat', 'voice', '', 'ja', N.screenFact());
-  ok(/普段の服/.test(sys) && /nsfw:on/.test(sys) && /すぐ脱がなくて/.test(sys),
-     'one prompt: screen fact + tag rules (no keyword list)');
-  ok((sys.match(/すぐ脱がなくて/g) || []).length === 1, 'undress rules appear once');
+  const tag = (sys.match(/^\[emotion:.+\]$/m) || [''])[0];
+  ok(tag === '[emotion:happy|attitude:agree|undress:off|stage:stage_01_001_04]',
+     'prefix is filled from the current screen (dressed, home)');
+  ok(/断るなら/.test(sys) && /on=脱いだ/.test(sys) && /undress:/.test(sys),
+     'refuse = leave undress, undress = on');
+  ok(!/すぐ脱がなくて/.test(sys), 'old delay-undress phrasing is gone');
+  ok(tag.indexOf('tod:') === -1, 'real mode tag line has no tod slot');
+  ok(!/<state>/.test(sys), 'no RPG context → no <state> example');
+  N.onTurn({ nsfw: true });
+  const sysOn = A.buildSystemPrompt('chat', 'voice', '', 'ja', N.screenFact());
+  ok(/\|undress:on\|/.test(sysOn) && /肌が見えている/.test(sysOn),
+     'undressed screen fills undress:on in the prefix');
+  N.reset();
+  const keepN = A.parseTaggedReply('[emotion:shy|undress:keep|stage:keep]\nhi');
+  ok(keepN.nsfw == null && !keepN.state, 'undress:keep / stage:keep still mean omit');
+  const echoOff = A.parseTaggedReply('[emotion:happy|undress:off|stage:stage_01_001_04]\nhi');
+  ok(echoOff.nsfw === false, 'copied undress:off parses as dressed');
+  const go = A.parseTaggedReply('[emotion:happy|stage:stage_01_002_01]\n行こっ');
+  ok(go.state && go.state.current_stage === 'stage_01_002_01', 'stage tag → current_stage');
+  const slp = A.parseTaggedReply('[emotion:cuddle|stage:sleep]\nおやすみ');
+  ok(slp.state && slp.state.sleep === true, 'stage:sleep → sleep');
+  const bag = A.parseTaggedReply(
+    '[emotion:happy|undress:on|stage:keep]\nやった\n' +
+    '<state>{"inventory_added":[{"id":"emeralia","count":1}]}</state>');
+  ok(bag.nsfw === true && bag.state && bag.state.inventory_added &&
+     bag.state.inventory_added[0].id === 'emeralia' && !bag.state.current_stage,
+     'screen fields on the tag; bags in <state>');
+  const hist = A.formatHistoryReply('やっ');
+  ok(hist.indexOf('[emotion:happy|attitude:agree|undress:off|stage:') === 0 &&
+     /\nやっ$/.test(hist),
+     'history stores the full screen line + spoken text');
+  ok(!/<state>/.test(hist), 'history does not echo RPG deltas');
+  const cued = A.withTurnCue('脱いで');
+  ok(/^脱いで\n/.test(cued) && /undress:off/.test(cued) && /セリフ/.test(cued),
+     'live user turn keeps player text and appends the copy cue');
 } else {
   bad('Api.parseTaggedReply missing');
 }

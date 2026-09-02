@@ -4,7 +4,13 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-09-08）：**官方 UI 对话页重构 + 桌面代理修复 + 取景校准**（AUDIT §11，1.2.10）。
+状态（2026-09-02）：**脱衣 `undress` + 历史回写整行**。exe/APK 重出 **1.2.14**（`output/desktop/RyzaChat-Setup-1.2.14.exe`、`output/android/RyzaChat-1.2.14.apk`，versionCode 17）。
+此前（2026-09-01）：**两层会话记忆 + LLM 设置**（AUDIT §14，**1.2.13**）。
+会话卡 / 会话总结卡；思考强度统一档（含 `default`）；拉取模型后下拉选择。作弊只无限体力/金币。exe/APK 重出 1.2.13。
+此前：**LLM 侧效应协议**（AUDIT §13，1.2.11）。
+real 跟随墙钟，LLM 不能拨时间；flow 才可以。标签第一行填当前画面值（复制即保持）；
+体力/背包/任务走 `<state>`。脱衣可拒绝，真脱必须把前缀改成 `undress:on`（旧 `nsfw` 仍能解析）。
+此前（2026-09-08）：**官方 UI 对话页重构 + 桌面代理修复 + 取景校准**（AUDIT §11，1.2.10）。
 对话页 = 官方单行顶栏（☰ / ボイス胶囊 / »侧边菜单）+ 左下苹果金币Lv + 右下圆钮 +
 常驻底部会话面板（⇧ 可折叠到只剩输入条，点正文看全文回看）+ ×N速度/胶囊输入/圆发送。
 站姿取景按官方截图校准（窗口×1.30、视线 0.74/0.68/0.50 分档）。
@@ -31,9 +37,8 @@ NSFW 按当前服装目录 `{id}{variant}.png` 换图集页，不写死 id。
 版本单一来源 `config/version.json` + `scripts/stamp_version.js`；
 打包隐私闸门 `scripts/privacy_check.py`（命中私人标识直接中止构建）。
 桌面壳是 **Electron 无边框窗口**（可置顶、无标题栏/边框），安装包与 APK
-统一重出 **1.2.9**（`output/desktop/RyzaChat-Setup-1.2.9.exe`、
-`output/android/RyzaChat-1.2.9.apk`，两包出厂前都过了隐私闸门；
-win-unpacked 自检截图=标题页正常渲染）。
+统一重出 **1.2.13**（`output/desktop/RyzaChat-Setup-1.2.13.exe`、
+`output/android/RyzaChat-1.2.13.apk`，两包出厂前都过了隐私闸门）。
 此前（09-05）：模式化 TTS + 气泡自动淡出（AUDIT §8）；（09-04）全视口布局 +
 桌面等比缩放（§7）；再前：点击交互精修（§3.9）、RPG 层按源数据补全（§6）。
 立绘动作与音景维持 2026-09-01 的修复结论（见 `docs/AUDIT.md` §3.7）。
@@ -67,7 +72,7 @@ projects/ryza-ai-revive/
 │   ├── boot_smoke.js       # App.init 全接线冒烟（真实 index.html 的 id 集）
 │   ├── build_desktop.ps1   # Electron → NSIS 安装包（前后各一次隐私闸门）
 │   ├── build_apk.ps1       # aapt2/javac/d8/zipalign/apksigner 直打 APK（无 Gradle）
-│   └── setup_android_tools.ps1 # 便携 JDK17 + Android SDK 装到 D:\agent\tools
+│   └── setup_android_tools.ps1 # 便携 JDK17 + Android SDK 装到 .android-tools (or RYZA_ANDROID_TOOLS)
 ├── config/version.json     # 唯一版本源（version + versionCode），两个 build 脚本都读
 ├── config/providers.json   # 开发水合用（gitignore）；模板 providers.example.json
 ├── data/                   # 源包抽取产物（libapp_strings_*.txt）
@@ -113,8 +118,7 @@ localStorage 键 `ryza.game.v1`。字段与 delta 键名**照抄 AOT 快照里�
   夜→朝切换、或 overlay 的「回家睡觉」按钮（源文案「安全な場所で寝ると回復するよ」）。
 - 背包四档 `talk.inventory.bag.small/normal/large/huge`（源文案名）= 6/12/24/40 格，
   扩容花金币（官方内购的本地替代）。
-- **作弊模式** `Config app.cheat`：体力无限、不掉晕、领取自由、背包不挡——
-  官方「无限体力/无限任务」付费权益的本地开关，不花钱。
+- **作弊模式** `Config app.cheat`：体力、金币无限。地图和任务进度不改。
 - `Game.promptBlock()` — 把状态写成日文段落，供系统提示词注入。
 - `Game.on(cb)` 事件订阅（App 刷新 HUD）；`snapshot()/restoreSnapshot()` 进存档槽。
 
@@ -148,7 +152,7 @@ localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日�
 
 - `buildSystemPrompt(mode, style, rpgContext, outLang)` — 人格提示词保持原版日文，
   只追加「## 出力言語（厳守）」段：回复语言 = `Langs.llm()`（auto=界面语言）。
-  实测（token-plan qwen 通道）：中文指令下 `[emotion|attitude]` 标签保留、正文中文。
+  实测（OpenAI 兼容 Qwen 通道）：中文指令下 `[emotion|attitude]` 标签保留、正文中文。
 - `parseTaggedReply` 剥掉 `<state>` 块（含忘写闭合标签的宽容解析），
   返回 `{emotion, attitude, text, state}`；显示与朗读永远不含机器块。
 - **TTS 双提供商**（`tts.provider`，**端点/密钥/音色字段完全分离**：qwen 用
@@ -159,7 +163,7 @@ localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日�
     （`qwen3-tts-flash` / `-instruct-flash` / `-vc-2026-01-22`），`language_type`
     取自朗读语言；响应 `output.audio.url` 经 `GET /_proxy` 拉回转 blob
     （口型 analyser 需要同源）。**需要普通百炼 sk- key**——Token Plan 个人版 key 在
-    dashscope 返回 401（且其条款禁止 API 调用），token-plan maas 主机不挂 TTS 模型（404）。
+    dashscope 返回 401（且其条款禁止 API 调用），that host does not serve TTS 模型（404）。
   - `Api.qwenCloneVoice()`：声音复刻——把 `assets/voice/ryza_wav/` 原声转 base64 data URI
     发 `voice-enrollment`（接口接受 data URI，无需公网托管），返回 voice_id 自动填入设置。
     参考 wav 随 exe/APK 打包且 git 跟踪，三端（serve.py/Electron/AssetServer）
@@ -197,10 +201,16 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
 
 ### 渲染与交互
 
+#### `web/js/memory.js` — 两层会话记忆
+
+`ryza.longmem.v1`。会话卡（N 轮压一张）和会话总结卡（会话满了压一张；总结满了同层再压）。
+每张可改可删。提示词只注入卡片，不注入未总结的 pending。见 AUDIT §14。
+
 #### `web/js/nsfw.js` — 着衣状态（LLM 标签，与服装 id 解耦）
 
 只记画面是否已脱，`screenFact` 一行进 system。`App.say` 回复后 `Nsfw.onTurn`。
-规则写在 `api.js` 出力形式一次。不扫玩家关键词。
+规则写在 `api.js` 出力形式一次（LLM 键是 `undress`）。不扫玩家关键词。
+助手历史回写整行标签；气泡仍只显示台词。
 
 #### `web/js/avatar.js` — Spine 渲染
 
@@ -243,7 +253,7 @@ EN: Ryza/Karl/Tao/Mio/Moritz/Empel/Lila/Klaudia/…；官方繁中教程句「�
   但 Electron 的窗口控制钮 `#winctl` 保留。
 - 存档槽 3 格：settings + history + memory + **game + daily** + alarms。
 - 设置页：文本速度用源图标（`text_speed_1x/15x/2x/3x.svg`）分段钮；
-  「游戏性」区 = 作弊开关 + 全恢复 + 解锁世界（仅作弊时显示）；
+  「游戏性」区 = 作弊开关（体力/金币无限）；
   「抹除全部本地数据」= 源 `local_save_data_eraser`（`Config.eraseAll()`）。
 
 #### `web/js/world.js` — 世界地图
@@ -350,7 +360,7 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 - 无头测试三件套全绿：`motion_regression.js`（立绘 60s×2 姿态）、
   `game_logic_regression.js`（数值/任务链/每日登录/ reducer 钳位）、
   `boot_smoke.js`（App.init 用真实 index.html 的 id 集跑通）
-- 截图走查（外部 puppeteer-core + 本机 Edge，工具在 `D:\agent\temp\ryza-shot`）：
+- 截图走查（外部 puppeteer-core + 本机 Edge，local screenshot helper）：
   标题/对话/任务/每日/地图/人物/设置/背包/状态/耗尽/教程/点击反应 12 个状态
 
 ---
@@ -362,7 +372,7 @@ zh-tw 覆盖关键页，hi/id/pt-br 继承 en。角色台词仍是日文。
 3. 主线 8 段的具体文案是**按源素材文案重建**，不是官方任务表（表在服务器，包里只有键名）。
 4. 等级曲线（`1+√(exp/30)`）、体力价目、背包容量档位是本地定的——源值在服务器。
 5. 安装包：`scripts/build_apk.ps1` 需要装了便携 JDK+SDK 的机器（`setup_android_tools.ps1`
-   一次性装到 D:\agent\tools）。**当前产物已出（1.2.9，版本单一来源 `config/version.json`）**：
+   一次性装到 .android-tools (or RYZA_ANDROID_TOOLS)）。**当前产物已出（1.2.9，版本单一来源 `config/version.json`）**：
    - `output/desktop/RyzaChat-Setup-1.2.9.exe`（616.6MB，NSIS 走「应用和功能」正常安装/卸载；
      `deleteAppDataOnUninstall:false` ⇒ 存档留在 %AppData%\RyzaChat\ryza-web-storage.json，要彻底清就用设置页
      「抹除全部本地数据」；win-unpacked 自检截图已核）
@@ -444,7 +454,7 @@ python scripts/build_indexes.py
 | `docs/reference/strings_ja_ui.txt` | 清洗后的日文文案 |
 | `docs/reference/spine_example.html` 等 | Spine 官方示例，渲染路径对照 |
 
-源 App 结构分析（接口、包名）在 `D:\agent\backup\ryza-recon-report.md`，不放在本目录。
+源 App 结构分析（接口、包名）放在本仓库之外，不放在本目录。
 
 ### 7.5 生成物
 

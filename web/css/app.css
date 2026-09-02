@@ -331,6 +331,7 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .card-title{font-weight:600;margin-bottom:4px;display:flex;gap:8px;align-items:center}
 .card-sub{font-size:12.5px;color:var(--dim);line-height:1.6}
 .card-acts{margin-top:9px;display:flex;gap:8px}
+.mem-layer{font-size:12px;color:var(--dim);padding:6px 2px 0;letter-spacing:.04em}
 .tag{font-size:10.5px;padding:2px 8px;border-radius:999px;background:rgba(232,180,92,.16);
   color:var(--gold);border:1px solid var(--line)}
 .tag.leaf{background:rgba(127,176,105,.16);color:var(--leaf)}
@@ -351,9 +352,10 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .form-wrap{flex:1;overflow:auto;padding:14px 16px calc(24px + var(--safe-b));max-width:720px;width:100%}
 .field{margin-bottom:15px}
 .field label{display:block;font-size:12.5px;color:var(--dim);margin-bottom:5px;letter-spacing:.03em}
-.field input,.field select,.field textarea{width:100%;background:rgba(24,17,21,.9);
+.field input,.field select,.field textarea{width:100%;max-width:none;background:rgba(24,17,21,.9);
   border:1px solid var(--line);border-radius:10px;padding:10px 12px;outline:none;transition:.15s;
   user-select:text;font-size:14px}
+.field select{-webkit-appearance:menulist;appearance:auto}
 .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--gold)}
 .field textarea{min-height:78px;resize:vertical;line-height:1.6}
 .field .hint{font-size:11px;color:#6d5f57;margin-top:4px;line-height:1.5}

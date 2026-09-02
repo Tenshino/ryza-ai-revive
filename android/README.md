@@ -9,7 +9,7 @@ chat). `config/*` requests answer 404: providers.json never ships.
 ## Build the APK (no Gradle needed)
 
 ```powershell
-powershell -File scripts/setup_android_tools.ps1   # one-time: JDK17 + SDK 34 on D:\agent\tools
+powershell -File scripts/setup_android_tools.ps1   # one-time: JDK17 + SDK 34
 powershell -File scripts/build_apk.ps1             # -> output\android\RyzaChat-<ver>.apk
 ```
 

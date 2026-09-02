@@ -2209,8 +2209,11 @@
       var L = Avatar.avatar;
       var names = ['neutral', 'happy', 'laughing', 'tease', 'shy',
                    'cuddle', 'sad', 'crying', 'angry'];
-      Avatar._emotion = names.indexOf(emotion) >= 0 ? emotion : 'neutral';
-      Avatar._attitude = ['agree', 'deny', 'question'].indexOf(attitude) >= 0 ? attitude : 'agree';
+      var atts = ['agree', 'deny', 'question'];
+      /* Invalid / omitted fields keep the last face — parseTaggedReply uses
+         null for omit, and a missed tag must not reset to neutral/agree. */
+      if (names.indexOf(emotion) >= 0) Avatar._emotion = emotion;
+      if (atts.indexOf(attitude) >= 0) Avatar._attitude = attitude;
       if (!L || !L.ready || !L.state) return;
 
       var st = L.state, data = L.data;

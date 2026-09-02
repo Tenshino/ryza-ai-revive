@@ -91,6 +91,7 @@ const sandbox = {
   Math, JSON, Date, Object, Array, String, Number, isFinite, parseInt, parseFloat,
   RegExp, Promise, Set, Map, Infinity, NaN
 };
+sandbox.performance = { now: () => Date.now() };
 sandbox.window = sandbox;
 sandbox.document = document;
 sandbox.localStorage = localStorage;
@@ -131,7 +132,7 @@ vm.createContext(sandbox);
 const load = (f) => vm.runInContext(fs.readFileSync(path.join(WEB, 'js', f), 'utf8'),
                                    sandbox, { filename: f });
 
-for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
+for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js', 'memory.js',
                  'game.js', 'quests.js', 'daily.js', 'world.js', 'audio.js',
                  'alarm.js', 'fx.js', 'nsfw.js', 'app.js']) {
   try { load(f); console.log('  loaded ' + f); }
@@ -167,6 +168,8 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
     sandbox.App.buildCharaForm();
     sandbox.App.updateHud();
     ok(true, 'render surfaces + settings form built');
+    ok(!!sandbox.Memory && sandbox.Memory.promptBlock() === '', 'Memory module boots empty');
+    sandbox.App.renderMemory();
     ok(!sandbox.App._lastText, 'no stale retry text');
 
     /* per-mode TTS voice direction: base hint + mode layer, overridable */
@@ -183,8 +186,14 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
        'asmr playback shaping present');
     ok(A.isPlaceholderModel('tts-model') && !A.isPlaceholderModel('mimo-audio'),
        'placeholder-model check centralized');
-    const nsfwTag = A.parseTaggedReply('[emotion:shy|attitude:agree|nsfw:on]\nhi');
-    ok(nsfwTag.nsfw === true && nsfwTag.emotion === 'shy', 'nsfw:on parses with extra pipes');
+    const nsfwTag = A.parseTaggedReply('[emotion:shy|attitude:agree|undress:on]\nhi');
+    ok(nsfwTag.nsfw === true && nsfwTag.emotion === 'shy', 'undress:on parses with extra pipes');
+    const spacedNsfw = A.parseTaggedReply('[emotion: shy | undress: on]\nhi');
+    ok(spacedNsfw.nsfw === true && spacedNsfw.emotion === 'shy',
+       'spaced undress:on still parses');
+    const omitFace = A.parseTaggedReply('タグなし');
+    ok(omitFace.emotion == null && omitFace.attitude == null,
+       'missed emotion tag is omit, not a reset to neutral');
     ok(sandbox.Nsfw && /着ている/.test(sandbox.Nsfw.screenFact()),
        'prompt tells the LLM she is dressed');
     sandbox.Nsfw.onTurn({ nsfw: null });
@@ -196,9 +205,53 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js',
     sandbox.Nsfw.reset();
     ok(!sandbox.Nsfw.active(), 'reset clears nsfw');
 
+    sandbox.Config.set('app.timeMode', 'real');
+    sandbox.Config.set('state.tod', 'aft');
+    sandbox.Config.set('state.stage', 'stage_01_001_04');
+    sandbox.App._applySceneDelta({ tod: 'ngt' });
+    ok(sandbox.Config.section('state').tod === 'aft', 'real mode ignores LLM tod');
+    sandbox.Config.set('app.timeMode', 'manual');
+    sandbox.App._applySceneDelta({ tod: 'ngt' });
+    ok(sandbox.Config.section('state').tod === 'aft', 'manual mode ignores LLM tod');
+    sandbox.Config.set('app.timeMode', 'flow');
+    sandbox.Config.set('state.gameHour', 12);
+    sandbox.Config.set('state.gameClockAt', Date.now());
+    sandbox.App._applySceneDelta({ tod: 'ngt' });
+    ok(sandbox.Config.section('state').tod === 'ngt', 'flow mode applies LLM tod');
+    sandbox.Config.set('state.tod', 'aft');
+    sandbox.Config.set('state.gameHour', 14);
+    sandbox.Config.set('state.gameClockAt', Date.now());
+    sandbox.App._applySceneDelta({ tod: 'aft' });
+    ok(Math.abs(Number(sandbox.Config.section('state').gameHour) - 14) < 0.05,
+       'echoing current tod does not rewind to band start');
+    sandbox.Config.set('app.timeMode', 'real');
+    sandbox.Config.set('state.tod', 'aft');
+    function tagLine(sys) {
+      var m = String(sys).match(/^\[emotion:.+\]$/m);
+      return m ? m[0] : '';
+    }
+    ok(/undress:off/.test(tagLine(A.buildSystemPrompt('chat', 'voice', '', 'ja', '',
+       sandbox.App._sceneContext()))) &&
+       /stage:stage_01_001_04/.test(tagLine(A.buildSystemPrompt('chat', 'voice', '', 'ja', '',
+       sandbox.App._sceneContext()))) &&
+       tagLine(A.buildSystemPrompt('chat', 'voice', '', 'ja', '',
+       sandbox.App._sceneContext())).indexOf('tod:') === -1,
+       'real 出力形式 fills undress+stage, no tod slot');
+    sandbox.Config.set('app.timeMode', 'flow');
+    ok(/tod:/.test(tagLine(A.buildSystemPrompt('chat', 'voice', '', 'ja', '',
+       sandbox.App._sceneContext()))),
+       'flow 出力形式 includes current tod');
+    sandbox.Config.set('app.timeMode', 'real');
+    sandbox.Config.set('state.tod', 'aft');
+    const sleptTod = sandbox.Config.section('state').tod;
+    sandbox.App._sleepHome();
+    ok(sandbox.Config.section('state').tod === sleptTod,
+       'real sleep refills stamina without jumping the wall-clock band');
+    ok(sandbox.Config.section('state').stage === 'stage_01_001_04', 'sleep still sends her home');
+
     sandbox.Config.set('state.mode', 'asmr');
     ok(!sandbox.App._rpgContext(), 'asmr skips numeric RPG block');
-    ok(/current_stage/.test(sandbox.App._sceneContext()),
+    ok(/stage_01_001_04/.test(sandbox.App._sceneContext()),
        'asmr still gets place catalog (marionette scene.*)');
     sandbox.Config.set('state.mode', 'chat');
 

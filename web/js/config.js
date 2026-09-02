@@ -21,7 +21,19 @@
       temperature: 0.9,
       maxTokens: 400,
       historyTurns: 12,
+      contextWindow: 0,            // 0 = guess from model id / /v1/models
+      thinking: 'auto',            // auto | off | on
+      thinkingEffort: 'default',   // default | off | low | medium | high | max  (xhigh→max)
+      thinkingStyle: 'auto',       // auto | none | openai | openrouter | qwen | glm
       lang: 'auto'                   // 回复语言（auto=跟随界面）
+    },
+
+    /* Two-layer conversation memory (web/js/memory.js). */
+    memory: {
+      enabled: true,
+      turnsPerSession: 8,          // exchanges per 会话 card
+      sessionCap: 8,               // 会话 cards before they fold into one 总结
+      summaryCap: 8                // 总结 cards before they fold into one same-layer 总结
     },
 
     /* ---- TTS providers ----
@@ -94,9 +106,9 @@
       fullscreen: false,
       rim: true,
       showBubble: true,              // talk bubbles over the stage (auto-fade)
-      timeMode: 'real',              // real=跟随本机时钟 | flow=游戏内时钟 | manual=纯手动
+      timeMode: 'real',              // real=墙钟(LLM不可拨) | flow=游戏钟(LLM可拨) | manual=🌤
       flowSpeed: 60,                 // flow: in-game minutes per real minute (60 ⇒ 1 game hr / real min)
-      cheat: false                   // 作弊模式：スタミナ無制限・全開放
+      cheat: false                   // 作弊：体力 + 金币无限（地图/任务不改）
     },
 
     /* ---- session state ---- */

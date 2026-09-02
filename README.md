@@ -1,0 +1,123 @@
+# Ryza Chat / 莱莎 Chat
+
+**EN** Offline fan-made AI companion. One static web app, plus thin Windows and Android shells. You bring your own LLM and TTS keys — nothing talks to an official server.
+
+**中文** 离线同人 AI 陪伴。同一套纯前端，外加 Windows / Android 薄壳。大模型和语音接口由你在设置里自填，不连接任何官方服务。
+
+> Unofficial fan project for personal use. Not affiliated with Gust, Koei Tecmo, or the original publisher.  
+> 非官方同人项目，仅供个人使用，与官方及原发行方无关。
+
+Current version: **1.2.14** — installer and APK: [Releases](https://github.com/zeroa234/ryza-ai-revive/releases)
+
+当前版本 **1.2.14**，Windows 安装包与安卓 APK 见 [Releases](https://github.com/zeroa234/ryza-ai-revive/releases)。
+
+---
+
+## Features / 功能
+
+| EN | 中文 |
+|---|---|
+| Talk modes (chat / story / immersive / ASMR / text) | 五种对话模式 |
+| Spine 4.2 portrait + scenes, sit/stand, tap reactions | 立绘与场景、坐站切换、点击反应 |
+| Local RPG layer (stamina, quests, inventory, daily login) | 体力 / 任务 / 背包 / 每日登录 |
+| Bring-your-own OpenAI-compatible LLM + TTS (incl. Qwen) | 自填 OpenAI 兼容 LLM 与 TTS（含百炼） |
+| 7 UI languages | 界面七语 |
+| Desktop frameless window + Android WebView APK | 无边框桌面窗 + 安卓 WebView |
+
+Clothing / undress changes only when the model writes `undress:on` (or the alias `nsfw:on`) on the tag line. Player keywords never force it.
+
+脱衣只认回复标签行的 `undress:on`（旧键 `nsfw` 仍能解析），不会扫玩家关键词。
+
+---
+
+## Privacy / 隐私
+
+- `config/providers.json` is **gitignored**. Copy `config/providers.example.json` and fill keys locally. Never commit it.
+- Keys live in the app settings (localStorage / `%AppData%\RyzaChat`). They are not baked into exe/APK.
+- Packaging runs `scripts/privacy_check.py` and **aborts** if a key-shaped secret or a personal machine path would ship.
+- 打包产物里没有密钥。本仓库也不应出现账号、本机路径、个人网关。
+
+---
+
+## Run from source / 从源码运行
+
+Spine and `fetch` cannot use `file://`. Use the bundled static server (it also provides `/_proxy` for CORS):
+
+```powershell
+python scripts/serve.py
+# open http://127.0.0.1:8765/
+```
+
+Do not use `python -m http.server` — there is no proxy, LLM/TTS will fail CORS.
+
+### Desktop / 桌面
+
+```powershell
+cd desktop
+npm install
+npx electron .
+```
+
+Installer:
+
+```powershell
+powershell -File scripts/build_desktop.ps1
+# -> output/desktop/RyzaChat-Setup-<version>.exe
+```
+
+### Android / 安卓
+
+```powershell
+# one-time JDK 17 + Android SDK (see RYZA_ANDROID_TOOLS below)
+powershell -File scripts/setup_android_tools.ps1
+powershell -File scripts/build_apk.ps1
+# -> output/android/RyzaChat-<version>.apk
+```
+
+Toolchain directory: set `RYZA_ANDROID_TOOLS`, or put a single path in gitignored `config/android-tools.local.txt`. Default is `.android-tools/` inside this repo (also gitignored).
+
+---
+
+## Settings / 设置里要填什么
+
+1. **LLM** — OpenAI-compatible base URL, model id, API key.
+2. **TTS** (optional) — separate OpenAI-compatible or Qwen DashScope fields. Clone/preset model names must be filled on device; packaged builds do not include `providers.json`.
+
+开发水合：把填好的 `config/providers.json` 放在本地即可（已被 ignore）。
+
+---
+
+## Tests / 测试
+
+```powershell
+node scripts/nsfw_intent_regression.js
+node scripts/boot_smoke.js
+node scripts/game_logic_regression.js
+node scripts/memory_regression.js
+node scripts/motion_regression.js
+node scripts/expression_coverage.js
+python scripts/privacy_check.py web
+```
+
+---
+
+## Layout / 目录
+
+```
+web/          app (static HTML/JS + Spine assets)
+desktop/      Electron shell (ryza://app)
+android/      WebView + local AssetServer
+scripts/      serve, indexes, packaging, privacy gate
+config/       version.json + providers.example.json
+docs/         PROJECT / AUDIT / HANDOFF (implementation notes)
+```
+
+More detail: [`docs/PROJECT.md`](docs/PROJECT.md).
+
+---
+
+## Disclaimer / 声明
+
+Assets and character likenesses originate from a copy of the original game the author owns. This repository is a from-scratch client. Do not treat it as an official product, and do not use it for redistribution of paid services.
+
+素材来自作者自有的原作资源拷贝；代码从零编写。请勿当成官方产品，也请勿拿去二次分发或接官方服务。

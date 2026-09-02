@@ -1,5 +1,8 @@
 # Secrets — keep the local file, never commit keys
 config/providers.json
+config/privacy_markers.local.txt
+config/android-tools.local.txt
+.android-tools/
 
 # Python
 __pycache__/

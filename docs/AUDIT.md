@@ -10,7 +10,7 @@ exe/APK 统一重出 1.2.3（含 TTS 端点/密钥分离，见 §6.9））
 增补：2026-09-05（**模式化 TTS 提示词 + 气泡自动淡出**：§8，重出 1.2.5）
 增补：2026-09-06（**姿态/相机/表情补全**：§9，重出 1.2.6；§3.2 的镜头行已改写）
 增补：2026-09-07（**图集变体 + 按源表取景**：§10；对话搬家 1.2.8；exe 存档 1.2.9）
-增补：2026-09-08（**官方 UI 对话页重构 + 桌面代理回归修复 + 审计修包**：§11，出 1.2.10）
+增补：2026-09-01（**两层会话记忆 + LLM 设置**：§14；重出 1.2.13）
 对象：`D:\download\ai.gospiral.atelierryza.v1.0.2.apk`（613,761,884 字节）  
 对照：`docs/reference/apk_asset_inventory.txt` + `web/assets/` 原始 JSON + `docs/dart_source_tree.txt`  
 代码：`web/js/*.js`、`web/index.html`、`scripts/serve.py`
@@ -320,12 +320,13 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   `AppServer response game_state cursor mismatch`），LLM 走 marionette/yorisoi
   websocket，`*"Stamina"*` 等内联样式段。
   **本地**：localStorage 权威；玩家自填 OpenAI 兼容接口；机器块换成回复尾部
-  `<state>{json}</state>`（显示/朗读前剥除）。协议在系统提示词里给了白名单和
-  「无事发生不要发」约束，实测弱模型漏发/错发时 reducer 钳位兜底。
+  `<state>{json}</state>`（显示/朗读前剥除）。画面栏每轮必写标签行（复制即保持），
+  RPG 无变动则不发 `<state>`；漏发/错发时 reducer 钳位兜底。
   源对话搬家是 `entry_map_move.dart` 的 `detectEntryMapMove` + marionette
   `scene.current_stage` / `scene.map_moved` / `scene.time_bucket`（官方 websocket
   会把当前舞台塞进会话）。本地：每轮 `_sceneContext` 带现在的地点和可去舞台
-  （日/中/英别名，ASMR/テキスト也给，不只 RPG 模式）；LLM 用
+  （日/中/英别名，ASMR/テキスト也给，不只 RPG 模式）；画面栏（搬家/睡/时段）走
+  标签行 `stage:` / `sleep` / `tod:`，RPG 数值走 `<state>`；兼容旧的
   `<state>{"current_stage":"stage_…"}</state>` 或 `{"sleep":true}`；App 解析后
   `gotoStage` / `_sleepHome`（未出航仍锁 area_02–05）。`tod` 对应
   `scene.time_bucket`。`scene.cast`/`roster` 没有别的立绘可切，用
@@ -351,8 +352,7 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
 
 ### 6.6 作弊模式（用户拍板的付费替代）
 
-设置→游戏性→`app.cheat`：体力无限（不掉晕、行动不扣）、每日登录七格随便领、
-背包满不挡路；配套按钮「全恢复」「解锁世界地图」。默认关，随时可关回去。
+设置→游戏性→`app.cheat`：体力、金币无限。默认关。地图、任务、每日登录不受影响。
 
 ### 6.7 打包与隐私
 
@@ -364,8 +364,8 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   去 androidx；`scripts/build_apk.ps1` 无 Gradle 直出签名 APK；正常安装/卸载。
 - 隐私：包内**无** `providers.json`；`config.js` 默认端点中立化（不再内置个人地址）；
   `src/` 原型、`data/*.wav` 测试音频、`output/*.png` 截图已从仓库删除；
-  keystore 目录 gitignore。1.2.4 产物内嵌文件逐包扫描：**零** `bmh05/token-plan/
-  xiaomimimo/sk-*/D:\agent` 私人标识（`api.js` 内置的 `dashscope.aliyuncs.com` 是
+  keystore 目录 gitignore。1.2.4 产物内嵌文件逐包扫描：**零** 账号名 / 本机路径 / 密钥形状
+  私人标识（`api.js` 内置的 `dashscope.aliyuncs.com` 是
   百炼**公共**默认端点，等同 api.openai.com，属功能必需，不是私人信息）。
 
 ### 6.8 回归
@@ -383,14 +383,14 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   `llm.lang`（回复）/ `tts.lang`（朗读）。`Langs`（i18n.js）统一解析，auto 逐级回落。
   朗读≠回复时 `Api.translate` 先翻译再合成，显示文字不变。
 - **提示词策略（用户拍板）**：persona 保持原版日文，只追加「## 出力言語（厳守）」段。
-  实测 token-plan qwen 通道：标签行保留、正文按指定语言输出。
+  实测兼容 Qwen 通道：标签行保留、正文按指定语言输出。
 - **TTS 双提供商**：`openai`（MiMo 克隆，实测 200 返回 RIFF wav）；`qwen`
   （百炼 DashScope `multimodal-generation`，`language_type` 跟随朗读槽，
   音频 URL 走新增的 `GET /_proxy` 回拉转 blob——口型 analyser 需同源）。
   声音复刻 `voice-enrollment` 接受 **base64 data URI**（本地莱莎原声直接注册，
   无需公网托管）→ voice_id 自动填入。
   **实测边界**：Token Plan 个人版 key 在 dashscope 401（其条款亦禁止 API 调用），
-  token-plan maas 主机无 TTS 模型（404）→ Qwen 槽必须用普通百炼 sk- key。
+  that compatible host has no TTS models（404）→ Qwen 槽必须用普通百炼 sk- key。
 - **TTS 端点/密钥按 provider 分离（2026-09-03）**：qwen 用自己的
   `tts.qwenBaseUrl`/`tts.qwenApiKey`（设置页 Qwen 区块绑定这两个字段；
   baseUrl 留空回落公共 DashScope），openai 用 `tts.baseUrl`/`tts.apiKey`。
@@ -408,7 +408,7 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
   「无法读取参考音频」，不崩。
 - **命名硬规则**：人名/地名/物品名只用**源包内验证过**的官方译名。验证方法：
   从 APK 提取 `libapp.so`，Dart 双字节字符串是 **UTF-16LE** 存储——按两种对齐
-  扫 CJK 串（`D:\agent\temp\apk-l10n\dump_ordered.py`，temp 会清，方法在案）；
+  扫 CJK 串（`a local scan script`，temp 会清，方法在案）；
   英文名直接扫 ASCII 串。已验证并入库：18 个繁中人名（萊莎/卡爾/塔奧/米奧/
   莫里茨/安佩爾/莉拉/羅密/賽莉/丹尼斯/科洛蒂婭/菲德麗卡/薩維里奧/迪安/多爾特/
   安娜/沃爾卡/古老）、27 个英文名、地名（庫肯島周邊地區/克萊莉亞地區/王都周邊地區/
@@ -689,7 +689,7 @@ build_apk.ps1 `$Ver/$VC=8`、android Gradle）。
   最容易出「exe 和 APK 版本不一致」。
 * `scripts/privacy_check.py` 是**构建闸门不是报告**：命中即非 0 退出，构建中止。
   查两类东西——① 路径名（`providers.json`、`*.keystore`、`*.pem`…）
-  ② 文本内容（`bmh05`、`d:\agent`、`c:\users`、`token-plan`、`xiaomimimo`、
+  ② 文本内容（账号名、本机路径、个人网关、
   `gospiral`、`api.craft.spiral`，外加 `sk-[A-Za-z0-9]{16,}` / JWT / Bearer 三个形状）。
   二进制扩展名只查名字不查内容，所以 570MB 素材树秒级过。
   调用点：`build_desktop.ps1`（暂存前 + `win-unpacked` 暂存包）、
@@ -717,7 +717,7 @@ node scripts/expression_coverage.js    # 新增：表情/动作可达性与引�
 源 APK **有**换装逻辑（`features/skin`：`SkinSwitchController` / `switchSkin` /
 `skin_switch_veil` / 5 槽预览），但那是 **整包 skel+atlas 切换**，不是同一骨架
 热换 PNG。包内可穿骨骼只有 `0001_01`（坐）和 `0001_99`（站）；`0002–0004` 只有
-预览图。因此「LLM 在标签行写 `nsfw:on` 才换贴图」是**本地加的演出**，
+预览图。因此「LLM 在标签行写 `undress:on` 才换贴图」是**本地加的演出**，
 不能接到源 `switchSkin` 上，否则会和 5 槽换装、坐/站后缀抢同一条 `loadSkin`。
 
 ### 10.1 模块边界（以后加别的服装的 nsfw 版只丢文件）
@@ -726,7 +726,7 @@ node scripts/expression_coverage.js    # 新增：表情/动作可达性与引�
 |---|---|---|
 | `web/js/nsfw.js` `Nsfw` | 画面着衣；`screenFact` 一行；只套用回复里的 `nsfw` 字段 | 不扫关键词、不写规则长文、不写服装 id、不碰 GL |
 | `Avatar.variantPageUrls` / `setAtlasVariant` | 按**当前已加载皮肤**解析变体页并换 GLTexture | 不认关键词、不 reload skel |
-| `api.js` | 标签行解析 `nsfw:on\|off`（与 emotion 同一行）；出力形式里写一次规则 | 不决定贴图 |
+| `api.js` | 标签行解析 `undress:on\|off`（`nsfw` 别名；与 emotion 同一行）；出力形式用当前画面填好前缀，规则写一次 | 不决定贴图 |
 | `app.js` | `say()` 传入 `screenFact`，回复后 `Nsfw.onTurn(reply)`；新对话 `reset` | 不解析路径 |
 
 路径约定（对任何 `crf_skn_*` 都一样，坐/站/未来 0002 通用）：
@@ -740,7 +740,7 @@ node scripts/expression_coverage.js    # 新增：表情/动作可达性与引�
 `AssetManager.loadTexture`（404 会脏 `errors`，下次 `loadSkin` 会误报素材失败）。
 
 **谁决定脱衣**：LLM，不是关键词。方式与 emotion 相同——回复第一行
-`[emotion:shy|nsfw:on]`，解析字段、台词里剥掉，不是扫「脱掉」也不是 OpenAI tools
+`[emotion:shy|undress:on]`，解析字段、台词里剥掉，不是扫「脱掉」也不是 OpenAI tools
 （自填的兼容接口不一定有 function call，且会多一套协议）。省略标签＝画面不变。
 `screenFact` 每轮告诉模型现在穿着还是已经裸着。新对话 `Nsfw.reset()`。
 
@@ -906,6 +906,33 @@ node scripts/electron_storage_regression.js
 * `app.timeMode`：`real`（跟随本机时钟，复刻官方）/ `flow`（游戏内时钟按倍速走）/ `manual`（纯手动）。默认 real。
 * 纯函数在 `world.js`：`hourToTod`（分带与闹钟 `todForHour` 一致）、`todStartHour`、`flowHour`（speed=游戏分钟/真实分钟，默认 60=1真实分=1游戏时）。`game_logic_regression` 8 条断言守。
 * `App._tickTime`：init（Avatar 就绪后）+ 30s 定时 + 回前台各跑一次；real 取本机小时、flow 推进 gameHour，变了走 `_setTod`（含夜→晨回体力）。`state.todManualUntil` 给手动 🌤 30 分钟优先窗口，不被自动同步抢。
-* **flow 模式 LLM 可拨钟**（用户要求）：`_applySceneDelta` 在 flow 下把 `<state>` 的 `game_hour`/`time_advance`/`tod` 统一作用到 gameHour，再反推 tod；`_sleepHome` 同步拨到早上。提示词 `_clockBlock` 每轮喂"第几天+时段+约几点"，flow 模式额外教 LLM 这套时间接口（对应官方 scene.time_bucket 双向）。
+* **flow 模式 LLM 可拨钟**（本地扩展，不是官方双向）：`_applySceneDelta` **仅在 flow** 把标签/`<state>` 的 `game_hour`/`time_advance`/`tod` 作用到 gameHour，再反推 tod；同一 `tod` 再写一遍不拨回时段起点（否则复制填好的前缀会把钟卡住）。`_sleepHome` 只在 flow 拨到早上。`real`/`manual` **忽略** LLM 的时间字段（官方 `scene.time_bucket` 是 `sendSceneState` 推给 marionette 的事实，APK 里没有 receive/set time_bucket）。提示词 `_clockBlock` 每轮只喂「第几天+时段+约几点」；flow 的拨钟口在标签行 `tod:`。
 
 长回复溢出面板读不全（删掉旧滚动全文的副作用）：`#log-body` 改 `overflow-y:auto`，打字时 `_scrollLog()` 跟随底部、点圆点切换则回到顶部。**滚动=读这一条，圆点=切换最近几条**，不再是两套冲突的历史机制。回归全绿。
+
+
+## 13. LLM 侧效应协议（1.2.11）
+
+字段协议，不上 tools（自填 OpenAI 兼容口不一定有 function call）。LLM 决定（含拒绝）；机器栏才改画面。
+
+* **两通道**：画面（emotion / attitude / undress / stage，flow 另加 tod）只写标签第一行；体力・荷物・金・経験・クエスト・記憶只写末尾 `<state>`。地点表和时钟是事实，不再教第二套写法。LLM 看到的键是 `undress`（`nsfw` 仍当别名解析）。
+* **前缀填当前值**：出力形式给出已填好的 `[emotion:…|undress:off|stage:stage_…]`，要求每轮从这一行复制、只改本回合变了的栏。原样复制 = 画面不变。`keep`/`omit` 仍当保持解析。
+* **real / manual 不吃 LLM 时间**：官方 `AppServerClock` + `sendSceneState`/`scene.time_bucket` 是墙钟→模型的事实，APK 无 setTimeBucket。`_applySceneDelta` 只在 `World.llmDrivesClock()`（= `timeMode===flow`）应用 `tod`/`time_advance`/`game_hour`。同一 tod 再写一遍不拨回时段起点。real 睡觉回家补体力，不跳到早上。
+* **漏标 = 保持**：`parseTaggedReply` 对 emotion/attitude/nsfw 缺省 `null`（不再默认 neutral/agree）。按 `|` 拆 `key:value`（空格、全角 `|`/`：`、第二行 `[undress:on]` 也能认）。`App.say` 只有字段在才 `setEmotion`。
+* **脱衣仍可拒绝**：断着衣 = 前缀里的 `undress:off` 原样留下；这轮台词真脱了才改成 `undress:on`。不扫玩家关键词。
+* **历史回写整行**：`App.history` 的 assistant 消息是 `Api.formatHistoryReply`（规范标签 + 台词）。显示/朗读/Memory 仍只用台词。不把 `<state>` 增量写进历史（会重放）。当轮用户消息经 `withTurnCue` 再贴一次复制行，避免长对话把系统尾部冲掉。表情、脱衣、地点是同一条衰减链，不能只修衣服栏。
+
+## 14. 两层会话记忆 + LLM 设置（2026-09-01）
+
+官方记忆在服务器（`states.memory` / `readMemoryFromStateDiff` / 付费墙 High-quality memory）。本地没有云，用 `web/js/memory.js` 两层卡片：
+
+* **会话**：每 N 轮对话压成一张（默认 8）。满 `sessionCap` 张 → 合成一张 **会话总结**。
+* **会话总结**：满 `summaryCap` 张 → **同层**再压成一张（不是第三层）。条数有硬顶。
+* 每张都能单独编辑/删除；添加也可。`App.memory` 仍是近期对白日志（「清空对白」只清它）。`Game.s.memory` 仍是冒险事件，不混进这一套。
+* 提示词顺序：静态人设/协议 → 长期记忆（总结在前、新会话在后）→ 当轮地点/背包/穿着/标签。前缀缓存能吃到静态段；新会话只追加在记忆块末尾。
+* 上下文：`llm.contextWindow`（0=按 `/v1/models` 或模型名估）。接近满时先砍近窗，并 `Memory.notifyPressure()` 强制把未总结轮次落成卡片。
+* 思考：默认不乱塞字段（`thinking=auto` 且协议未知 → 不发送）。强度是统一档 `default|off|low|medium|high|max`（`xhigh` 只在对端词汇里出现，由最近档映射，不单独做选项）。`default` = 不发强度字段，对端不支持改强度也能用。协议 `auto|none|openai|openrouter|qwen|glm`。拉取模型走 GET `/v1/models`（各家字段不同：有则用 `context_length` / `limit.context` / `reasoning_options`，没有就只留下 id，强度走 default）。
+
+回归：`scripts/memory_regression.js`。exe/APK 重出 **1.2.13**（versionCode 16）。
+
+

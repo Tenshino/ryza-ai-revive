@@ -99,6 +99,9 @@ ok(Game.canAct(999), 'cheat: canAct always');
 Game.spend(50);
 ok(Game.s.stamina === 0, 'cheat: spend is a no-op');
 ok(Game.apples().filled === 5, 'cheat: HUD shows full row');
+Game.s.money = 50;
+Game.addMoney(-20);
+ok(Game.s.money === 50 && Game.canPay(999), 'cheat: gold does not decrease');
 Config.set('app.cheat', false);
 Game.refill();
 
@@ -277,10 +280,33 @@ ok(/stage_01_001_04/.test(pb) && /ライザの家/.test(pb), 'prompt names curre
 ok(World.resolveStage('塔奥家') === 'stage_01_002_01', 'short zh alias 塔奥家');
 ok(World.resolveStage('回家') === 'stage_01_001_04', 'colloquial 回家 → home');
 ok(/塔奥家门前/.test(pb) && /隠れ家前/.test(pb), 'catalog lists ja + zh names');
-ok(/sleep/.test(pb), 'prompt teaches sleep');
+ok(!World.llmDrivesClock(), 'default real: LLM does not drive the clock');
+ok(!/<state>/.test(pb), 'place catalog is facts, not a second protocol');
+Config.set('app.timeMode', 'flow');
+ok(World.llmDrivesClock(), 'flow: LLM drives the clock');
+const pbFlow = World.promptBlock({ stage: 'stage_01_001_04', tod: 'aft', day: 1 });
+ok(/時間帯/.test(pbFlow) && !/time_advance/.test(pbFlow),
+   'flow catalog stays facts; clock write is in the tag line');
+Config.set('app.timeMode', 'real');
+ok(/ライザの家/.test(World.promptBlock({ stage: 'stage_01_001_04', tod: 'aft', day: 1 })),
+   'reset to real after flow catalog check');
 const asmrSys = Api.buildSystemPrompt('asmr', 'voice', '', 'zh', '', pb);
-ok(/current_stage/.test(asmrSys) && !/stamina_delta/.test(asmrSys),
-   'asmr gets scene travel without RPG grind protocol');
+const asmrTag = (asmrSys.match(/^\[emotion:.+\]$/m) || [''])[0];
+ok(/\|undress:off\|/.test(asmrTag) && /stage:stage_01_001_04/.test(asmrTag) &&
+   !/stamina_delta/.test(asmrSys),
+   'asmr gets a filled travel prefix without RPG <state>');
+ok(asmrTag.indexOf('tod:') === -1, 'real mode has no tod slot');
+ok(/sleep/.test(asmrSys), 'tag line teaches stage:sleep');
+Config.set('app.timeMode', 'flow');
+const flowSys2 = Api.buildSystemPrompt('chat', 'voice', '', 'ja', '', pbFlow);
+const flowTag = (flowSys2.match(/^\[emotion:.+\]$/m) || [''])[0];
+ok(/\|tod:aft\]/.test(flowTag), 'flow tag line includes current tod');
+Config.set('app.timeMode', 'real');
+const rpgBlk = [Game.promptBlock(), Quests.promptBlock()].join('\n\n');
+const chatSys = Api.buildSystemPrompt('chat', 'voice', rpgBlk, 'ja', '', pb);
+ok(/<state>\{/.test(chatSys) && /stamina_delta/.test(chatSys) &&
+   /inventory_added/.test(chatSys),
+   'chat RPG prompt teaches trailing <state> for bags/exp/quest');
 const slept = Api.parseTaggedReply(
   '[emotion:cuddle|attitude:agree]\nおやすみ<state>{"sleep":true}</state>');
 ok(slept.state && slept.state.sleep === true, 'sleep flag parses');
@@ -313,6 +339,7 @@ ok(World.flowHour(12, at, at, 60) === 12, 'flow: zero elapsed = no advance');
 /* LLM time_advance / game_hour parse through the state protocol */
 const adv = Api.parseTaggedReply('おやすみ<state>{"time_advance":3}</state>');
 ok(adv.state && Number(adv.state.time_advance) === 3, 'LLM time_advance parses');
+ok(adv.emotion == null, 'untagged reply does not default emotion to neutral');
 
 console.log(failures ? '\n' + failures + ' FAILURES' : '\nALL PASS');
 process.exit(failures ? 1 : 0);

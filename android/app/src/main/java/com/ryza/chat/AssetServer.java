@@ -100,7 +100,7 @@ public final class AssetServer extends Thread {
                 return;
             }
             if ("GET".equals(method) && rawUrl.startsWith("/_proxy")) {
-                proxyGet(rawUrl, out);
+                proxyGet(rawUrl, hs, out);
                 return;
             }
             if (!"GET".equals(method) && !"HEAD".equals(method)) {
@@ -183,6 +183,7 @@ public final class AssetServer extends Thread {
             up.setReadTimeout(180000);
             up.setDoOutput(true);
             up.setRequestProperty("Content-Type", hs.contentType);
+            up.setRequestProperty("User-Agent", "RyzaChat/1.2.13");
             if (hs.authorization != null) up.setRequestProperty("Authorization", hs.authorization);
             if (hs.apiKey != null) up.setRequestProperty("api-key", hs.apiKey);
             if (body.length > 0) {
@@ -203,8 +204,8 @@ public final class AssetServer extends Thread {
         }
     }
 
-    /** GET /_proxy?u=https%3A%2F%2F... — Qwen TTS audio URL passthrough. */
-    private void proxyGet(String rawUrl, OutputStream out) throws IOException {
+    /** GET /_proxy?u=https%3A%2F%2F... — audio URL passthrough + /v1/models. */
+    private void proxyGet(String rawUrl, Headers hs, OutputStream out) throws IOException {
         String target = "";
         int q = rawUrl.indexOf('?');
         if (q >= 0) {
@@ -225,6 +226,9 @@ public final class AssetServer extends Thread {
             up.setConnectTimeout(20000);
             up.setReadTimeout(120000);
             up.setInstanceFollowRedirects(true);
+            up.setRequestProperty("User-Agent", "RyzaChat/1.2.13");
+            if (hs != null && hs.authorization != null) up.setRequestProperty("Authorization", hs.authorization);
+            if (hs != null && hs.apiKey != null) up.setRequestProperty("api-key", hs.apiKey);
             int code = up.getResponseCode();
             InputStream is = code >= 400 ? up.getErrorStream() : up.getInputStream();
             byte[] resp = is == null ? new byte[0] : readAll(is);

@@ -108,6 +108,13 @@
       if (h < 20) return 'eve';
       return 'ngt';
     },
+    /* Official AppServerClock: scene.time_bucket is a FACT pushed TO marionette,
+       never a command FROM it. Only the local 'flow' clock lets the LLM dial time. */
+    llmDrivesClock: function () {
+      try {
+        return !!(global.Config && Config.section('app').timeMode === 'flow');
+      } catch (e) { return false; }
+    },
     /* representative hour at the start of a band — used when the LLM or the
        manual button SETS a band in flow mode and the game clock must snap */
     todStartHour: function (tod) {
@@ -363,26 +370,22 @@
       return best;
     },
 
-    /* Injected into the talk system prompt so the model knows where she is
-       and which stage ids she may write into <state>.current_stage. */
+    /* Facts only — how to write stage/tod lives once in api.js 出力形式. */
     promptBlock: function (st) {
       st = st || {};
       var here = World.find(st.stage);
       if (!here) return '';
-      var L = ['## いまの場所（画面の事実。地名は下の一覧の表記を使う）'];
-      L.push('- 場所：' + World.placeLabel(here.stageId, here.stage) +
+      var L = ['## いまの場所'];
+      L.push('- いま：' + World.placeLabel(here.stageId, here.stage) +
              '（' + here.stageId + '）／' +
              World.placeLabel(here.fieldId, here.field) + '／' +
              World.placeLabel(here.areaId, here.area));
-      L.push('- 時間帯：' + (st.tod || 'aft') +
-             '（mor=朝 aft=昼 eve=夕 ngt=夜）');
-      L.push('- 画面を動かすときだけ <state>{"current_stage":"stage_xx_xxx_xx"}</state>。id は下の一覧（日/中/英どれで書いてもよい）。時間帯は tod。省略＝今の場所のまま。');
-      L.push('- 安全な場所で寝る：<state>{"sleep":true}</state>（ライザの家の朝になりスタミナ全回復）。');
+      L.push('- 時間帯：' + (st.tod || 'aft') + '（mor=朝 aft=昼 eve=夕 ngt=夜）');
       var sailed = window.Game && Game.s && Game.s.sailed;
       if (!sailed) {
         L.push('- 船ができるまでクーケン島（area_01）以外は行けない。');
       }
-      L.push('- 行ける場所：');
+      L.push('- 行ける場所（stage 欄用）：');
       World.areas().forEach(function (a) {
         if (World.locked(a.id)) return;
         a.fields.forEach(function (f) {

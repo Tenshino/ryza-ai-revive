@@ -8,7 +8,7 @@ a machine path, an account name, or an API key.
 
 Two kinds of check:
   * ENTRY NAMES — every path inside the artifact (apk/zip members, files under
-    a directory). Catches things like `providers.json` or a stray `bmh05.png`.
+    a directory). Catches things like `providers.json` or a stray key file.
   * CONTENT — text-ish members scanned for the marker strings. Binary media
     (png/m4a/skel/…) is skipped by extension, never by size, so a 570 MB asset
     tree still scans in about a second.
@@ -29,15 +29,27 @@ NAME_MARKERS = [
     "id_rsa", "id_ed25519", ".pem", ".p12", ".keystore", ".jks",
 ]
 
+# Generic markers that belong in git. Extra personal hosts/paths live in
+# gitignored config/privacy_markers.local.txt (one substring per line).
 CONTENT_MARKERS = [
-    "bmh05",                   # windows profile name
-    "d:\\agent", "d:/agent",   # this workspace's absolute path
-    "c:\\users", "c:/users",
-    "token-plan",              # the developer's own gateway host
-    "xiaomimimo",
-    "gospiral",                # the original publisher's identifiers
+    "gospiral",                # original publisher identifiers must not ship
     "api.craft.spiral",
 ]
+
+
+def extra_content_markers():
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "..", "config", "privacy_markers.local.txt")
+    out = []
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            for line in fh:
+                s = line.split("#", 1)[0].strip().lower()
+                if s:
+                    out.append(s)
+    except OSError:
+        pass
+    return out
 
 # Real-looking secrets, caught by shape rather than by literal.
 CONTENT_PATTERNS = [
@@ -128,6 +140,9 @@ def main(argv):
         print(__doc__)
         return 2
     findings = []
+    extra = extra_content_markers()
+    if extra:
+        CONTENT_MARKERS.extend(extra)
     for target in args:
         if os.path.isdir(target):
             scan_dir(target, findings)

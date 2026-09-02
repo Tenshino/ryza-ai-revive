@@ -1,6 +1,6 @@
 # Build the Android APK without Gradle: aapt2 -> javac -> d8 -> zipalign ->
 # apksigner. Needs the portable toolchain from scripts/setup_android_tools.ps1
-# (JDK 17 + android-34 platform + build-tools 34 on D:\agent\tools).
+# (JDK 17 + android-34 platform + build-tools 34 via setup_android_tools.ps1).
 #
 # Output: output/android/RyzaChat-<version>.apk  (self-signed; installs via
 # adb / sideload and uninstalls like any other app — see the notes at the end)
@@ -9,7 +9,10 @@
 # Privacy gates: on the web tree before it is packed, and on the signed APK.
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
-$Tools = "D:\agent\tools"
+$localTools = Join-Path $Root "config/android-tools.local.txt"
+if ($env:RYZA_ANDROID_TOOLS) { $Tools = $env:RYZA_ANDROID_TOOLS }
+elseif (Test-Path $localTools) { $Tools = (Get-Content $localTools -Raw).Trim() }
+else { $Tools = Join-Path $Root ".android-tools" }
 $Jdk = Join-Path $Tools "jdk17"
 $Sdk = Join-Path $Tools "android-sdk"
 $BT = Join-Path $Sdk "build-tools/34.0.0"

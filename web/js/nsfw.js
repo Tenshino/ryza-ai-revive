@@ -1,8 +1,9 @@
 /* Screen clothing vs atlas variant. No costume ids, no player-keyword lists.
 
-   The LLM switches clothes the same way it switches emotion: a field on the
-   first tag line (`nsfw:on` / `nsfw:off`). This module stores what the
-   screen shows and applies that field. Policy text lives once in api.js. */
+   The LLM decides (including refuse). The tag-line field is `undress:on` /
+   `undress:off` (`nsfw` still parsed as an alias). Player words never force
+   it. Copying the filled prefix (or omit / keep) leaves the screen.
+   Atlas files stay `{page}nsfw.png`. Policy text lives once in api.js. */
 (function (global) {
   'use strict';
 

@@ -355,11 +355,11 @@
         var n = Game.countItem('you', t);
         if (t === 'bomb' && n > 0) { odds += 0.18; tools.push(itemName('bomb')); Game.removeItem('you', t, 1); }
         else if (t === 'charm' && n > 0) { odds += 0.12; }
-        else if (t === 'bottle' && n > 0 && !Game.cheat() && Game.s.stamina < Game.max() / 2) {
+        else if (t === 'bottle' && n > 0 && Game.s.stamina < Game.max() / 2) {
           Game.removeItem('you', t, 1); Game.restore(Game.ITEMS.bottle.stamina); tools.push(itemName('bottle'));
         }
       });
-      var win = Game.cheat() || Math.random() < Util.clamp(odds, 0.1, 0.92);
+      var win = Math.random() < Util.clamp(odds, 0.1, 0.92);
       if (win) {
         var money = 20 + Math.floor(Math.random() * 40) + area * 10;
         Game.addMoney(money);
@@ -399,7 +399,7 @@
       if (partsDone >= 4) return { ok: false, line: L('qact.build.done', '部品はもうそろってる！ 次は「船で自由に旅へ出よう」だね。') };
       var want = PART_ITEMS[partsDone];
       var have = Game.countItem('you', want) + Game.countItem('ryza', want);
-      if (!Game.cheat() && have <= 0) {
+      if (have <= 0) {
         return { ok: false, refund: true,
           line: TF('qact.build.lack', '造船には {part}（{item}）が必要みたい。探してこよ！',
             { part: L('part.' + want, PART_NAMES[want]), item: itemName(want) }) };
@@ -416,10 +416,10 @@
       if (Game.flag('ship_parts', 0) < 4) {
         return { ok: false, refund: true, line: L('qact.sail.parts', 'まだ部品が足りない！ 造船クエストに戻ろう。') };
       }
-      if (!Game.cheat() && Game.s.money < 200) {
+      if (!Game.canPay(200)) {
         return { ok: false, refund: true, line: L('qact.sail.money', '出航に 200G 必要らしい。お店を開いて稼ごう！') };
       }
-      if (!Game.cheat()) Game.addMoney(-200);
+      Game.addMoney(-200);
       q.step = q.need;
       var cleared = Quests.clear();   /* complete() flips sailed */
       return { ok: true, done: true, sail: true, quest: cleared,

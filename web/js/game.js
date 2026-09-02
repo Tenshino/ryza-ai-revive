@@ -16,7 +16,8 @@
    StaminaAppleRow), and its cap grows with total EXP
    (`staminaMaxForExpTotal`). Out of stamina Ryza faints
    ("無くなると気絶しちゃうから / 安全な場所で寝ると回復するよ").
-   A single 作弊模式 switch (settings → app.cheat) lifts every limit. */
+   A single 作弊模式 switch (settings → app.cheat) makes stamina and gold
+   infinite. Map locks, bags, quests and daily login stay as they are. */
 (function (global) {
   'use strict';
 
@@ -151,7 +152,7 @@
       Game.emit('reset');
     },
 
-    /* ------------------------------------------------- cheat (user toggle) */
+    /* ------------------------------------------------- cheat (stamina + gold only) */
     cheat: function () {
       return !!(window.Config && Config.section('app').cheat);
     },
@@ -209,9 +210,15 @@
 
     /* ---------------------------------------------------------- economy */
     addMoney: function (n) {
-      Game.s.money = Math.max(0, Math.round((Game.s.money || 0) + Number(n) || 0));
+      n = Number(n) || 0;
+      if (Game.cheat() && n < 0) return;
+      Game.s.money = Math.max(0, Math.round((Game.s.money || 0) + n));
       Game.save();
       Game.emit('money');
+    },
+    canPay: function (cost) {
+      cost = Math.max(0, cost | 0);
+      return Game.cheat() || Game.s.money >= cost;
     },
     addExp: function (n) {
       var before = Game.level();
@@ -240,7 +247,6 @@
       id = String(id || '').trim();
       if (!id) return false;
       var list = Game.bagList(which);
-      if (Game.cheat()) { Game.s.flags.cheat_items = (Game.s.flags.cheat_items | 0) + 1; }
       var slot = null;
       list.forEach(function (x) { if (x.id === id) slot = x; });
       if (slot) {
@@ -262,8 +268,7 @@
       count = Math.max(1, count || 1);
       var list = Game.bagList(which);
       var have = countOf(list, id);
-      if (!Game.cheat() && have < count) return false;
-      if (Game.cheat() && have < count) count = have;
+      if (have < count) return false;
       var left = count, out = [];
       list.forEach(function (x) {
         if (x.id === id && left > 0) {
@@ -286,8 +291,8 @@
       if (idx < 0 || idx >= BAG_ORDER.length - 1) return false;
       var next = BAG_ORDER[idx + 1];
       var cost = BAG_UPGRADE_COST[next] || 0;
-      if (!Game.cheat() && Game.s.money < cost) return false;
-      if (!Game.cheat()) Game.addMoney(-cost);
+      if (!Game.canPay(cost)) return false;
+      Game.addMoney(-cost);
       if (which === 'ryza') Game.s.bagRyza = next; else Game.s.bagYou = next;
       Game.save();
       Game.emit('inventory');
@@ -407,11 +412,11 @@
         if (!list.length) return '（空）';
         return list.map(function (x) { return itemName(x.id) + '×' + x.count; }).join('、');
       };
-      L.push('## ゲーム状態（RPGモード・数値はあなたの手番で変動させられる）');
+      L.push('## ゲーム状態');
       L.push('- レベル ' + Game.level() + '（累計経験値 ' + s.exp_total + '）');
-      L.push('- スタミナ ' + s.stamina + '/' + Game.max() +
-             (Game.cheat() ? '（無制限モード）' : '') + '：活動や戦闘で減る。ゼロだとあたしは気絶しちゃう。');
-      L.push('- 所持金 ' + s.money + 'G（この世界のお金）');
+      L.push('- スタミナ ' + (Game.cheat() ? '∞' : (s.stamina + '/' + Game.max())) +
+             '：活動や戦闘で減る。ゼロだとあたしは気絶しちゃう。');
+      L.push('- 所持金 ' + (Game.cheat() ? '∞' : (s.money + 'G')) + '（この世界のお金）');
       L.push('- あなたのバッグ：' + invBrief(s.inventory));
       L.push('- あたしのバッグ：' + invBrief(s.ryza_inventory));
       L.push('- 出会った人々 ' + s.met_charas.length + ' 人');

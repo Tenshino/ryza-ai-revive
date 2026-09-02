@@ -129,6 +129,7 @@
       Game.load();
       Daily.load();
       Quests.ensure();
+      try { if (window.Memory) Memory.load(); } catch (e) {}
 
       App._bindChrome();
       App._bindTalk();
@@ -448,7 +449,18 @@
       var peopleBtn = document.getElementById('btn-world-people');
       if (peopleBtn) peopleBtn.onclick = function () { App._showPeople(); };
       document.getElementById('btn-memory-clear').onclick = function () {
+        if (!confirm(I18n.t('memory.clearLogAsk'))) return;
         App.memory = []; App.saveMemory(); App.renderMemory();
+      };
+      var addBtn = document.getElementById('btn-memory-add');
+      if (addBtn) addBtn.onclick = function () { App._editMemory(null); };
+      var flushBtn = document.getElementById('btn-memory-flush');
+      if (flushBtn) flushBtn.onclick = function () {
+        if (!window.Memory) return;
+        Memory.flushNow().then(function () {
+          App.toast(I18n.t('toast.memFlushed'));
+          App.renderMemory();
+        });
       };
       document.getElementById('btn-settings-reset').onclick = function () {
         if (confirm('恢复所有设置为默认值？')) {
@@ -564,7 +576,8 @@
       }
       var m = document.getElementById('hud-money-n');
       /* official purse pill groups thousands: 43,000 */
-      if (m) m.textContent = String(Game.s.money).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+      if (m) m.textContent = Game.cheat() ? '∞'
+        : String(Game.s.money).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
       var lv = document.getElementById('hud-level');
       if (lv) lv.textContent = 'Lv' + Game.level();
       App._dailyBadge();
@@ -631,19 +644,15 @@
     },
 
     /* The clock line fed to the LLM every turn: day count + current band +
-       hour. In flow mode it also teaches the LLM it may move the in-game
-       clock (the official pushed scene.time_bucket over marionette; our wire
-       is the <state> block). */
+       hour. Official scene.time_bucket is a FACT pushed TO marionette, not a
+       command; only local flow mode teaches/accepts a clock write. */
     _clockBlock: function (st) {
       var mode = (Config.section('app').timeMode) || 'real';
       var hour = mode === 'flow' ? Math.floor(Number(st.gameHour) || 12)
-                                 : new Date().getHours();
-      var L = ['## 現在時刻'];
-      L.push('- 同伴 ' + (st.day || 1) + '日目／' + World.todLabel(st.tod) + '（約' + hour + '時）');
-      if (mode === 'flow') {
-        L.push('- これはゲーム内の時計。場面で時間が動くなら <state>{"tod":"mor|aft|eve|ngt"}</state> か <state>{"time_advance":2}</state>（未来へN時間）で進めてよい。本当に時間が変わったときだけ使う。');
-      }
-      return L.join('\n');
+               : mode === 'manual' ? World.todStartHour(st.tod)
+               : new Date().getHours();
+      return '## 現在時刻\n- 同伴 ' + (st.day || 1) + '日目／' +
+        World.todLabel(st.tod) + '（約' + hour + '時）';
     },
 
     /* Talk → map / time of day / sleep. Source: detectEntryMapMove,
@@ -660,7 +669,6 @@
       }
       var raw = d.current_stage || d.stage || d.map_move || scene.current_stage;
       if (d.map_moved && !raw) raw = scene.current_stage;
-      var tod = d.tod || d.time_bucket || scene.time_bucket;
       var s = Config.section('state');
       var fromStage = s.stage, fromTod = s.tod;
       var dest = fromStage;
@@ -671,11 +679,12 @@
           else dest = id;
         }
       }
-      var nextTod = (tod && World.isTod(tod)) ? tod : fromTod;
-      /* flow mode: the LLM drives the in-game clock, and the band is DERIVED
-         from it (so time_advance / game_hour / tod all move one shared clock).
-         real/manual mode: a tod from the LLM is a one-off scene change only. */
-      if ((Config.section('app').timeMode) === 'flow') {
+      /* Official: time_bucket is pushed TO the model (AppServerClock), never
+         written back. real/manual ignore LLM tod/time_advance/game_hour.
+         flow is the local extension where the LLM may drive one shared clock. */
+      var nextTod = fromTod;
+      if (World.llmDrivesClock()) {
+        var tod = d.tod || d.time_bucket || scene.time_bucket;
         var gh = Number(d.game_hour != null ? d.game_hour : NaN);
         var adv = Number(d.time_advance != null ? d.time_advance :
                          (d.advance_hours != null ? d.advance_hours : NaN));
@@ -683,7 +692,7 @@
         var nowMs = Date.now();
         if (!isNaN(gh)) cur = ((gh % 24) + 24) % 24;
         else if (!isNaN(adv)) cur = ((cur + adv) % 24 + 24) % 24;
-        else if (tod && World.isTod(tod)) cur = World.todStartHour(tod);
+        else if (tod && World.isTod(tod) && tod !== fromTod) cur = World.todStartHour(tod);
         else cur = World.flowHour(cur, s.gameClockAt, nowMs, Config.section('app').flowSpeed);
         Config.set('state.gameHour', cur);
         Config.set('state.gameClockAt', nowMs);
@@ -852,14 +861,19 @@
 
     _sleepHome: function () {
       var st = Config.section('state');
+      var tod = st.tod;
       Config.set('state.stage', HOME_STAGE);
-      Config.set('state.tod', 'mor');
-      if ((Config.section('app').timeMode) === 'flow') {
+      /* flow: sleeping skips the in-game clock to morning. real/manual keep
+         the current band (real stays on the wall clock; official sleep does
+         not jump AppServerClock). Stamina refill is independent of lighting. */
+      if (World.llmDrivesClock()) {
+        tod = 'mor';
+        Config.set('state.tod', 'mor');
         Config.set('state.gameHour', World.todStartHour('mor'));
         Config.set('state.gameClockAt', Date.now());
       }
-      App._loadSceneFor(HOME_STAGE, 'mor');
-      Sound.setPlace(HOME_STAGE, 'mor', World.backgroundFor(HOME_STAGE));
+      App._loadSceneFor(HOME_STAGE, tod);
+      Sound.setPlace(HOME_STAGE, tod, World.backgroundFor(HOME_STAGE));
       Game.refill();
       Game.remember('安全なおうちでぐっすり眠った。');
       document.getElementById('overlay-faint').classList.add('hidden');
@@ -904,7 +918,7 @@
       sect(I18n.t('st.level') + ' ' + Game.level());
       row(I18n.t('stamina') || 'スタミナ', appleHtml + ' <b>' + (Game.cheat() ? '∞' : Game.s.stamina + '/' + Game.max()) + '</b>');
       row(I18n.t('st.exp'), e.into + ' / ' + e.span + '（' + Game.s.exp_total + '）');
-      row('G', String(Game.s.money));
+      row('G', Game.cheat() ? '∞' : String(Game.s.money));
       var q = Quests.active();
       if (q) row(I18n.t('quest.goal'),
         '「' + App.esc(q.title) + '」 ' + (q.step | 0) + '/' + q.need);
@@ -1160,9 +1174,9 @@
           App.speaking = false;
           document.getElementById('btn-send').disabled = false;
           App.history.push({ role: 'user', content: text });
-          App.history.push({ role: 'assistant', content: reply.text });
           App.remember('user', text);
           App.remember('ryza', reply.text);
+          try { if (window.Memory) Memory.ingest(text, reply.text); } catch (e) {}
 
           if (reply.state && typeof reply.state === 'object') {
             Game.applyDelta(reply.state, 'llm');
@@ -1172,7 +1186,18 @@
           Game.spend(cost, 'talk');
 
           if (window.Nsfw) Nsfw.onTurn(reply);
-          Avatar.setEmotion(reply.emotion, reply.attitude);
+          /* Omit = keep (same as undress). A missed tag must not snap the face
+             back to neutral/agree. */
+          if (reply.emotion || reply.attitude) {
+            Avatar.setEmotion(reply.emotion, reply.attitude);
+          }
+          /* After side effects so the echoed line matches the new screen.
+             All fields (emotion / undress / stage) live on this one line —
+             stripping it from history made every column decay together. */
+          App.history.push({
+            role: 'assistant',
+            content: Api.formatHistoryReply(reply.text)
+          });
           App.typeBubble(reply.text, function () {
             App.speakThen(reply.text, reply.emotion);
           });
@@ -1601,20 +1626,130 @@
     },
     renderMemory: function () {
       var root = document.getElementById('memory-list');
-      if (!App.memory.length) {
-        root.innerHTML = '<div class="empty">' + I18n.t('memory.empty') + '</div>';
-        return;
-      }
+      if (!root) return;
       root.innerHTML = '';
-      App.memory.slice().reverse().slice(0, 120).forEach(function (m) {
-        var el = document.createElement('div');
-        el.className = 'card';
-        el.innerHTML = '<div class="card-title"><span class="tag' +
-          (m.who === 'ryza' ? '' : ' leaf') + ' t-who"></span></div>' +
-          '<div class="card-sub t-text"></div>';
-        el.querySelector('.t-who').textContent = m.who === 'ryza' ? 'ライザ' : '你';
-        el.querySelector('.t-text').textContent = m.text;
-        root.appendChild(el);
+      var T = function (k) { return I18n.t(k); };
+      if (window.Memory) {
+        var bag = Memory.list();
+        var pend = Memory.pendingTurns();
+        if (pend) {
+          var p = document.createElement('div');
+          p.className = 'hint';
+          p.textContent = I18n.tf('memory.pending', '未总结 {n} 轮', { n: pend });
+          root.appendChild(p);
+        }
+        function section(title, items) {
+          if (!items.length) return;
+          var h = document.createElement('div');
+          h.className = 'mem-layer';
+          h.textContent = title;
+          root.appendChild(h);
+          items.slice().reverse().forEach(function (c) {
+            var el = document.createElement('div');
+            el.className = 'card';
+            el.innerHTML = '<div class="card-sub t-text"></div>' +
+              '<div class="card-acts">' +
+              '<button type="button" class="mini-btn t-edit"></button>' +
+              '<button type="button" class="mini-btn t-del"></button></div>';
+            el.querySelector('.t-text').textContent = c.text;
+            el.querySelector('.t-edit').textContent = T('memory.edit');
+            el.querySelector('.t-del').textContent = T('memory.del');
+            el.querySelector('.t-edit').onclick = function () { App._editMemory(c.id); };
+            el.querySelector('.t-del').onclick = function () {
+              if (!confirm(T('memory.delAsk'))) return;
+              Memory.remove(c.id);
+              App.renderMemory();
+            };
+            root.appendChild(el);
+          });
+        }
+        section(T('memory.summaries'), bag.summaries);
+        section(T('memory.sessions'), bag.sessions);
+      }
+      if (App.memory && App.memory.length) {
+        var h2 = document.createElement('div');
+        h2.className = 'mem-layer';
+        h2.textContent = T('memory.log');
+        root.appendChild(h2);
+        App.memory.slice().reverse().slice(0, 40).forEach(function (m) {
+          var el = document.createElement('div');
+          el.className = 'card';
+          el.innerHTML = '<div class="card-title"><span class="tag' +
+            (m.who === 'ryza' ? '' : ' leaf') + ' t-who"></span></div>' +
+            '<div class="card-sub t-text"></div>';
+          el.querySelector('.t-who').textContent = m.who === 'ryza' ? 'ライザ' : '你';
+          el.querySelector('.t-text').textContent = m.text;
+          root.appendChild(el);
+        });
+      }
+      if (!root.firstChild) {
+        root.innerHTML = '<div class="empty">' + T('memory.empty') + '</div>';
+      }
+    },
+
+    _editMemory: function (id) {
+      var existing = id && window.Memory ? Memory.get(id) : null;
+      App.openModal({
+        title: existing ? I18n.t('memory.edit') : I18n.t('memory.add'),
+        okLabel: I18n.t('form.ok'),
+        build: function (body) {
+          var ta = document.createElement('textarea');
+          ta.id = 'mem-edit-text';
+          ta.rows = 6;
+          ta.value = existing ? existing.text : '';
+          body.appendChild(ta);
+          if (!existing) {
+            var sel = document.createElement('select');
+            sel.id = 'mem-edit-layer';
+            [['session', I18n.t('memory.sessions')],
+             ['summary', I18n.t('memory.summaries')]].forEach(function (p) {
+              var o = document.createElement('option');
+              o.value = p[0]; o.textContent = p[1];
+              sel.appendChild(o);
+            });
+            body.appendChild(sel);
+          }
+        },
+        onOk: function (body) {
+          var text = (body.querySelector('#mem-edit-text') || {}).value || '';
+          if (!window.Memory) return;
+          if (existing) Memory.update(existing.id, text);
+          else {
+            var layer = (body.querySelector('#mem-edit-layer') || {}).value || 'session';
+            Memory.add(text, layer);
+          }
+          App.renderMemory();
+        }
+      });
+    },
+
+    _llmModels: [],
+
+    _applyPickedModel: function (id) {
+      Config.set('llm.model', id);
+      var hit = (App._llmModels || []).filter(function (m) { return m.id === id; })[0];
+      if (hit && window.Api && typeof Api.setModelMeta === 'function') Api.setModelMeta(hit);
+      if (hit && hit.context && !(Number(Config.section('llm').contextWindow) > 0)) {
+        Config.set('llm.contextWindow', hit.context);
+        App.buildSettings();
+      }
+    },
+
+    _fetchModels: function () {
+      var llm = Config.section('llm');
+      if (!llm.apiKey) { App.toast(I18n.t('toast.needKey'), true); return; }
+      if (!llm.baseUrl) { App.toast(I18n.t('toast.needUrl'), true); return; }
+      App.toast(I18n.t('toast.modelsWait'));
+      Api.listModels().then(function (list) {
+        App._llmModels = list || [];
+        var hit = App._llmModels.filter(function (m) { return m.id === llm.model; })[0];
+        if (hit && hit.context && !(Number(llm.contextWindow) > 0)) {
+          Config.set('llm.contextWindow', hit.context);
+        }
+        App.toast(I18n.tf('toast.modelsOk', '已拉取 {n} 个模型', { n: App._llmModels.length }));
+        App.buildSettings();
+      }).catch(function (e) {
+        App.toast(I18n.t('toast.modelsFail') + (e && e.message ? e.message : ''), true);
       });
     },
 
@@ -1683,8 +1818,14 @@
       var input = document.createElement(opts.multi ? 'textarea' : 'input');
       if (!opts.multi) input.type = opts.password ? 'password' : (opts.type || 'text');
       input.value = value == null ? '' : value;
+      if (opts.list) input.setAttribute('list', opts.list);
       input.oninput = function () { onInput(input.value); };
       d.appendChild(lab); d.appendChild(input);
+      if (opts.list && !document.getElementById(opts.list)) {
+        var dl = document.createElement('datalist');
+        dl.id = opts.list;
+        d.appendChild(dl);
+      }
       if (opts.hint) {
         var h = document.createElement('div');
         h.className = 'hint'; h.textContent = opts.hint;
@@ -1759,13 +1900,85 @@
       App._field(w, T('settings.baseUrl'), Config.section('llm').baseUrl,
         function (v) { Config.set('llm.baseUrl', v); },
         { hint: 'OpenAI 兼容地址，以 /v1 结尾；也可放 config/providers.json 自动水合' });
-      App._field(w, T('settings.model'), Config.section('llm').model,
-        function (v) { Config.set('llm.model', v); });
+      var models = App._llmModels || [];
+      if (models.length) {
+        var cur = Config.section('llm').model || '';
+        var opts = models.map(function (m) {
+          return { v: m.id, t: m.context ? (m.id + ' · ' + m.context) : m.id };
+        });
+        if (cur && !opts.filter(function (o) { return o.v === cur; }).length) {
+          opts.unshift({ v: cur, t: cur });
+        }
+        App._select(w, T('settings.model'), cur, opts, function (v) {
+          App._applyPickedModel(v);
+        });
+      } else {
+        App._field(w, T('settings.model'), Config.section('llm').model,
+          function (v) { Config.set('llm.model', v); },
+          { hint: T('settings.model.hint') });
+      }
+      var fetchRow = document.createElement('div');
+      fetchRow.className = 'btn-row';
+      var bFetch = document.createElement('button');
+      bFetch.type = 'button'; bFetch.className = 'btn';
+      bFetch.textContent = T('settings.fetchModels');
+      bFetch.onclick = function () { App._fetchModels(); };
+      fetchRow.appendChild(bFetch);
+      w.appendChild(fetchRow);
       App._field(w, T('settings.apiKey'), Config.section('llm').apiKey,
         function (v) { Config.set('llm.apiKey', v); },
-        { password: true, hint: '只保存在本机 localStorage' });
+        { password: true, hint: T('settings.apiKey.hint') });
       App._field(w, T('settings.temp'), Config.section('llm').temperature,
         function (v) { Config.set('llm.temperature', parseFloat(v) || 0.9); });
+      App._field(w, T('settings.maxTokens'), Config.section('llm').maxTokens,
+        function (v) { Config.set('llm.maxTokens', Math.max(64, parseInt(v, 10) || 400)); });
+      App._field(w, T('settings.historyTurns'), Config.section('llm').historyTurns,
+        function (v) { Config.set('llm.historyTurns', Math.max(2, parseInt(v, 10) || 12)); });
+      App._field(w, T('settings.context'), Config.section('llm').contextWindow || '',
+        function (v) {
+          var n = parseInt(v, 10);
+          Config.set('llm.contextWindow', n > 0 ? n : 0);
+        },
+        { hint: T('settings.context.hint') + ' · auto=' + Api.resolvedContext() });
+      App._select(w, T('settings.thinking'), Config.section('llm').thinking || 'auto', [
+        { v: 'auto', t: T('settings.thinking.auto') },
+        { v: 'off', t: T('settings.thinking.off') },
+        { v: 'on', t: T('settings.thinking.on') }
+      ], function (v) { Config.set('llm.thinking', v); });
+      var effort = (window.Api && Api.normalizeEffort)
+        ? Api.normalizeEffort(Config.section('llm').thinkingEffort)
+        : (Config.section('llm').thinkingEffort || 'default');
+      if (effort === 'xhigh') effort = 'max';
+      if (['default', 'off', 'low', 'medium', 'high', 'max'].indexOf(effort) === -1) {
+        effort = 'default';
+      }
+      App._select(w, T('settings.thinkingEffort'), effort, [
+        { v: 'default', t: T('settings.thinkingEffort.default') },
+        { v: 'off', t: T('settings.thinkingEffort.off') },
+        { v: 'low', t: T('settings.thinkingEffort.low') },
+        { v: 'medium', t: T('settings.thinkingEffort.medium') },
+        { v: 'high', t: T('settings.thinkingEffort.high') },
+        { v: 'max', t: T('settings.thinkingEffort.max') }
+      ], function (v) { Config.set('llm.thinkingEffort', v); });
+      App._select(w, T('settings.thinkingStyle'), Config.section('llm').thinkingStyle || 'auto', [
+        { v: 'auto', t: T('settings.thinkingStyle.auto') },
+        { v: 'none', t: T('settings.thinkingStyle.none') },
+        { v: 'openai', t: T('settings.thinkingStyle.openai') },
+        { v: 'openrouter', t: T('settings.thinkingStyle.openrouter') },
+        { v: 'qwen', t: T('settings.thinkingStyle.qwen') },
+        { v: 'glm', t: T('settings.thinkingStyle.glm') }
+      ], function (v) { Config.set('llm.thinkingStyle', v); });
+
+      App._title(w, T('settings.memory'));
+      var mem = Config.section('memory') || {};
+      App._switch(w, T('settings.memoryOn'), mem.enabled !== false,
+        function (v) { Config.set('memory.enabled', v); });
+      App._field(w, T('settings.turnsPerSession'), mem.turnsPerSession,
+        function (v) { Config.set('memory.turnsPerSession', Math.max(2, parseInt(v, 10) || 8)); });
+      App._field(w, T('settings.sessionCap'), mem.sessionCap,
+        function (v) { Config.set('memory.sessionCap', Math.max(2, parseInt(v, 10) || 8)); });
+      App._field(w, T('settings.summaryCap'), mem.summaryCap,
+        function (v) { Config.set('memory.summaryCap', Math.max(2, parseInt(v, 10) || 8)); });
 
       App._title(w, T('settings.tts'));
       App._select(w, T('settings.tts.provider'), Config.section('tts').provider || 'openai', [
@@ -1949,21 +2162,6 @@
           App.refreshHud();
           App.buildSettings();
         });
-      if (Config.section('app').cheat) {
-        var crow = document.createElement('div');
-        crow.className = 'btn-row';
-        var cRef = document.createElement('button');
-        cRef.className = 'btn'; cRef.textContent = T('cheat.refill');
-        cRef.onclick = function () { Game.refill(); App.toast(T('cheat.refill')); };
-        var cMap = document.createElement('button');
-        cMap.className = 'btn'; cMap.textContent = T('cheat.unlockWorld');
-        cMap.onclick = function () {
-          Game.s.sailed = true; Game.save(); Game.emit('flags');
-          App.toast(T('cheat.unlockDone'));
-        };
-        crow.appendChild(cRef); crow.appendChild(cMap);
-        w.appendChild(crow);
-      }
       var g = document.createElement('div');
       g.className = 'hint';
       g.textContent = T('stamina.faintMsg');
@@ -2141,6 +2339,7 @@
         settings: JSON.parse(Config.exportJSON()),
         history: App.history,
         memory: App.memory,
+        longmem: window.Memory ? Memory.snapshot() : null,
         game: Game.snapshot(),
         daily: JSON.parse(localStorage.getItem('ryza.daily.v1') || 'null'),
         alarms: Alarm.items
@@ -2153,6 +2352,7 @@
       App.history = snap.history || [];
       App.memory = snap.memory || [];
       App.saveMemory();
+      if (window.Memory) Memory.restore(snap.longmem);
       Game.restoreSnapshot(snap.game);
       try { localStorage.setItem('ryza.daily.v1', JSON.stringify(snap.daily || { lastDate: '', streak: 0, claimedDays: [] })); } catch (e) {}
       Daily.load();

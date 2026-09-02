@@ -23,6 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 PROVIDERS = ROOT / "config" / "providers.json"
 PORT = 8765
+# Cloudflare (opencode.ai etc.) returns 1010 for the default Python-urllib UA.
+UA = "RyzaChat/1.2.13"
 
 
 class Server(ThreadingHTTPServer):
@@ -60,7 +62,15 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_error(400, "proxy target must be https")
             return
         try:
-            with urlopen(Request(target, method="GET"), timeout=120) as resp:
+            headers = {"User-Agent": UA}
+            auth = self.headers.get("Authorization")
+            if auth:
+                headers["Authorization"] = auth
+            apikey = self.headers.get("api-key") or self.headers.get("Api-Key")
+            if apikey:
+                headers["api-key"] = apikey
+            req = Request(target, headers=headers, method="GET")
+            with urlopen(req, timeout=120) as resp:
                 data = resp.read()
                 self.send_response(resp.status)
                 self.send_header("Content-Type", resp.headers.get("Content-Type") or "application/octet-stream")
@@ -99,7 +109,10 @@ class Handler(SimpleHTTPRequestHandler):
             return
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n) if n else b""
-        headers = {"Content-Type": self.headers.get("Content-Type") or "application/json"}
+        headers = {
+            "Content-Type": self.headers.get("Content-Type") or "application/json",
+            "User-Agent": UA,
+        }
         auth = self.headers.get("Authorization")
         if auth:
             headers["Authorization"] = auth

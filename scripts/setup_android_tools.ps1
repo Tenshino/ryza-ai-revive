@@ -1,8 +1,15 @@
-# One-time setup of a portable Android build toolchain on D: (no C: writes,
-# no admin). Installs: Temurin JDK 17 -> tools\jdk17, Android cmdline-tools +
-# platform 34 + build-tools 34 -> tools\android-sdk.
+# One-time setup of a portable Android build toolchain (no admin).
+# Installs: Temurin JDK 17 -> <tools>\jdk17, Android cmdline-tools +
+# platform 34 + build-tools 34 -> <tools>\android-sdk.
+#
+# Tools dir: $env:RYZA_ANDROID_TOOLS, else gitignored
+# config/android-tools.local.txt, else <repo>/.android-tools
 $ErrorActionPreference = "Stop"
-$Tools = "D:\agent\tools"
+$Root = Split-Path -Parent $PSScriptRoot
+$localTools = Join-Path $Root "config/android-tools.local.txt"
+if ($env:RYZA_ANDROID_TOOLS) { $Tools = $env:RYZA_ANDROID_TOOLS }
+elseif (Test-Path $localTools) { $Tools = (Get-Content $localTools -Raw).Trim() }
+else { $Tools = Join-Path $Root ".android-tools" }
 New-Item -ItemType Directory -Force $Tools | Out-Null
 
 function Get-Zip($urls, $dest) {

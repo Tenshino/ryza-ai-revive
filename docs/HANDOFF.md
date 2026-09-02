@@ -2,8 +2,11 @@
 技术栈是纯前端 HTML + JavaScript + Spine 4.2 骨骼动画，素材是本地文件，
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
-【当前状态（2026-09-08）】
-官方 UI 对话页重构 + 桌面代理修复 + 取景校准（AUDIT §11，别退回去）：
+【当前状态（2026-09-02）】
+脱衣标签改 `undress` + 历史回写整行（AUDIT §13 续）。exe/APK 重出 **1.2.14**（versionCode 17）：`output/desktop/RyzaChat-Setup-1.2.14.exe`、`output/android/RyzaChat-1.2.14.apk`。
+此前：两层会话记忆 + LLM 设置（AUDIT §14，1.2.13）：`memory.js` 会话/会话总结；思考强度统一档含 `default`。拉取模型后用下拉选。作弊只无限体力/金币。exe/APK 重出 1.2.13。
+此前：LLM 侧效应协议（AUDIT §13，1.2.11）：标签第一行填当前画面值（复制即保持）；RPG 数值走 `<state>`。real/manual 忽略 LLM 的 tod；flow 仍可拨钟，回写同一 tod 不把钟拨回时段起点。漏标保持。脱衣仍由 LLM 决定，真脱改 `undress:on`（`nsfw` 仍是别名），拒绝则不动前缀。不上 tools。对话历史回写整行标签（表情/脱衣/地点一起），否则聊几轮后整栏都会忘。exe/APK 已出 1.2.11。
+此前（2026-09-08）官方 UI 对话页重构 + 桌面代理修复 + 取景校准（AUDIT §11，别退回去）：
 ① localProxy 必须认 ryza://app（1.2.9 迁移漏了它 ⇒ 桌面 LLM/TTS 全挂，已修 + 4 条路由断言）；
 ② 对话页 chrome = 官方样式：单行顶栏（☰/ボイス胶囊/»侧边菜单）、左下 HUD 簇（苹果+千分位金币+Lv）、
    右下圆钮（⇧折叠/⚑任务/背包）、底部常驻会话面板（头像+ライザ+mode.sub.* 描述+正文+页点），
@@ -27,10 +30,11 @@ ASMR zoom **就是源表** sitting 3.5 / standing 2.5（相对底栏 1.93 / 1.45
 仍只做朝脸的 pan 重映射。
 源 APK 换装是整包 skel+atlas（`features/skin` / `switchSkin`），没有「同一骨架只换 PNG」。
 本轮 NSFW 是图集页变体：`{pageBase}{variant}.png`，不写死服装 id。
-脱衣只认回复标签行的 `nsfw:on/off`（和 emotion 同一栏），不是关键词、也不是 tools。
+脱衣只认回复标签行的 `undress:on/off`（和 emotion 同一栏；`nsfw` 仍是别名），不是关键词、也不是 tools。
+助手历史回写整行标签，否则聊几轮后表情/脱衣/地点会一起忘。
 对话搬家：源 `detectEntryMapMove` / `scene.current_stage` / `scene.time_bucket`；
-地点表在 `_sceneContext`（**所有**模式，含 ASMR），`<state>{"current_stage":…}`
-或 `{"sleep":true}` 后 `gotoStage` / `_sleepHome`（未出航锁外岛）。
+地点表在 `_sceneContext`（**所有**模式，含 ASMR）。搬家/睡写标签 `stage:` / `sleep`；
+背包/经验/任务写 `<state>`。兼容旧的 `<state>{"current_stage":…}` 或 `{"sleep":true}`。
 此前（09-06）：姿态/相机/表情补全（AUDIT §9，不要退回去）：默认开局**站姿 `_99`**
 （旧存档一次性迁移 `state.postureMigrated`）；姿态 chip 改**动作语义**（站着显示
 「坐下」）；`midgroundPostures` 不再当皮肤约束（196/200 组场景只列 sitting），
@@ -207,7 +211,7 @@ PROJECT.md 第 7 节列出了所有解包产物的路径。其中这些是**原�
 必须用 `scripts/serve.py`（静态 + `POST /_proxy` 转发 LLM/TTS）。
 桌面开发：cd desktop && npx electron .（首次需 npm install，脚本里有镜像环境变量）
 安装包：powershell -File scripts/build_desktop.ps1
-APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk17 + android-sdk），
+APK：  先 scripts/setup_android_tools.ps1（一次性，装 .android-tools (or RYZA_ANDROID_TOOLS)\jdk17 + android-sdk），
       再 scripts/build_apk.ps1
       两个脚本都会：从 config/version.json 盖版本号（stamp_version.js）→ 暂存前跑
       privacy_check.py → 出成品后再跑一遍（APK 按 zip 成员逐个查）。命中即中止构建。
@@ -222,7 +226,7 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
   node scripts/expression_coverage.js     # 表情/动作可达性 + 引用解析全量核对
   node scripts/nsfw_intent_regression.js  # NSFW：标签切图集 + 路径约定
   python scripts/privacy_check.py web     # 打包前隐私自查（构建脚本已自动跑）
-截图走查（UI 改动必做）：外部工具在 D:\agent\temp\ryza-shot（puppeteer-core + 本机 Edge），
+截图走查（UI 改动必做）：local screenshot helper（puppeteer-core + 本机 Edge），
   node shot.js title talk quest daily world people settings inv status faint tap
   出图在 shots/*.png，用 read 工具看图核对。Electron 窗口自检：
   $env:RYZA_SHOT='...png'; npx electron .   （9 秒后截图退出）
@@ -288,7 +292,7 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
     - **人名/地名/物品名只用源包验证过的官方译名**（i18n.js CONTENT 表有注释标明来源=
       libapp.so UTF-16 扫描）。没验证过的一律保留日文原名——禁止自行发明翻译
       （已发生过一次：尼梅德地方/冥界奥利姆等编造被撤销）。要加新译名，先回
-      D:\agent\temp\apk-l10n\ 的扫描脚本（dump_ordered.py / scan_cjk.py）在包里验证。
+      a local APK string-scan script（dump_ordered.py / scan_cjk.py）在包里验证。
     - TTS 双提供商 tts.provider=openai|qwen。Qwen 用百炼 DashScope，**必须是普通
       sk- API key**；Token Plan 个人版 key 在 dashscope 是 401，且条款禁止 API 调用，
       别把它配进 Qwen 槽。Qwen 声音复刻走 voice-enrollment + data URI（本地 wav 直接
@@ -328,9 +332,15 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
       把人缩小会让模型显得过小，还会把坐姿从沙发上抬到空气里。
     - 坐姿有 `sofa_root` 时用世界坐标（不要走 `k` 映射）；ASMR zoom 用源表
       3.5/2.5，不要拿 `cameraPanY≈3200` 当正交中心。
-    - NSFW 脱衣只认标签行 `nsfw:on/off`（和 emotion 同一栏）。不要再做玩家关键词
-      立刻换图，也不要为这一下接 OpenAI tools（自填接口不一定支持，且会多一套协议）。
-    - 对话搬家认 `<state>.current_stage` / `sleep`（源 `detectEntryMapMove`）。
+    - 脱衣只认标签行 `undress:on/off`（和 emotion 同一栏；`nsfw` 仍当别名）。
+      对话历史必须回写整行标签（`Api.formatHistoryReply`），显示/朗读仍剥掉。
+      不要再做玩家关键词立刻换图，也不要为这一下接 OpenAI tools（自填接口不一定支持，且会多一套协议）。
+    - 长期记忆只住 `web/js/memory.js`。不要并进 `Game.s.memory`（冒险事件）或
+      `App.memory`（对白日志）。总结层满了是同层再压，不要加第三层。
+      思考参数默认未知协议就不发送，避免普通聊天模型 400。
+      强度用统一档，不要为每个 URL 做一套选项；对端不支持改强度就选 `default`。
+    - 对话搬家认标签 `stage:` / `sleep`，以及旧的 `<state>.current_stage` / `sleep`
+      （源 `detectEntryMapMove`）。
       地名表在 `World.promptBlock`，经 `_sceneContext` **每个**对话模式都注入
       （不要再塞进只给 RPG 模式的 `_rpgContext`，否则 ASMR 不知道自己在哪）。
       换景在 `App._applySceneDelta`，不要写进 `Game.applyDelta`。
@@ -397,13 +407,13 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 D:\agent\tools\jdk
 不要写 ASCII 密度图，不要用「测 canvas 像素」的脚本代替自己看。
 
 【输出位置】
-只改 projects/ryza-ai-revive/ 内的文件（截图工具例外，在 D:\agent\temp\ryza-shot）。
+只改本仓库内的文件。
 仓库根目录规范见 AGENTS.md 与 structure.md，不要往仓库根目录丢文件。
 每完成一个阶段做 git 提交。打包产物只进 output/（已 gitignore）。
 任何安装包/仓库内容不得含 config/providers.json、个人端点、测试音频。
 
 两点补充说明：
 
-docs/recon-report.md 已移到 D:\agent\backup\ryza-recon-report.md。那份文档通篇是源 App 的结构分析（接口、包结构、官方特征），留在要交出去的目录里正好是最容易触发审核的东西。没删，你要看随时能看。
+docs/recon-report.md 放在本仓库之外。那份文档通篇是源 App 的结构分析（接口、包结构、官方特征），留在要交出去的目录里正好是最容易触发审核的东西。没删，你要看随时能看。
 
 另外参照价值的解码产物在 docs/reference/——按项目规范 temp/ 是「可随时清理」的，不该让后续工作依赖它。
