@@ -4,7 +4,8 @@
 素材来自本地已有的资源文件。目标是：打开就能聊，LLM 与 TTS 接口由玩家自己在设置里填；
 玩法与演出**按源项目的模块划分和原始数据重新实现**（没有 Dart 源码可抄）。
 
-状态（2026-09-02）：**脱衣 `undress` + 历史回写整行**。exe/APK 重出 **1.2.14**（`output/desktop/RyzaChat-Setup-1.2.14.exe`、`output/android/RyzaChat-1.2.14.apk`，versionCode 17）。
+状态（2026-09-02）：**百炼 TTS 多主机/手填模型 + 难过点头嘴型**。exe/APK 重出 **1.2.15**（`output/desktop/RyzaChat-Setup-1.2.15.exe`、`output/android/RyzaChat-1.2.15.apk`，versionCode 18）。
+此前：脱衣标签改 `undress` + 历史回写整行。exe/APK 重出 **1.2.14**（versionCode 17）。
 此前（2026-09-01）：**两层会话记忆 + LLM 设置**（AUDIT §14，**1.2.13**）。
 会话卡 / 会话总结卡；思考强度统一档（含 `default`）；拉取模型后下拉选择。作弊只无限体力/金币。exe/APK 重出 1.2.13。
 此前：**LLM 侧效应协议**（AUDIT §13，1.2.11）。

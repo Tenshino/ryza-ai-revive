@@ -184,7 +184,8 @@ function resetAvatar(skin) {
     _rollSm: 0, _exprBand: '',
     _lookMul: 1, _lipOpen: 0, _lipHold: 0, _lookHist: [], _lookClock: 0,
     _faceRef: null, _exitMixCache: null,
-    _midBind: null, _atlasVariant: 'default', _variantMiss: {}
+    _midBind: null, _atlasVariant: 'default', _variantMiss: {},
+    _pokeMouthHold: false
   });
   Avatar._look = { yaw: 0, pitch: 0, roll: 0, ty: 0, tp: 0, tr: 0,
                    hold: 2, trans: 0.8, t: 0 };
@@ -222,6 +223,7 @@ function stepOnce(L, label) {
   if (Avatar._idleTimer > Avatar._idleGap) Avatar._rerollIdle();
 
   if (Avatar._addMuted && Avatar._pokeUnmuteReady()) Avatar._muteAdditives(false);
+  Avatar._restoreMouthAfterPoke();
 
   if (Avatar._closedHold > 0) Avatar._closedHold -= DT;
   Avatar._blinkTimer -= DT;
@@ -721,6 +723,38 @@ for (const skin of SKINS) {
   assertTrack0IsBaseIdle(L, 'poke exit');
   console.log('OK   poke exit: single settle (limbs+_lookMul overlapped, aim max ' +
               maxAimJump.toFixed(1) + 'u/f)');
+})();
+
+/* Sad mouth idles key extra mouth-chain bones that tap clips do not.
+   poke must park track 4 so those leftovers cannot shear mouth_01. */
+(function sadMouthClearedDuringPoke() {
+  const L = resetAvatar(SKINS[1]);
+  Avatar.setEmotion('sad', 'agree', true);
+  soak(L, 'sad face', 0.2);
+  const before = L.state.getCurrent(4);
+  if (!(before && before.animation && /facial_mouth/.test(before.animation.name))) {
+    fail('sad: track 4 has no idle mouth before poke');
+  }
+  if (!Avatar.poke('head')) fail('sad poke(head) returned no reaction');
+  stepOnce(L, 'sad poke');
+  const parked = L.state.getCurrent(4);
+  const parkedName = parked && parked.animation && parked.animation.name || '';
+  if (!/<empty>/i.test(parkedName)) {
+    fail('sad poke left mouth idle on track 4 (' + parkedName + ')');
+  }
+  if (!Avatar._pokeMouthHold) fail('sad poke did not set _pokeMouthHold');
+  let n = 0;
+  while (Avatar._trackBusy(6)) {
+    if (++n > 60 * 8) fail('sad poke: track 6 never drained');
+    stepOnce(L, 'sad poke drain');
+  }
+  Avatar._restoreMouthAfterPoke();
+  const after = L.state.getCurrent(4);
+  if (!(after && after.animation && /facial_mouth/.test(after.animation.name))) {
+    fail('sad: mouth idle not restored after poke drain');
+  }
+  if (Avatar._pokeMouthHold) fail('sad: _pokeMouthHold stuck after restore');
+  console.log('OK   sad poke parks mouth track then restores idle');
 })();
 
 /* ---- every animation named in the gesture table exists in the .skel */

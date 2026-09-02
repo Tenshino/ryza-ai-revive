@@ -39,8 +39,11 @@
     /* ---- TTS providers ----
        provider 'openai': any OpenAI-compatible chat/completions + audio.voice
                           (e.g. Xiaomi MiMo voice-clone).
-       provider 'qwen'  : Aliyun Bailian DashScope (qwen3-tts-flash /
-                          qwen3-tts-instruct-flash / qwen3-tts-vc-* cloned). */
+       provider 'qwen'  : DashScope-compatible TTS (official, workspace, or
+                          a third-party host with the same /api/v1/services
+                          paths). Model id is free-typed; qwen3-tts-* uses
+                          multimodal-generation, qwen-audio-* / cosyvoice-*
+                          use SpeechSynthesizer. */
     tts: {
       provider: 'openai',
       baseUrl: '',
@@ -62,7 +65,7 @@
          Empty qwenBaseUrl falls back to the public DashScope host. */
       qwenBaseUrl: '',
       qwenApiKey: '',
-      qwenModel: 'qwen3-tts-flash',  // or qwen3-tts-vc-2026-01-22 with a cloned voice
+      qwenModel: 'qwen3-tts-flash',  // any current DashScope TTS id; typed or fetched
       qwenVoice: 'Cherry',           // preset name, or voice_id from 声音复刻
       qwenCloneTarget: 'qwen3-tts-vc-2026-01-22',
       lang: 'auto'                   // 朗读语言（auto=与 llm.lang 实际值一致）

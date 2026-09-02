@@ -342,6 +342,35 @@
     return '/_proxy?u=' + encodeURIComponent(target);
   }
 
+  /* DashScope uses {code, message}; OpenAI-compat uses {error:{message}}. */
+  function apiErrorMessage(j, status, raw) {
+    if (j) {
+      var err = j.error;
+      if (typeof err === 'string' && err) return err;
+      if (err && typeof err === 'object') {
+        var em = err.message || err.msg || '';
+        var ec = err.code || err.type || '';
+        if (em) return (ec ? ec + ': ' : '') + em;
+        if (ec) return String(ec);
+      }
+      var msg = j.message || j.msg;
+      var code = j.code;
+      if (msg && code && String(code) && String(code) !== '200') {
+        return String(code) + ': ' + msg;
+      }
+      if (msg) return String(msg);
+    }
+    var snippet = raw ? String(raw).replace(/\s+/g, ' ').slice(0, 180) : '';
+    return 'HTTP ' + status + (snippet ? ': ' + snippet : '');
+  }
+
+  function xhrJsonOk(xhr, j) {
+    if (!(xhr.status >= 200 && xhr.status < 300 && j)) return false;
+    if (j.code && String(j.code) && String(j.code) !== '200' &&
+        !(j.output || j.data)) return false;
+    return true;
+  }
+
   function request(url, body, apiKey, timeoutMs) {
     return new Promise(function (resolve, reject) {
       var xhr = new XMLHttpRequest();
@@ -355,9 +384,8 @@
       xhr.onload = function () {
         var j = null;
         try { j = JSON.parse(xhr.responseText); } catch (e) {}
-        if (xhr.status >= 200 && xhr.status < 300 && j) resolve(j);
-        else reject(new Error((j && j.error && (j.error.message || JSON.stringify(j.error))) ||
-                              ('HTTP ' + xhr.status + (xhr.responseText ? ': ' + xhr.responseText.slice(0, 180) : ''))));
+        if (xhrJsonOk(xhr, j)) resolve(j);
+        else reject(new Error(apiErrorMessage(j, xhr.status, xhr.responseText)));
       };
       xhr.onerror = function () { reject(new Error('网络请求失败（跨域或未走本地代理）')); };
       xhr.ontimeout = function () { reject(new Error('请求超时')); };
@@ -377,14 +405,113 @@
       xhr.onload = function () {
         var j = null;
         try { j = JSON.parse(xhr.responseText); } catch (e) {}
-        if (xhr.status >= 200 && xhr.status < 300 && j) resolve(j);
-        else reject(new Error((j && j.error && (j.error.message || JSON.stringify(j.error))) ||
-                              ('HTTP ' + xhr.status + (xhr.responseText ? ': ' + xhr.responseText.slice(0, 180) : ''))));
+        if (xhrJsonOk(xhr, j)) resolve(j);
+        else reject(new Error(apiErrorMessage(j, xhr.status, xhr.responseText)));
       };
       xhr.onerror = function () { reject(new Error('网络请求失败（跨域或未走本地代理）')); };
       xhr.ontimeout = function () { reject(new Error('请求超时')); };
       xhr.send();
     });
+  }
+
+  /* Same DashScope HTTP protocol, different hosts: official Beijing,
+     Singapore, workspace MaaS, or a reverse-proxy that mirrors the
+     /api/v1/services/... paths. Users paste whatever the console copied
+     (host root, /api/v1, compatible-mode/v1, even a full TTS URL). */
+  var QWEN_DEFAULT_BASE = 'https://dashscope.aliyuncs.com';
+  var QWEN_TTS_MODELS = [
+    'qwen3-tts-flash',
+    'qwen3-tts-instruct-flash',
+    'qwen3-tts-vc-2026-01-22',
+    'qwen-audio-3.0-tts-flash',
+    'qwen-audio-3.0-tts-plus',
+    'cosyvoice-v3-flash',
+    'cosyvoice-v3.5-flash',
+    'cosyvoice-v3.5-plus'
+  ];
+  var QWEN_TTS_VOICES = [
+    'Cherry', 'Serena', 'Chelsie', 'Ethan', 'longanhuan_v3.6'
+  ];
+
+  function qwenApiRoot(baseUrl) {
+    var s = String(baseUrl || '').trim();
+    if (!s) s = QWEN_DEFAULT_BASE;
+    s = s.replace(/\/+$/, '');
+    s = s.replace(/\/api\/v1\/services\/[^?#]*/i, '');
+    s = s.replace(/\/compatible-mode\/v1$/i, '');
+    s = s.replace(/\/compatible-mode$/i, '');
+    s = s.replace(/\/api\/v1$/i, '');
+    /* OpenAI-compat copy-paste: https://gateway.example/v1 */
+    if (!/\/api\/v1$/i.test(s)) s = s.replace(/\/v1$/i, '');
+    return s.replace(/\/+$/, '');
+  }
+
+  function qwenTtsKind(model) {
+    var m = String(model || '').toLowerCase();
+    if (/voice-enrollment|qwen-voice-enrollment|qwen-voice-design/.test(m)) {
+      return 'enroll';
+    }
+    if (/cosyvoice|qwen-audio/.test(m)) return 'speech';
+    return 'multimodal';
+  }
+
+  function qwenTtsPath(model) {
+    var k = qwenTtsKind(model);
+    if (k === 'speech') return '/api/v1/services/audio/tts/SpeechSynthesizer';
+    if (k === 'enroll') return '/api/v1/services/audio/tts/customization';
+    return '/api/v1/services/aigc/multimodal-generation/generation';
+  }
+
+  function qwenTtsUrl(baseUrl, model) {
+    return qwenApiRoot(baseUrl) + qwenTtsPath(model);
+  }
+
+  function qwenHttpsUrl(url) {
+    return String(url || '').replace(/^http:\/\//i, 'https://');
+  }
+
+  function qwenDefaultVoice(model, current) {
+    var m = String(model || '').toLowerCase();
+    var v = String(current || '').trim();
+    var audioFamily = /qwen-audio|cosyvoice/.test(m);
+    if (!v) return audioFamily ? 'longanhuan_v3.6' : 'Cherry';
+    if (audioFamily && /^cherry$/i.test(v)) return 'longanhuan_v3.6';
+    if (!audioFamily && /longanhuan/i.test(v) && /qwen3-tts|qwen-tts/.test(m)) {
+      return 'Cherry';
+    }
+    return v;
+  }
+
+  function qwenWantsInstructions(model) {
+    var m = String(model || '').toLowerCase();
+    if (/qwen3-tts-vc|qwen-tts-vc/.test(m)) return false;
+    if (/instruct/.test(m)) return true;
+    if (/qwen-audio/.test(m)) return true;
+    if (/cosyvoice-v3\.5|cosyvoice-v3-flash/.test(m)) return true;
+    return false;
+  }
+
+  function isQwenHttpTtsModelId(id) {
+    id = String(id || '').toLowerCase();
+    if (/realtime/.test(id)) return false;
+    return /tts|cosyvoice|qwen-audio|speech|voice-enrollment|qwen-voice/.test(id);
+  }
+
+  function parseQwenModelList(j) {
+    var raw = (j && (j.data || j.models)) || [];
+    if (!Array.isArray(raw) && j && j.output && Array.isArray(j.output.models)) {
+      raw = j.output.models;
+    }
+    if (!Array.isArray(raw)) raw = [];
+    var out = [], seen = {};
+    raw.forEach(function (m) {
+      var e = parseModelEntry(m);
+      if (!e || !e.id || seen[e.id] || !isQwenHttpTtsModelId(e.id)) return;
+      seen[e.id] = 1;
+      out.push(e);
+    });
+    out.sort(function (a, b) { return a.id < b.id ? -1 : a.id > b.id ? 1 : 0; });
+    return out;
   }
 
   function choiceText(j) {
@@ -689,6 +816,14 @@
     /* test seam: which calls get rewritten onto the same-origin /_proxy
        (nsfw_intent_regression asserts serve.py + ryza://app both route) */
     _localProxy: localProxy,
+    QWEN_DEFAULT_BASE: QWEN_DEFAULT_BASE,
+    QWEN_TTS_MODELS: QWEN_TTS_MODELS,
+    QWEN_TTS_VOICES: QWEN_TTS_VOICES,
+    _qwenApiRoot: qwenApiRoot,
+    _qwenTtsUrl: qwenTtsUrl,
+    _qwenHttpsUrl: qwenHttpsUrl,
+    _qwenTtsKind: qwenTtsKind,
+    _qwenDefaultVoice: qwenDefaultVoice,
     /* resolved per-mode TTS voice direction (base hint + mode layer) */
     ttsStyleFor: function (mode) { return ttsStyleFor(mode, Config.section('tts')); },
 
@@ -801,10 +936,34 @@
         });
     },
 
+    /* DashScope-compatible hosts rarely put TTS ids on /v1/models, so this
+       also tries compatible-mode, then filters to HTTP (non-realtime) speech
+       models. Empty result is not a failure — the user can type any id. */
+    listQwenTtsModels: function () {
+      var tts = Config.section('tts');
+      if (!tts.qwenApiKey) return Promise.reject(new Error('NO_KEY'));
+      var root = qwenApiRoot(tts.qwenBaseUrl);
+      var urls = [
+        root + '/compatible-mode/v1/models',
+        root + '/api/v1/models'
+      ];
+      function pull(i) {
+        if (i >= urls.length) return Promise.resolve([]);
+        return requestGet(localProxy(urls[i]), tts.qwenApiKey, 20000)
+          .then(function (j) {
+            var list = parseQwenModelList(j);
+            if (list.length) return list;
+            return pull(i + 1);
+          })
+          .catch(function () { return pull(i + 1); });
+      }
+      return pull(0);
+    },
+
     /* ------------------------------------------------------------- TTS */
     /* Resolves to a Blob URL. Returns null when voice is disabled.
        provider: 'openai' (chat/completions + audio, MiMo-style) or
-       'qwen' (Bailian DashScope multimodal-generation, wav URL reply).
+       'qwen' (DashScope-compatible TTS; path depends on the model id).
        `mode` is the talk mode (chat/story/immersive/asmr/text); it picks
        the per-mode voice direction — see MODE_TTS. */
     speak: function (text, lang, mode) {
@@ -856,41 +1015,46 @@
     },
 
     /* ------------------------------------------- Qwen / Bailian (DashScope) */
-    QWEN_DEFAULT_BASE: 'https://dashscope.aliyuncs.com',
-
     _qwenSpeak: function (text, lang, mode) {
       var tts = Config.section('tts');
       if (!tts.qwenApiKey) return Promise.reject(new Error('NO_KEY'));
       var lg = lang || (window.Langs ? Langs.tts() : 'ja');
       var langType = window.Langs ? Langs.ttsLangType(lg) : 'Auto';
-      var base = (tts.qwenBaseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
-      var model = tts.qwenModel || 'qwen3-tts-flash';
-      var input = {
-        text: text,
-        voice: tts.qwenVoice || 'Cherry',
-        language_type: langType
-      };
-      /* Only qwen3-tts-instruct-* accepts natural-language voice direction
-         (input.instructions); plain flash and the cloned vc models don't. */
-      if (/instruct/i.test(model)) {
-        var style = ttsStyleFor(mode || 'chat', tts);
-        if (style) input.instructions = style;
+      var model = String(tts.qwenModel || 'qwen3-tts-flash').trim() || 'qwen3-tts-flash';
+      var kind = qwenTtsKind(model);
+      var voice = qwenDefaultVoice(model, tts.qwenVoice);
+      var input = { text: text, voice: voice };
+      if (kind === 'speech') {
+        input.format = 'wav';
+        input.sample_rate = 24000;
+        if (/qwen-audio/i.test(model)) input.language_type = langType;
+      } else {
+        input.language_type = langType;
       }
-      return request(localProxy(base + '/api/v1/services/aigc/multimodal-generation/generation'), {
+      if (qwenWantsInstructions(model)) {
+        var style = ttsStyleFor(mode || 'chat', tts);
+        if (style) {
+          if (kind === 'speech') input.instruction = style;
+          else input.instructions = style;
+        }
+      }
+      return request(localProxy(qwenTtsUrl(tts.qwenBaseUrl, model)), {
         model: model,
         input: input
       }, tts.qwenApiKey, 180000).then(function (j) {
         var aud = j && j.output && j.output.audio;
-        if (aud && aud.data) return Api._b64ToUrl(aud.data, 'audio/wav');
-        if (aud && aud.url) return Api._downloadUrl(aud.url);
-        throw new Error((j && j.message) || 'Qwen TTS 未返回音频');
+        var data = aud && String(aud.data || '').trim();
+        var url = aud && aud.url;
+        if (data) return Api._b64ToUrl(data, 'audio/wav');
+        if (url) return Api._downloadUrl(url);
+        throw new Error('Qwen TTS 未返回音频');
       });
     },
 
-    /* DashScope hands back a 24h OSS URL; pull it through our own proxy so
-       the blob feeds the lip-sync analyser without CORS problems. */
+    /* DashScope often returns an http:// OSS URL. The local /_proxy only
+       forwards https, and Android cleartext is blocked — rewrite first. */
     _downloadUrl: function (url) {
-      return fetch(localProxy(url)).then(function (r) {
+      return fetch(localProxy(qwenHttpsUrl(url))).then(function (r) {
         if (!r.ok) throw new Error('音频下载失败 HTTP ' + r.status);
         return r.blob();
       }).then(function (blob) { return URL.createObjectURL(blob); });
@@ -902,13 +1066,13 @@
     qwenCloneVoice: function () {
       var tts = Config.section('tts');
       if (!tts.qwenApiKey) return Promise.reject(new Error('NO_KEY'));
-      var base = (tts.qwenBaseUrl || Api.QWEN_DEFAULT_BASE).replace(/\/+$/, '');
+      var target = String(tts.qwenCloneTarget || 'qwen3-tts-vc-2026-01-22').trim();
       return Api._fetchAsDataUrl(tts.reference).then(function (dataUri) {
-        return request(localProxy(base + '/api/v1/services/audio/tts/customization'), {
+        return request(localProxy(qwenTtsUrl(tts.qwenBaseUrl, 'voice-enrollment')), {
           model: 'voice-enrollment',
           input: {
             action: 'create_voice',
-            target_model: tts.qwenCloneTarget || 'qwen3-tts-vc-2026-01-22',
+            target_model: target,
             prefix: 'ryza',
             preferred_name: 'ryza',
             url: dataUri
@@ -917,7 +1081,7 @@
       }).then(function (j) {
         var out = j && j.output;
         var vid = out && (out.voice_id || out.voice);
-        if (!vid) throw new Error((j && (j.message || j.code)) || '未返回 voice_id');
+        if (!vid) throw new Error(apiErrorMessage(j, 200, '') || '未返回 voice_id');
         return vid;
       });
     },

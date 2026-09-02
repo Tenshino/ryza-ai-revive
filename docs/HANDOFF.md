@@ -3,7 +3,8 @@
 没有任何官方服务端。代码已经能跑起来，现在需要你继续开发。
 
 【当前状态（2026-09-02）】
-脱衣标签改 `undress` + 历史回写整行（AUDIT §13 续）。exe/APK 重出 **1.2.14**（versionCode 17）：`output/desktop/RyzaChat-Setup-1.2.14.exe`、`output/android/RyzaChat-1.2.14.apk`。
+百炼 TTS 兼容多主机/手填模型 ID + 难过表情点头嘴型错位。exe/APK 重出 **1.2.15**（versionCode 18）：`output/desktop/RyzaChat-Setup-1.2.15.exe`、`output/android/RyzaChat-1.2.15.apk`。
+此前：脱衣标签改 `undress` + 历史回写整行（AUDIT §13 续）。exe/APK 重出 **1.2.14**（versionCode 17）。
 此前：两层会话记忆 + LLM 设置（AUDIT §14，1.2.13）：`memory.js` 会话/会话总结；思考强度统一档含 `default`。拉取模型后用下拉选。作弊只无限体力/金币。exe/APK 重出 1.2.13。
 此前：LLM 侧效应协议（AUDIT §13，1.2.11）：标签第一行填当前画面值（复制即保持）；RPG 数值走 `<state>`。real/manual 忽略 LLM 的 tod；flow 仍可拨钟，回写同一 tod 不把钟拨回时段起点。漏标保持。脱衣仍由 LLM 决定，真脱改 `undress:on`（`nsfw` 仍是别名），拒绝则不动前缀。不上 tools。对话历史回写整行标签（表情/脱衣/地点一起），否则聊几轮后整栏都会忘。exe/APK 已出 1.2.11。
 此前（2026-09-08）官方 UI 对话页重构 + 桌面代理修复 + 取景校准（AUDIT §11，别退回去）：

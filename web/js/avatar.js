@@ -172,6 +172,7 @@
     _lookMul: 1,
     /* frozen pointer reference during one-shots (see _applyLook) */
     _faceRef: null,
+    _pokeMouthHold: false,
     /* FX pick memo (emotion|band) so one reply does not re-roll blush twice */
     _fxPick: null,
     /* gaze driver cycle: { band, spec, left } honours ambientBindings
@@ -2287,7 +2288,9 @@
       Avatar._mouthIdle = pickAnim(data, expr && expr.mouth) || pickAnim(data, inten && inten.mouthBase);
       if (Avatar._eyeOpen) st.setAnimation(2, Avatar._eyeOpen, true).mixDuration = mixEye;
       if (brow) st.setAnimation(3, brow, true).mixDuration = mixBrow;
-      if (!Avatar._talking && Avatar._mouthIdle) {
+      /* A live tap parks track 4 (see poke); putting the idle mouth back
+         mid-gesture would re-introduce the unkeyed-bone shear. */
+      if (!Avatar._talking && Avatar._mouthIdle && !Avatar._pokeMouthHold) {
         st.setAnimation(4, Avatar._mouthIdle, true).mixDuration = immediate ? 0 : 0.25;
       }
     },
@@ -2300,9 +2303,10 @@
       if (!L || !L.ready || !L.state) return;
       var data = L.data, st = L.state;
       var lip = pickAnim(data, Avatar._lipSync) || pickAnim(data, FALLBACK_LIP);
+      if (Avatar._talking) Avatar._pokeMouthHold = false;
       if (Avatar._talking && lip) {
         st.setAnimation(4, lip, true).mixDuration = 0.12;
-      } else if (Avatar._mouthIdle) {
+      } else if (Avatar._mouthIdle && !Avatar._pokeMouthHold) {
         st.setAnimation(4, Avatar._mouthIdle, true).mixDuration = 0.2;
       }
       var tr0 = st.getCurrent(0);
@@ -2464,10 +2468,38 @@
          fade only in that overlap case. */
       if (enter === 0 && Avatar._trackBusy(6)) enter = 0.15;
       Avatar._muteAdditives(true);
+      /* Tap clips key mouth_01 (open) plus a SUBSET of the mouth chain
+         (A_001: mouth2/3/4/5 translate only). MixBlend.replace leaves
+         unkeyed bones at the idle-mouth pose. Sad/crying idles (004/005/006)
+         park extra translate/scale/rotate on face_mouth, mouth6, mouth7_ex
+         and scale on mouth2/3 — those leftovers shear mouth_01 as soon as
+         look-at turns the head off the clip's authored side. Other
+         expression mouths sit near setup, so the mix is invisible.
+         Empty track 4 for the gesture so tap applies on bind pose. */
+      Avatar._clearMouthForPoke(enter);
       var tr = L.state.setAnimation(6, anim, false);
       tr.mixDuration = enter;
       L.state.addEmptyAnimation(6, Avatar._pokeExitMix(anim), 0);
       return pick.OverlayID;
+    },
+
+    _clearMouthForPoke: function (mix) {
+      var L = Avatar.avatar;
+      if (!L || !L.state || Avatar._talking) return;
+      var m = Number(mix);
+      if (!(m >= 0)) m = 0.08;
+      L.state.setEmptyAnimation(4, m);
+      Avatar._pokeMouthHold = true;
+    },
+
+    _restoreMouthAfterPoke: function () {
+      if (!Avatar._pokeMouthHold) return;
+      if (Avatar._trackBusy(6)) return;
+      Avatar._pokeMouthHold = false;
+      if (Avatar._talking) return;
+      var L = Avatar.avatar;
+      if (!L || !L.state || !Avatar._mouthIdle) return;
+      L.state.setAnimation(4, Avatar._mouthIdle, true).mixDuration = 0.2;
     },
 
     /* Un-mute timing for the tap exit. The limb/occupancy layers used to come
@@ -2546,6 +2578,7 @@
       if (Avatar._addMuted && Avatar._pokeUnmuteReady()) {
         Avatar._muteAdditives(false);
       }
+      Avatar._restoreMouthAfterPoke();
 
       if (Avatar._closedHold > 0) Avatar._closedHold -= dt;
       Avatar._blinkTimer -= dt;

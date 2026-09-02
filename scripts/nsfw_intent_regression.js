@@ -165,5 +165,49 @@ sandbox.location = { origin: 'https://elsewhere.test' };
 ok(sandbox.Api._localProxy(PROXY_TARGET) === PROXY_TARGET, 'foreign browser origin calls the endpoint direct');
 sandbox.location = { origin: 'http://127.0.0.1:8765' };
 
+/* --- Qwen TTS: same protocol, different hosts; model ids change --- */
+const HOST = 'https://dashscope.aliyuncs.com';
+ok(A._qwenApiRoot('') === HOST, 'empty base → public DashScope');
+ok(A._qwenApiRoot('https://dashscope.aliyuncs.com/') === HOST, 'trailing slash stripped');
+ok(A._qwenApiRoot('https://dashscope.aliyuncs.com/api/v1') === HOST, 'strip /api/v1');
+ok(A._qwenApiRoot('https://dashscope.aliyuncs.com/compatible-mode/v1') === HOST,
+   'strip compatible-mode/v1');
+ok(A._qwenApiRoot('https://abc.cn-beijing.maas.aliyuncs.com/compatible-mode/v1') ===
+   'https://abc.cn-beijing.maas.aliyuncs.com', 'workspace host kept');
+ok(A._qwenApiRoot('https://proxy.example.com/dashscope') === 'https://proxy.example.com/dashscope',
+   'custom prefix kept');
+ok(A._qwenApiRoot('https://proxy.example.com/dashscope/api/v1') ===
+   'https://proxy.example.com/dashscope', 'custom prefix + /api/v1');
+ok(A._qwenApiRoot('https://gateway.example.com/v1') === 'https://gateway.example.com',
+   'OpenAI-style /v1 stripped');
+ok(A._qwenTtsUrl('', 'qwen3-tts-flash') ===
+   HOST + '/api/v1/services/aigc/multimodal-generation/generation',
+   'qwen3 → multimodal-generation');
+ok(A._qwenTtsUrl('', 'qwen-audio-3.0-tts-flash') ===
+   HOST + '/api/v1/services/audio/tts/SpeechSynthesizer',
+   'qwen-audio → SpeechSynthesizer');
+ok(A._qwenTtsUrl('', 'cosyvoice-v3.5-flash') ===
+   HOST + '/api/v1/services/audio/tts/SpeechSynthesizer',
+   'cosyvoice → SpeechSynthesizer');
+ok(A._qwenTtsUrl(
+     HOST + '/api/v1/services/aigc/multimodal-generation/generation',
+     'qwen-audio-3.0-tts-plus') ===
+   HOST + '/api/v1/services/audio/tts/SpeechSynthesizer',
+   'pasted full path rewritten for model family');
+ok(A._qwenHttpsUrl('http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav') ===
+   'https://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/x.wav',
+   'http OSS rewritten to https');
+ok(A._qwenHttpsUrl('https://already.example/x') === 'https://already.example/x',
+   'https OSS left alone');
+ok(A._qwenDefaultVoice('qwen-audio-3.0-tts-flash', 'Cherry') === 'longanhuan_v3.6',
+   'Cherry remapped on qwen-audio');
+ok(A._qwenDefaultVoice('qwen3-tts-flash', 'Serena') === 'Serena',
+   'custom qwen3 voice kept');
+ok(A._qwenTtsKind('voice-enrollment') === 'enroll', 'enrollment path');
+ok(A.QWEN_TTS_MODELS.indexOf('qwen-audio-3.0-tts-flash') >= 0, 'seed includes qwen-audio');
+ok(A._localProxy(A._qwenHttpsUrl('http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/a.wav'))
+     .indexOf('https%3A') >= 0,
+   'proxied OSS download is https');
+
 console.log(failures ? '\nNSFW INTENT: ' + failures + ' FAILURES' : '\nNSFW INTENT: ALL PASS');
 process.exit(failures ? 1 : 0);

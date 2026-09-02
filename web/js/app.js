@@ -1724,6 +1724,7 @@
     },
 
     _llmModels: [],
+    _qwenModels: [],
 
     _applyPickedModel: function (id) {
       Config.set('llm.model', id);
@@ -1747,6 +1748,33 @@
           Config.set('llm.contextWindow', hit.context);
         }
         App.toast(I18n.tf('toast.modelsOk', '已拉取 {n} 个模型', { n: App._llmModels.length }));
+        App.buildSettings();
+      }).catch(function (e) {
+        App.toast(I18n.t('toast.modelsFail') + (e && e.message ? e.message : ''), true);
+      });
+    },
+
+    _qwenModelSuggestions: function () {
+      var ids = [], seen = {};
+      function add(id) {
+        id = String(id || '').trim();
+        if (!id || seen[id]) return;
+        seen[id] = 1;
+        ids.push(id);
+      }
+      (Api.QWEN_TTS_MODELS || []).forEach(add);
+      (App._qwenModels || []).forEach(function (m) { add(m && m.id); });
+      add((Config.section('tts') || {}).qwenModel);
+      return ids;
+    },
+
+    _fetchQwenModels: function () {
+      var tts = Config.section('tts');
+      if (!tts.qwenApiKey) { App.toast(I18n.t('toast.needKey'), true); return; }
+      App.toast(I18n.t('toast.modelsWait'));
+      Api.listQwenTtsModels().then(function (list) {
+        App._qwenModels = list || [];
+        App.toast(I18n.tf('toast.modelsOk', '已拉取 {n} 个模型', { n: App._qwenModels.length }));
         App.buildSettings();
       }).catch(function (e) {
         App.toast(I18n.t('toast.modelsFail') + (e && e.message ? e.message : ''), true);
@@ -1818,14 +1846,22 @@
       var input = document.createElement(opts.multi ? 'textarea' : 'input');
       if (!opts.multi) input.type = opts.password ? 'password' : (opts.type || 'text');
       input.value = value == null ? '' : value;
-      if (opts.list) input.setAttribute('list', opts.list);
-      input.oninput = function () { onInput(input.value); };
-      d.appendChild(lab); d.appendChild(input);
-      if (opts.list && !document.getElementById(opts.list)) {
+      var suggestions = opts.suggestions || [];
+      if (opts.list || suggestions.length) {
+        var listId = opts.list || ('dl-' + String(labelKey || 'field').replace(/\W+/g, ''));
+        input.setAttribute('list', listId);
         var dl = document.createElement('datalist');
-        dl.id = opts.list;
+        dl.id = listId;
+        suggestions.forEach(function (s) {
+          if (!s) return;
+          var o = document.createElement('option');
+          o.value = s;
+          dl.appendChild(o);
+        });
         d.appendChild(dl);
       }
+      input.oninput = function () { onInput(input.value); };
+      d.appendChild(lab); d.appendChild(input);
       if (opts.hint) {
         var h = document.createElement('div');
         h.className = 'hint'; h.textContent = opts.hint;
@@ -1989,17 +2025,26 @@
       if ((Config.section('tts').provider || 'openai') === 'qwen') {
         App._field(w, T('settings.baseUrl'), Config.section('tts').qwenBaseUrl,
           function (v) { Config.set('tts.qwenBaseUrl', v); },
-          { hint: '留空即可（用公共 DashScope 端点）；百炼 API Key 需 sk- 开头' });
+          { hint: T('settings.qwenBaseHint') });
         App._field(w, T('settings.apiKey'), Config.section('tts').qwenApiKey,
           function (v) { Config.set('tts.qwenApiKey', v); }, { password: true });
-        App._select(w, T('settings.qwenModel'), Config.section('tts').qwenModel, [
-          { v: 'qwen3-tts-flash', t: 'qwen3-tts-flash（内置音色）' },
-          { v: 'qwen3-tts-instruct-flash', t: 'qwen3-tts-instruct-flash（指令）' },
-          { v: 'qwen3-tts-vc-2026-01-22', t: 'qwen3-tts-vc（复刻音色）' }
-        ], function (v) { Config.set('tts.qwenModel', v); });
+        App._field(w, T('settings.qwenModel'), Config.section('tts').qwenModel,
+          function (v) { Config.set('tts.qwenModel', v); },
+          { hint: T('settings.qwenModel.hint'), suggestions: App._qwenModelSuggestions(), list: 'qwen-model-list' });
+        var qFetch = document.createElement('div');
+        qFetch.className = 'btn-row';
+        var bQFetch = document.createElement('button');
+        bQFetch.type = 'button'; bQFetch.className = 'btn';
+        bQFetch.textContent = T('settings.fetchModels');
+        bQFetch.onclick = function () { App._fetchQwenModels(); };
+        qFetch.appendChild(bQFetch);
+        w.appendChild(qFetch);
         App._field(w, T('settings.qwenVoice'), Config.section('tts').qwenVoice,
           function (v) { Config.set('tts.qwenVoice', v); },
-          { hint: '内置如 Cherry/Serena/Chelsie；复刻后自动填入 voice_id' });
+          { hint: T('settings.qwenVoice.hint'), suggestions: Api.QWEN_TTS_VOICES || [], list: 'qwen-voice-list' });
+        App._field(w, T('settings.qwenCloneTarget'), Config.section('tts').qwenCloneTarget,
+          function (v) { Config.set('tts.qwenCloneTarget', v); },
+          { hint: T('settings.qwenCloneTarget.hint') });
         var crow = document.createElement('div');
         crow.className = 'btn-row';
         var clone = document.createElement('button');

@@ -7,9 +7,9 @@
 > Unofficial fan project for personal use. Not affiliated with Gust, Koei Tecmo, or the original publisher.  
 > 非官方同人项目，仅供个人使用，与官方及原发行方无关。
 
-Current version: **1.2.14** — installer and APK: [Releases](https://github.com/zeroa234/ryza-ai-revive/releases)
+Current version: **1.2.15** — installer and APK: [Releases](https://github.com/zeroa234/ryza-ai-revive/releases)
 
-当前版本 **1.2.14**，Windows 安装包与安卓 APK 见 [Releases](https://github.com/zeroa234/ryza-ai-revive/releases)。
+当前版本 **1.2.15**，Windows 安装包与安卓 APK 见 [Releases](https://github.com/zeroa234/ryza-ai-revive/releases)。
 
 ---
 
