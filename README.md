@@ -26,6 +26,32 @@ Current version: **1.2.15** — installer and APK: [Releases](https://github.com
 
 ---
 
+## Assets / 素材
+
+This git repository is **source code only**. Original-game textures, Spine `.skel` binaries, voice / BGM / ambient / SE audio, and bundled fonts are **not** in the tree (including git history).
+
+本仓库只放源码。原作贴图、Spine 骨骼二进制、语音 / BGM / 环境音 / SE、以及随包字体都不进 git，**历史提交里也没有**。
+
+Playable Windows and Android builds still include those files. Get them from [Releases](https://github.com/zeroa234/ryza-ai-revive/releases) — those packages were not changed.
+
+可玩的 Windows / 安卓包仍带完整素材，请从 [Releases](https://github.com/zeroa234/ryza-ai-revive/releases) 下载。Release 安装包没有改动。
+
+To run or rebuild from source, restore media into `web/assets/` (png / jpg / skel / m4a / wav / ttf). Do not commit them.
+
+从源码运行或打包前，把素材放回 `web/assets/`，不要提交：
+
+```powershell
+python scripts/restore_media.py path\to\RyzaChat-1.2.15.apk
+# or an unpacked desktop tree:
+python scripts/restore_media.py path\to\win-unpacked\resources\web
+```
+
+JSON / atlas / SVG under `web/assets/` stay in git so the code still has structure tables. Raster, audio, and `.skel` do not.
+
+`web/assets/` 里的 JSON、atlas、SVG 仍在仓库里；位图、音频、`.skel` 不在。
+
+---
+
 ## Privacy / 隐私
 
 - `config/providers.json` is **gitignored**. Copy `config/providers.example.json` and fill keys locally. Never commit it.
@@ -37,7 +63,7 @@ Current version: **1.2.15** — installer and APK: [Releases](https://github.com
 
 ## Run from source / 从源码运行
 
-Spine and `fetch` cannot use `file://`. Use the bundled static server (it also provides `/_proxy` for CORS):
+Restore media first (see **Assets / 素材** above), then start the bundled static server. Spine and `fetch` cannot use `file://`. The server also provides `/_proxy` for CORS:
 
 ```powershell
 python scripts/serve.py
@@ -99,7 +125,7 @@ python scripts/privacy_check.py web
 ## Layout / 目录
 
 ```
-web/          app (static HTML/JS + Spine assets)
+web/          app (static HTML/JS; media under assets/ is local-only)
 desktop/      Electron shell (ryza://app)
 android/      WebView + local AssetServer
 scripts/      serve, indexes, packaging, privacy gate
@@ -113,6 +139,6 @@ More detail: [`docs/PROJECT.md`](docs/PROJECT.md).
 
 ## Disclaimer / 声明
 
-Assets and character likenesses originate from a copy of the original game the author owns. This repository is a from-scratch client. Do not treat it as an official product, and do not use it for redistribution of paid services.
+Character likenesses and original-game media originate from a copy of the game the author owns. They are not distributed via this git repository. This tree is a from-scratch client. Do not treat it as an official product, and do not use it for redistribution of paid services.
 
-素材来自作者自有的原作资源拷贝；代码从零编写。请勿当成官方产品，也请勿拿去二次分发或接官方服务。
+角色形象与原作媒体来自作者自有的游戏拷贝，不通过本 git 仓库分发。代码从零编写。请勿当成官方产品，也请勿拿去二次分发或接官方服务。
