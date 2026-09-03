@@ -466,6 +466,43 @@
     return qwenApiRoot(baseUrl) + qwenTtsPath(model);
   }
 
+  /* Qwen-TTS uses the new enrollment contract. Qwen-Audio and CosyVoice
+     still use the legacy contract on the same customization endpoint. */
+  function qwenCloneUsesLegacyContract(targetModel) {
+    return /^(qwen-audio|cosyvoice)/i.test(String(targetModel || '').trim());
+  }
+
+  function qwenCloneRequest(targetModel, dataUri) {
+    var target = String(targetModel || '').trim();
+    if (qwenCloneUsesLegacyContract(target)) {
+      return {
+        model: 'voice-enrollment',
+        input: {
+          action: 'create_voice',
+          target_model: target,
+          prefix: 'ryza',
+          url: dataUri
+        }
+      };
+    }
+    return {
+      model: 'qwen-voice-enrollment',
+      input: {
+        action: 'create',
+        target_model: target,
+        preferred_name: 'ryza',
+        audio: { data: dataUri }
+      }
+    };
+  }
+
+  function qwenCloneVoiceId(targetModel, response) {
+    var out = response && response.output;
+    if (!out) return '';
+    var voice = qwenCloneUsesLegacyContract(targetModel) ? out.voice_id : out.voice;
+    return typeof voice === 'string' ? voice.trim() : '';
+  }
+
   function qwenHttpsUrl(url) {
     return String(url || '').replace(/^http:\/\//i, 'https://');
   }
@@ -821,6 +858,8 @@
     QWEN_TTS_VOICES: QWEN_TTS_VOICES,
     _qwenApiRoot: qwenApiRoot,
     _qwenTtsUrl: qwenTtsUrl,
+    _qwenCloneRequest: qwenCloneRequest,
+    _qwenCloneVoiceId: qwenCloneVoiceId,
     _qwenHttpsUrl: qwenHttpsUrl,
     _qwenTtsKind: qwenTtsKind,
     _qwenDefaultVoice: qwenDefaultVoice,
@@ -1060,28 +1099,19 @@
       }).then(function (blob) { return URL.createObjectURL(blob); });
     },
 
-    /* 声音复刻: register the shipped Ryza reference wav (data URI — the
-       endpoint accepts base64 data URIs, no public hosting needed) and
-       return the voice_id. target_model must match the synthesis model. */
+    /* 声音复刻: Qwen-TTS uses qwen-voice-enrollment + input.audio.data;
+       Qwen-Audio/CosyVoice keep the legacy voice-enrollment + input.url.
+       target_model must exactly match the synthesis model. */
     qwenCloneVoice: function () {
       var tts = Config.section('tts');
       if (!tts.qwenApiKey) return Promise.reject(new Error('NO_KEY'));
       var target = String(tts.qwenCloneTarget || 'qwen3-tts-vc-2026-01-22').trim();
       return Api._fetchAsDataUrl(tts.reference).then(function (dataUri) {
-        return request(localProxy(qwenTtsUrl(tts.qwenBaseUrl, 'voice-enrollment')), {
-          model: 'voice-enrollment',
-          input: {
-            action: 'create_voice',
-            target_model: target,
-            prefix: 'ryza',
-            preferred_name: 'ryza',
-            url: dataUri
-          }
-        }, tts.qwenApiKey, 120000);
+        return request(localProxy(qwenTtsUrl(tts.qwenBaseUrl, 'qwen-voice-enrollment')),
+                       qwenCloneRequest(target, dataUri), tts.qwenApiKey, 120000);
       }).then(function (j) {
-        var out = j && j.output;
-        var vid = out && (out.voice_id || out.voice);
-        if (!vid) throw new Error(apiErrorMessage(j, 200, '') || '未返回 voice_id');
+        var vid = qwenCloneVoiceId(target, j);
+        if (!vid) throw new Error(apiErrorMessage(j, 200, '') || '未返回音色 ID');
         return vid;
       });
     },

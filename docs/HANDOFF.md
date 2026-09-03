@@ -296,8 +296,9 @@ APK：  先 scripts/setup_android_tools.ps1（一次性，装 .android-tools (or
       a local APK string-scan script（dump_ordered.py / scan_cjk.py）在包里验证。
     - TTS 双提供商 tts.provider=openai|qwen。Qwen 用百炼 DashScope，**必须是普通
       sk- API key**；Token Plan 个人版 key 在 dashscope 是 401，且条款禁止 API 调用，
-      别把它配进 Qwen 槽。Qwen 声音复刻走 voice-enrollment + data URI（本地 wav 直接
-      base64，无需公网），voice_id 自动填设置。
+      别把它配进 Qwen 槽。Qwen-TTS/Qwen3 声音复刻走当前
+      `qwen-voice-enrollment + action=create + audio.data` 协议（本地 wav 直接 base64，
+      无需公网），读取 `output.voice` 并自动填设置；Qwen-Audio/CosyVoice 仍走旧协议。
     - 【2026-09-03】两端**凭据字段已分离**：qwen 只读 `tts.qwenBaseUrl`/`tts.qwenApiKey`
       （baseUrl 空=回落公共 DashScope），openai 只读 `tts.baseUrl`/`tts.apiKey`；
       音色本来就分离（`qwenVoice` vs `presetVoice`/`reference`）。别把 qwen 路径
