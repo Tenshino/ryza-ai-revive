@@ -10,14 +10,18 @@ let failures = 0;
 const bad = (msg) => { failures++; console.log('  FAIL ' + msg); };
 const ok = (cond, name) => { if (cond) console.log('  PASS ' + name); else bad(name); };
 
+const configSections = {};
 const sandbox = {
   console, Math, JSON, String, Array, RegExp, Object, Date, Number, isFinite,
-  parseInt, parseFloat, Infinity, NaN, Set, Map, Promise
+  parseInt, parseFloat, Infinity, NaN, Set, Map, Promise, Uint8Array
 };
 sandbox.window = sandbox;
 sandbox.globalThis = sandbox;
+sandbox.btoa = (value) => Buffer.from(value, 'binary').toString('base64');
 sandbox.Avatar = { _calls: [], setAtlasVariant(name) { this._calls.push(name); } };
-sandbox.Config = { section() { return {}; }, set() {}, get() { return {}; } };
+sandbox.Config = {
+  section(name) { return configSections[name] || {}; }, set() {}, get() { return {}; }
+};
 sandbox.document = { getElementById() { return null; } };
 sandbox.XMLHttpRequest = function () {};
 sandbox.location = { origin: 'http://127.0.0.1:8765' };
@@ -203,11 +207,92 @@ ok(A._qwenDefaultVoice('qwen-audio-3.0-tts-flash', 'Cherry') === 'longanhuan_v3.
    'Cherry remapped on qwen-audio');
 ok(A._qwenDefaultVoice('qwen3-tts-flash', 'Serena') === 'Serena',
    'custom qwen3 voice kept');
-ok(A._qwenTtsKind('voice-enrollment') === 'enroll', 'enrollment path');
+ok(A._qwenTtsKind('voice-enrollment') === 'enroll', 'legacy enrollment path');
+ok(A._qwenTtsKind('qwen-voice-enrollment') === 'enroll', 'Qwen-TTS enrollment path');
+const QWEN_CLONE_DATA = 'data:audio/wav;base64,UklGRg==';
+const qwenClone = A._qwenCloneRequest('qwen3-tts-vc-2026-01-22', QWEN_CLONE_DATA);
+ok(qwenClone.model === 'qwen-voice-enrollment' &&
+   qwenClone.input.action === 'create' &&
+   qwenClone.input.target_model === 'qwen3-tts-vc-2026-01-22' &&
+   qwenClone.input.preferred_name === 'ryza' &&
+   qwenClone.input.audio.data === QWEN_CLONE_DATA &&
+   !('url' in qwenClone.input) && !('prefix' in qwenClone.input),
+   'Qwen3 clone uses current qwen-voice-enrollment contract');
+const audioClone = A._qwenCloneRequest('qwen-audio-3.0-tts-flash', QWEN_CLONE_DATA);
+ok(audioClone.model === 'voice-enrollment' &&
+   audioClone.input.action === 'create_voice' &&
+   audioClone.input.url === QWEN_CLONE_DATA &&
+   audioClone.input.prefix === 'ryza' && !('audio' in audioClone.input),
+   'Qwen-Audio clone keeps legacy enrollment contract');
+const cosyClone = A._qwenCloneRequest('cosyvoice-v3.5-plus', QWEN_CLONE_DATA);
+ok(cosyClone.model === 'voice-enrollment' && cosyClone.input.action === 'create_voice',
+   'CosyVoice clone keeps legacy enrollment contract');
+ok(A._qwenCloneVoiceId('qwen3-tts-vc-2026-01-22', { output: { voice: '  voice-ok  ' } }) ===
+   'voice-ok', 'Qwen3 voice id is trimmed');
+ok(A._qwenCloneVoiceId('qwen3-tts-vc-2026-01-22', { output: { voice: 123 } }) === '' &&
+   A._qwenCloneVoiceId('qwen-audio-3.0-tts-flash', { output: { voice_id: '   ' } }) === '',
+   'malformed or blank voice ids are rejected');
 ok(A.QWEN_TTS_MODELS.indexOf('qwen-audio-3.0-tts-flash') >= 0, 'seed includes qwen-audio');
 ok(A._localProxy(A._qwenHttpsUrl('http://dashscope-result-bj.oss-cn-beijing.aliyuncs.com/a.wav'))
      .indexOf('https%3A') >= 0,
    'proxied OSS download is https');
 
-console.log(failures ? '\nNSFW INTENT: ' + failures + ' FAILURES' : '\nNSFW INTENT: ALL PASS');
-process.exit(failures ? 1 : 0);
+async function exerciseCloneCall(target, response, expectedVoice, legacy) {
+  let sent = null;
+  configSections.tts = {
+    qwenApiKey: 'sk-test',
+    qwenBaseUrl: '',
+    qwenCloneTarget: target,
+    reference: 'reference.wav'
+  };
+  sandbox.fetch = function () {
+    return Promise.resolve({
+      ok: true,
+      arrayBuffer() { return Promise.resolve(Uint8Array.from([82, 73, 70, 70]).buffer); }
+    });
+  };
+  sandbox.XMLHttpRequest = function () { this.headers = {}; };
+  sandbox.XMLHttpRequest.prototype.open = function (method, url) {
+    this.method = method;
+    this.url = url;
+  };
+  sandbox.XMLHttpRequest.prototype.setRequestHeader = function (name, value) {
+    this.headers[name] = value;
+  };
+  sandbox.XMLHttpRequest.prototype.send = function (body) {
+    sent = { method: this.method, url: this.url, body: JSON.parse(body) };
+    this.status = 200;
+    this.responseText = JSON.stringify(response);
+    this.onload();
+  };
+
+  const voice = await A.qwenCloneVoice();
+  const endpoint = HOST + '/api/v1/services/audio/tts/customization';
+  ok(voice === expectedVoice, (legacy ? 'legacy' : 'Qwen3') + ' clone parses its response field');
+  ok(sent && sent.method === 'POST' &&
+     sent.url === '/_proxy?u=' + encodeURIComponent(endpoint),
+     (legacy ? 'legacy' : 'Qwen3') + ' clone posts to customization endpoint');
+  ok(sent && sent.body.model === (legacy ? 'voice-enrollment' : 'qwen-voice-enrollment') &&
+     sent.body.input.action === (legacy ? 'create_voice' : 'create') &&
+     sent.body.input.target_model === target &&
+     (legacy ? sent.body.input.url : sent.body.input.audio.data)
+       .indexOf('data:audio/wav;base64,') === 0,
+     (legacy ? 'legacy' : 'Qwen3') + ' clone sends the production request contract');
+}
+
+(async function () {
+  try {
+    await exerciseCloneCall(
+      'qwen3-tts-vc-2026-01-22',
+      { output: { voice: 'qwen3-voice', voice_id: 'wrong-legacy-field' } },
+      'qwen3-voice', false);
+    await exerciseCloneCall(
+      'qwen-audio-3.0-tts-flash',
+      { output: { voice: 'wrong-current-field', voice_id: 'audio-voice' } },
+      'audio-voice', true);
+  } catch (e) {
+    bad('Qwen clone integration threw: ' + e.message);
+  }
+  console.log(failures ? '\nNSFW INTENT: ' + failures + ' FAILURES' : '\nNSFW INTENT: ALL PASS');
+  process.exit(failures ? 1 : 0);
+})();

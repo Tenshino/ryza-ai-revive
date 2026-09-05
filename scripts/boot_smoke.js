@@ -132,9 +132,9 @@ vm.createContext(sandbox);
 const load = (f) => vm.runInContext(fs.readFileSync(path.join(WEB, 'js', f), 'utf8'),
                                    sandbox, { filename: f });
 
-for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js', 'memory.js',
+for (const f of ['util.js', 'native-tts.js', 'config.js', 'i18n.js', 'api.js', 'memory.js',
                  'game.js', 'quests.js', 'daily.js', 'world.js', 'audio.js',
-                 'alarm.js', 'fx.js', 'nsfw.js', 'app.js']) {
+                 'alarm.js', 'fx.js', 'nsfw.js', 'chatlog.js', 'app.js']) {
   try { load(f); console.log('  loaded ' + f); }
   catch (e) { bad('load ' + f + ': ' + e.message); }
 }
@@ -165,11 +165,22 @@ for (const f of ['util.js', 'config.js', 'i18n.js', 'api.js', 'memory.js',
     sandbox.App.renderStatus();
     sandbox.App.renderInv();
     sandbox.App.buildSettings();
+    sandbox.Config.set('tts.provider', 'lingchat');
+    sandbox.App.buildSettings();
+    ok(!sandbox.RyzaNativeTtsBridge.available(), 'native TTS settings render without a native shell');
+    sandbox.Config.set('tts.provider', 'openai');
     sandbox.App.buildCharaForm();
     sandbox.App.updateHud();
     ok(true, 'render surfaces + settings form built');
     ok(!!sandbox.Memory && sandbox.Memory.promptBlock() === '', 'Memory module boots empty');
     sandbox.App.renderMemory();
+    ok(!!sandbox.ChatLog, 'ChatLog module boots');
+    sandbox.ChatLog.clear();
+    const logTurn = sandbox.ChatLog.addTurn('hello', 'やあ', { mode: 'chat' });
+    ok(sandbox.ChatLog.list().length === 2 && !!logTurn && logTurn.role === 'assistant',
+       'ChatLog stores user + assistant turns');
+    sandbox.App.renderHistory();
+    sandbox.ChatLog.clear();
     ok(!sandbox.App._lastText, 'no stale retry text');
 
     /* per-mode TTS voice direction: base hint + mode layer, overridable */

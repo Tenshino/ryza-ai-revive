@@ -23,9 +23,14 @@ node (Join-Path $PSScriptRoot "stamp_version.js") $Ver $VerJson.code
 if ($LASTEXITCODE) { throw "could not stamp the version into the shell manifests" }
 "Building RyzaChat-Setup-$Ver.exe (versionCode $($VerJson.code))"
 
+"== embedded Style-Bert-VITS2 runtime =="
+& (Join-Path $PSScriptRoot "build_native_tts.ps1") -Platform windows
+if ($LASTEXITCODE) { throw "native TTS build failed" }
+
 "== privacy gate on everything that will be staged =="
 python (Join-Path $PSScriptRoot "privacy_check.py") `
-  (Join-Path $Root "web") "main.js" "preload.js" "web-storage.js" "package.json" `
+  (Join-Path $Root "web") "main.js" "preload.js" "web-storage.js" "native-tts.js" "package.json" `
+  (Join-Path $Root "native/ryza-tts/src") (Join-Path $Root "THIRD_PARTY_NOTICES.md") `
   (Join-Path $Root "android/app/src")
 if ($LASTEXITCODE) { throw "privacy check refused the build - nothing was packaged" }
 
@@ -39,6 +44,28 @@ if (-not (Test-Path "node_modules/electron/dist/electron.exe")) {
   node node_modules/electron/install.js
 } else {
   "electron already present"
+}
+
+# app-builder's winCodeSign archive contains two macOS symlinks. On Windows
+# accounts without symlink privilege its extractor fails even though every
+# Windows tool was extracted. Seed the normal cache with those usable files.
+$CacheRoot = if ($env:ELECTRON_BUILDER_CACHE) { $env:ELECTRON_BUILDER_CACHE } else { Join-Path $env:LOCALAPPDATA "electron-builder/Cache" }
+$WinCodeSign = Join-Path $CacheRoot "winCodeSign/winCodeSign-2.6.0"
+if (-not (Test-Path (Join-Path $WinCodeSign "rcedit-x64.exe"))) {
+  "== prepare winCodeSign cache for restricted Windows accounts =="
+  $Group = Split-Path $WinCodeSign -Parent
+  $Archive = Join-Path $Group "winCodeSign-2.6.0.7z"
+  $Temp = Join-Path $Group "extract-$PID"
+  New-Item -ItemType Directory -Force $Group | Out-Null
+  $Base = if ($env:ELECTRON_BUILDER_BINARIES_MIRROR) { $env:ELECTRON_BUILDER_BINARIES_MIRROR } else { "https://github.com/electron-userland/electron-builder-binaries/releases/download/" }
+  Invoke-WebRequest ($Base.TrimEnd('/') + "/winCodeSign-2.6.0/winCodeSign-2.6.0.7z") -OutFile $Archive
+  $Expected = "CDAEC7154DDA7CC31F88D886E2489379A0625A737D610B5AE7F62A12F16743A4"
+  if ((Get-FileHash $Archive -Algorithm SHA256).Hash -ne $Expected) { throw "winCodeSign checksum mismatch" }
+  Remove-Item -Recurse -Force $Temp -ErrorAction SilentlyContinue
+  & "node_modules/7zip-bin/win/x64/7za.exe" x -snld -bd $Archive "-o$Temp" | Out-Null
+  if (-not (Test-Path (Join-Path $Temp "rcedit-x64.exe"))) { throw "could not extract winCodeSign Windows tools" }
+  Remove-Item -Recurse -Force $WinCodeSign -ErrorAction SilentlyContinue
+  Move-Item $Temp $WinCodeSign
 }
 
 $BuildStart = Get-Date

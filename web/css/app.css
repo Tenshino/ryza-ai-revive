@@ -332,6 +332,9 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
 .card-sub{font-size:12.5px;color:var(--dim);line-height:1.6}
 .card-acts{margin-top:9px;display:flex;gap:8px}
 .mem-layer{font-size:12px;color:var(--dim);padding:6px 2px 0;letter-spacing:.04em}
+.chat-history-row .t-time{margin-left:auto;font-size:11px;color:var(--dim);font-weight:400}
+.chat-history-row.from-ryza .card-sub{color:var(--ink)}
+.chat-history-row.from-user .card-sub{color:var(--dim)}
 .tag{font-size:10.5px;padding:2px 8px;border-radius:999px;background:rgba(232,180,92,.16);
   color:var(--gold);border:1px solid var(--line)}
 .tag.leaf{background:rgba(127,176,105,.16);color:var(--leaf)}
@@ -374,6 +377,11 @@ select{background:rgba(20,14,18,.9);border:1px solid var(--line);border-radius:9
   padding-bottom:6px;border-bottom:1px solid var(--line);text-transform:uppercase}
 .section-title:first-child{margin-top:0}
 .btn-row{display:flex;gap:10px;margin-top:18px}
+.native-tts-actions{flex-wrap:wrap}
+.native-tts-actions .btn{flex:1 1 calc(50% - 5px);min-width:130px}
+.native-tts-state .hint{padding:9px 11px;border:1px solid rgba(220,90,70,.3);border-radius:6px;color:#c88f82}
+.native-tts-state .hint.ready{border-color:rgba(112,180,122,.38);color:#83bd8d}
+.settings-note{margin:-4px 0 16px;color:#75675f;font-size:11px;line-height:1.55}
 .btn{flex:1;padding:12px;border-radius:11px;border:1px solid var(--line);
   background:rgba(232,180,92,.12);font-size:14px;transition:.15s;text-align:center}
 .btn:hover{background:rgba(232,180,92,.22)}

@@ -68,6 +68,22 @@
       qwenModel: 'qwen3-tts-flash',  // any current DashScope TTS id; typed or fetched
       qwenVoice: 'Cherry',           // preset name, or voice_id from 声音复刻
       qwenCloneTarget: 'qwen3-tts-vc-2026-01-22',
+      /* local GPT-SoVITS v2 — provider 'local'. The service is launched on
+         the user's PC/LAN; these paths are paths on THAT machine, not inside
+         this app package. */
+      localBaseUrl: 'http://127.0.0.1:9880',
+      localRefAudioPath: '',
+      localPromptText: '',
+      localPromptLang: 'ja',
+      localGptWeights: '',
+      localSoVitsWeights: '',
+      /* LingChat-style embedded Style-Bert-VITS2 (native shell only). */
+      nativeVoiceId: 'ryza',
+      nativeStyleId: 0,
+      nativeSpeakerId: 0,
+      nativeSdpRatio: 0.0,
+      nativeLengthScale: 1.0,
+      nativeStyleWeight: 1.0,
       lang: 'auto'                   // 朗读语言（auto=与 llm.lang 实际值一致）
     },
 
@@ -78,6 +94,19 @@
        tts.lang   = what the voice speaks ('auto' = same as llm.lang; anything else
                     triggers an LLM translation pass before synthesis) */
     voice: { lang: 'auto' },
+
+    /* ---- local translation (optional) ----
+       When enabled and the speech language differs from the reply language,
+       translation uses this OpenAI-compatible local endpoint instead of the
+       chat LLM. Chat keeps using `llm.*`; only zh→ja/etc. speech prep goes
+       through this server. */
+    translation: {
+      enabled: false,
+      baseUrl: 'http://127.0.0.1:11434/v1', // Ollama / LM Studio / vLLM compatible
+      model: 'qwen3:4b',
+      apiKey: '',
+      timeoutMs: 60000
+    },
 
     /* ---- character / persona (fed into the system prompt) ---- */
     chara: {

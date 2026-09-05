@@ -114,6 +114,7 @@
     s: null,
     _subs: [],
     ITEMS: ITEMS,
+    itemName: itemName,
     BAGS: BAGS,
     BAG_ORDER: BAG_ORDER,
     BAG_UPGRADE_COST: BAG_UPGRADE_COST,

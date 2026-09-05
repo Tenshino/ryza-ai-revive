@@ -1,0 +1,149 @@
+[
+  {
+    "id": "normal__task__morning__08",
+    "style": "normal",
+    "wav": "wavs/normal__task__morning__08.wav",
+    "text": "リリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリ",
+    "reason": "preexisting_manual_ringtone_removal"
+  },
+  {
+    "id": "normal__prologue__prologue_04",
+    "style": "normal",
+    "wav": "normal_wav/normal__prologue__prologue_04.wav",
+    "text": "例えば…",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__daytime__06",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__daytime__06.wav",
+    "text": "リリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__daytime__08",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__daytime__08.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__evening__03",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__evening__03.wav",
+    "text": "リリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__evening__06",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__evening__06.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__evening__08",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__evening__08.wav",
+    "text": "タルルルタルルル時間だよタルルルタルルル",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__morning__10",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__morning__10.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__morning__03",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__morning__03.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__morning__06",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__morning__06.wav",
+    "text": "タルルルタルルル時間だよタルルルタルルル",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__night__03",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__night__03.wav",
+    "text": "たるるるるるるるる時間だよーたるるるるるるる",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__night__06",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__night__06.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "whisper__task__daytime__08",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__task__daytime__08.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "whisper__task__evening__06",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__task__evening__06.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "whisper__task__morning__10",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__task__morning__10.wav",
+    "text": "ピリリリピリリリ時間だよピリリリピリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "whisper__task__morning__03",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__task__morning__03.wav",
+    "text": "リリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "whisper__task__morning__08",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__task__morning__08.wav",
+    "text": "りりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりりり",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "whisper__task__night__06",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__task__night__06.wav",
+    "text": "ピリリピリリ時間だよピリリピリリ",
+    "reason": "short_or_ringtone"
+  },
+  {
+    "id": "normal__task__daytime__03",
+    "style": "normal",
+    "wav": "normal_wav/normal__task__daytime__03.wav",
+    "text": "タルルルタルルル実感だよタルルルタルルル",
+    "reason": "ringtone_onomatopoeia"
+  },
+  {
+    "id": "whisper__goodMorning__evening__02",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__goodMorning__evening__02.wav",
+    "text": "おはよー、タルルルタルルル、雷雨覚ましたぞー。",
+    "reason": "ringtone_onomatopoeia"
+  },
+  {
+    "id": "whisper__task__evening__03",
+    "style": "whisper",
+    "wav": "whisper_wav/whisper__task__evening__03.wav",
+    "text": "じりりりりー、じりりりりー、タイマーお知らせしまーす。じりりりりー。",
+    "reason": "ringtone_onomatopoeia"
+  }
+]

@@ -20,10 +20,12 @@ android {
     sourceSets {
         main {
             assets.srcDirs = ["../../web"]
+            jniLibs.srcDirs = ["src/main/jniLibs"]
         }
     }
     packaging {
         resources.excludes += "**/*.md"
+        jniLibs.useLegacyPackaging = false
     }
 }
 

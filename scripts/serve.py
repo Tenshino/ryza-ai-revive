@@ -27,6 +27,28 @@ PORT = 8765
 UA = "RyzaChat/1.2.13"
 
 
+def _http_target_allowed(target: str) -> bool:
+    """Local GPT-SoVITS often runs on http://127.0.0.1 or a LAN address."""
+    try:
+        p = urlparse(target)
+        if p.scheme != "http":
+            return False
+        host = (p.hostname or "").lower()
+        if host in ("127.0.0.1", "localhost", "::1"):
+            return True
+        if host.startswith("192.168.") or host.startswith("10."):
+            return True
+        if host.startswith("172."):
+            try:
+                second = int(host.split(".")[1])
+                return 16 <= second <= 31
+            except ValueError:
+                return False
+        return False
+    except Exception:
+        return False
+
+
 class Server(ThreadingHTTPServer):
     allow_reuse_address = True
     daemon_threads = True
@@ -58,8 +80,8 @@ class Handler(SimpleHTTPRequestHandler):
         time-limited OSS audio URLs; the page pulls them through here so
         the blob is same-origin for the lip-sync analyser)."""
         target = (parse_qs(parsed.query).get("u") or [""])[0]
-        if not target.startswith("https://"):
-            self.send_error(400, "proxy target must be https")
+        if not target.startswith("https://") and not _http_target_allowed(target):
+            self.send_error(400, "proxy target must be https or private http")
             return
         try:
             headers = {"User-Agent": UA}
@@ -104,8 +126,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_error(404, "use POST /_proxy")
             return
         target = (parse_qs(parsed.query).get("u") or [""])[0]
-        if not target.startswith("https://"):
-            self.send_error(400, "proxy target must be https")
+        if not target.startswith("https://") and not _http_target_allowed(target):
+            self.send_error(400, "proxy target must be https or private http")
             return
         n = int(self.headers.get("Content-Length") or 0)
         body = self.rfile.read(n) if n else b""

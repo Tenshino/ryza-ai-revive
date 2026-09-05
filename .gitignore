@@ -30,9 +30,12 @@ __pycache__/
 venv/
 *.egg-info/
 
-# Desktop (Electron) build junk — placeholder desktop/build/icon.png IS tracked
+# Desktop/native build junk — placeholder desktop/build/icon.png IS tracked
 desktop/node_modules/
 desktop/dist/
+native/ryza-tts/target/
+native/ryza-tts/dist/
+.rust-tools/
 output/
 
 # Android build junk
@@ -40,6 +43,7 @@ android/.gradle/
 android/**/build/
 android/local.properties
 android/.idea/
+android/app/src/main/jniLibs/
 *.iml
 android/keystore/
 
@@ -52,3 +56,19 @@ Thumbs.db
 
 # scratch (agent working files, never shipped)
 temp/
+.asr-tools/
+training/ryza-jp/source/
+training/ryza-jp/wavs/
+training/ryza-jp/*_wav/
+training/ryza-jp/*.sbv2
+training/ryza-jp/transcripts.auto.jsonl
+training/ryza-jp/sbv2-export/
+
+# local large build/worktree leftovers (never part of the source tree)
+bud/
+data/
+pr-worktree/
+aapt-probe/
+aapt-final-probe/
+aapt-probe-relative
+莱莎AI_本地版/

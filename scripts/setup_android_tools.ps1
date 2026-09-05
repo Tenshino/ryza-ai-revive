@@ -1,6 +1,6 @@
 # One-time setup of a portable Android build toolchain (no admin).
 # Installs: Temurin JDK 17 -> <tools>\jdk17, Android cmdline-tools +
-# platform 34 + build-tools 34 -> <tools>\android-sdk.
+# platform 34 + build-tools 34 + NDK 27 -> <tools>\android-sdk.
 #
 # Tools dir: $env:RYZA_ANDROID_TOOLS, else gitignored
 # config/android-tools.local.txt, else <repo>/.android-tools
@@ -79,5 +79,7 @@ $env:JAVA_HOME = $jdk
 $env:Path = "$jdk\bin;$env:Path"
 $sm = Join-Path $cmdline "bin\sdkmanager.bat"
 "yes" * 200 | & $sm --sdk_root=$sdk --licenses 2>&1 | Select-Object -Last 1
-& $sm --sdk_root=$sdk "platform-tools" "platforms;android-34" "build-tools;34.0.0" 2>&1 | Select-Object -Last 4
-"toolchain ready: $(Test-Path (Join-Path $sdk 'build-tools\34.0.0\aapt2.exe'))"
+& $sm --sdk_root=$sdk "platform-tools" "platforms;android-34" "build-tools;34.0.0" "ndk;27.2.12479018" 2>&1 | Select-Object -Last 6
+$ready = (Test-Path (Join-Path $sdk 'build-tools\34.0.0\aapt2.exe')) -and
+         (Test-Path (Join-Path $sdk 'ndk\27.2.12479018\toolchains\llvm'))
+"toolchain ready: $ready"

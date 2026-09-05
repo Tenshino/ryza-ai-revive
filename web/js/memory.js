@@ -44,6 +44,47 @@
     return String(s || '').replace(/\s+/g, ' ').trim().slice(0, TEXT_MAX);
   }
 
+  /* Memory summaries and fallback labels follow the active reply language
+     (auto = UI language). zh is simplified, zh-tw uses traditional wording. */
+  function summaryLang() {
+    try {
+      if (global.Langs && typeof global.Langs.llm === 'function') {
+        var lg = global.Langs.llm();
+        if (lg && lg !== 'auto') return lg;
+      }
+    } catch (e) {}
+    try {
+      if (global.I18n && global.I18n.lang) return global.I18n.lang;
+    } catch (e) {}
+    return 'zh';
+  }
+
+  function roleLabel(lang, role) {
+    var user = role === 'user';
+    if (lang === 'zh') return user ? '你' : '莱莎';
+    if (lang === 'zh-tw') return user ? '你' : '萊莎';
+    if (lang === 'ja') return user ? '君' : 'ライザ';
+    return user ? 'You' : 'Ryza';
+  }
+
+  function summarySystem(lang) {
+    if (lang === 'zh') {
+      return '你是对话记忆的总结助手。把给出的内容整理成简短的一条条要点。' +
+             '保留专有名词、约定和情绪变化。不要输出标签或 JSON。200字以内。';
+    }
+    if (lang === 'zh-tw') {
+      return '你是對話記憶的總結助手。把給定的內容整理成簡短的重點條列。' +
+             '保留專有名詞、約定和情緒變化。不要輸出標籤或 JSON。200字以內。';
+    }
+    if (lang === 'ja') {
+      return '会話記憶の要約者。与えられた内容を短い箇条書き1本にまとめる。' +
+             '固有名詞・約束・感情の変化を残す。タグもJSONも出力しない。200字以内。';
+    }
+    return 'You are a conversation-memory summarizer. Turn the input into a ' +
+           'short bullet-point summary. Keep proper nouns, promises, and ' +
+           'emotional changes. Do not output tags or JSON. Within 200 characters.';
+  }
+
   function card(layer, text, n) {
     return { id: uid(), layer: layer, text: clip(text), at: Date.now(), n: n | 0 };
   }
@@ -77,16 +118,18 @@
   }
 
   function fallbackText(items) {
+    var lg = summaryLang();
     return items.map(function (it) {
       if (it.text) return it.text;
-      var who = it.role === 'user' ? '君' : 'ライザ';
+      var who = roleLabel(lg, it.role);
       return who + '：' + clip(it.content || it.text || '');
     }).join(' / ').slice(0, 800);
   }
 
   function formatPending(pending) {
+    var lg = summaryLang();
     return pending.map(function (t) {
-      var who = t.role === 'user' ? '君' : 'ライザ';
+      var who = roleLabel(lg, t.role);
       return who + '：' + clip(t.text);
     }).join('\n');
   }
@@ -102,8 +145,7 @@
     var body = kind === 'pending'
       ? formatPending(items)
       : items.map(function (it) { return '・' + it.text; }).join('\n');
-    var sys = '会話記憶の要約者。与えられた内容を短い箇条書き1本にまとめる。' +
-              '固有名詞・約束・感情の変化を残す。タグもJSONも出力しない。200字以内。';
+    var sys = summarySystem(summaryLang());
     if (global.Api && typeof Api.complete === 'function') {
       return Api.complete(sys, body, { maxTokens: 280, temperature: 0.2 })
         .then(function (t) { t = clip(t); return t || fallbackText(items); })
@@ -273,7 +315,11 @@
     promptBlock: function () {
       if (!cfg().enabled) return '';
       if (!state.summaries.length && !state.sessions.length) return '';
-      var L = ['## 長期記憶（下ほど新しい。事実だけ参照）'];
+      var lg = summaryLang();
+      var head = lg === 'ja' ? '## 長期記憶（下ほど新しい。事実だけ参照）'
+        : (lg === 'zh' || lg === 'zh-tw') ? '## 长期记忆（越往下越新，只参照事实）'
+        : '## Long-term memory (newer below; reference facts only)';
+      var L = [head];
       state.summaries.forEach(function (c) { L.push('- ' + c.text); });
       state.sessions.forEach(function (c) { L.push('- ' + c.text); });
       return L.join('\n');

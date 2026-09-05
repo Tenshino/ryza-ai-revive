@@ -25,6 +25,7 @@
       "main.js",
       "preload.js",
       "web-storage.js",
+      "native-tts.js",
       "package.json"
     ],
     "extraResources": [
@@ -32,6 +33,15 @@
         "from": "../web",
         "to": "web",
         "filter": ["**/*"]
+      },
+      {
+        "from": "../native/ryza-tts/dist/windows",
+        "to": "tts",
+        "filter": ["**/*"]
+      },
+      {
+        "from": "../THIRD_PARTY_NOTICES.md",
+        "to": "THIRD_PARTY_NOTICES.md"
       }
     ],
     "asar": true,

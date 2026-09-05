@@ -7,8 +7,12 @@
 #
 # Version comes from config/version.json (same file the desktop script reads).
 # Privacy gates: on the web tree before it is packed, and on the signed APK.
+param([switch]$SkipNativeBuild)
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
+# aapt2 on Windows cannot open non-ASCII absolute input paths. Keep repository
+# inputs relative to a stable root working directory.
+Set-Location $Root
 $localTools = Join-Path $Root "config/android-tools.local.txt"
 if ($env:RYZA_ANDROID_TOOLS) { $Tools = $env:RYZA_ANDROID_TOOLS }
 elseif (Test-Path $localTools) { $Tools = (Get-Content $localTools -Raw).Trim() }
@@ -37,15 +41,33 @@ node (Join-Path $PSScriptRoot "stamp_version.js") $Ver $VC
 if ($LASTEXITCODE) { throw "could not stamp the version into the shell manifests" }
 "Building RyzaChat-$Ver.apk (versionCode $VC)"
 
+if (-not $SkipNativeBuild) {
+  "== embedded Style-Bert-VITS2 runtime =="
+  & (Join-Path $PSScriptRoot "build_native_tts.ps1") -Platform android
+  if ($LASTEXITCODE) { throw "native TTS Android build failed" }
+} else {
+  "== reuse staged embedded TTS runtime =="
+  $RequiredNative = @("libryza_tts.so", "libc++_shared.so")
+  foreach ($name in $RequiredNative) {
+    if (-not (Test-Path (Join-Path $Root "android/app/src/main/jniLibs/arm64-v8a/$name"))) {
+      throw "missing staged native library: $name"
+    }
+  }
+}
+
 "== privacy gate on the tree that is about to be packed =="
-python (Join-Path $PSScriptRoot "privacy_check.py") $Web (Join-Path $And "app/src/main")
+python (Join-Path $PSScriptRoot "privacy_check.py") $Web `
+  (Join-Path $And "app/src/main") (Join-Path $Root "native/ryza-tts/src") `
+  (Join-Path $Root "THIRD_PARTY_NOTICES.md")
 if ($LASTEXITCODE) { throw "privacy check refused the build - nothing was packaged" }
 
 Remove-Item -Recurse -Force $Work -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force $Work, $Out | Out-Null
+# aapt2 also fails to stat android.jar through a non-ASCII absolute path.
+Copy-Item -Force $AJ "output/apk-work/android.jar"
 
 "== compile resources =="
-& (Join-Path $BT "aapt2.exe") compile --dir (Join-Path $And "app/src/main/res") -o (Join-Path $Work "res.zip")
+& (Join-Path $BT "aapt2.exe") compile --dir "android/app/src/main/res" -o "output/apk-work/res.zip"
 if ($LASTEXITCODE) { throw "aapt2 compile failed" }
 
 "== link base apk (manifest + resources) =="
@@ -53,10 +75,10 @@ if ($LASTEXITCODE) { throw "aapt2 compile failed" }
 # (assets\js\...) which AssetManager cannot open; assets are packed with
 # scripts/pack_apk_assets.py (forward slashes) after the dex is added.
 & (Join-Path $BT "aapt2.exe") link `
-  -o (Join-Path $Work "base.apk") `
-  --manifest (Join-Path $And "app/src/main/AndroidManifest.xml") `
-  -I $AJ `
-  (Join-Path $Work "res.zip") `
+  -o "output/apk-work/base.apk" `
+  --manifest "android/app/src/main/AndroidManifest.xml" `
+  -I "output/apk-work/android.jar" `
+  "output/apk-work/res.zip" `
   --auto-add-overlay `
   --min-sdk-version 24 --target-sdk-version 34 `
   --version-code $VC --version-name $Ver
@@ -86,24 +108,45 @@ if ($code) { throw "aapt add failed" }
 python (Join-Path $PSScriptRoot "pack_apk_assets.py") (Join-Path $Work "base.apk") $Web
 if ($LASTEXITCODE) { throw "asset packing failed" }
 
+"== pack native TTS libraries =="
+python (Join-Path $PSScriptRoot "pack_apk_native.py") (Join-Path $Work "base.apk") `
+  (Join-Path $And "app/src/main/jniLibs") (Join-Path $Root "THIRD_PARTY_NOTICES.md")
+if ($LASTEXITCODE) { throw "native library packing failed" }
+
 "== zipalign =="
-& (Join-Path $BT "zipalign.exe") -f 4 (Join-Path $Work "base.apk") (Join-Path $Work "aligned.apk")
+& (Join-Path $BT "zipalign.exe") -p -f 4 (Join-Path $Work "base.apk") (Join-Path $Work "aligned.apk")
 if ($LASTEXITCODE) { throw "zipalign failed" }
 
 "== sign =="
-# Self-signed for sideloading. The keystore lives in android/keystore (gitignored):
-# the SAME key must be reused for every release, otherwise Android refuses an
-# in-place upgrade and the player has to uninstall first (losing their saves).
+# Self-signed for sideloading. Signing identity and credentials are local-only;
+# the SAME key must be reused or Android refuses in-place upgrades.
 $KsDir = Join-Path $And "keystore"
+$SigningFile = Join-Path $KsDir "signing.local.json"
 New-Item -ItemType Directory -Force $KsDir | Out-Null
-$Ks = Join-Path $KsDir "ryza.keystore"
+if (-not (Test-Path $SigningFile)) {
+  $LegacyKey = Join-Path $KsDir "ryza.keystore"
+  if (Test-Path $LegacyKey) {
+    throw "existing keystore has no signing.local.json; add its alias and passwords without committing that file"
+  }
+  $Secret = [guid]::NewGuid().ToString("N") + [guid]::NewGuid().ToString("N")
+  @{ keystore = "ryza.keystore"; alias = "ryza"; storePass = $Secret; keyPass = $Secret } |
+    ConvertTo-Json | Set-Content $SigningFile -Encoding UTF8
+}
+$Signing = Get-Content $SigningFile -Raw | ConvertFrom-Json
+foreach ($field in @("keystore", "alias", "storePass", "keyPass")) {
+  if (-not $Signing.$field) { throw "missing '$field' in $SigningFile" }
+}
+$Ks = if ([System.IO.Path]::IsPathRooted($Signing.keystore)) { $Signing.keystore } else { Join-Path $KsDir $Signing.keystore }
 if (-not (Test-Path $Ks)) {
-  & (Join-Path $Jdk "bin/keytool.exe") -genkeypair -v -keystore $Ks -alias ryza `
+  & (Join-Path $Jdk "bin/keytool.exe") -genkeypair -v -keystore $Ks -alias $Signing.alias `
     -keyalg RSA -keysize 2048 -validity 10000 `
-    -dname "CN=Ryza Chat, OU=offline rebuild" -storepass ryza-chat -keypass ryza-chat | Out-Null
+    -dname "CN=Ryza Chat, OU=offline rebuild" -storepass $Signing.storePass -keypass $Signing.keyPass | Out-Null
+  if ($LASTEXITCODE) { throw "keytool failed" }
 }
 $Apk = Join-Path $Out "RyzaChat-$Ver.apk"
-& (Join-Path $BT "apksigner.bat") sign --ks $Ks --ks-pass pass:ryza-chat --key-pass pass:ryza-chat --out $Apk (Join-Path $Work "aligned.apk")
+& (Join-Path $BT "apksigner.bat") sign --ks $Ks --ks-key-alias $Signing.alias `
+  --ks-pass "pass:$($Signing.storePass)" --key-pass "pass:$($Signing.keyPass)" `
+  --out $Apk (Join-Path $Work "aligned.apk")
 if ($LASTEXITCODE) { throw "apksigner failed" }
 
 "== verify =="

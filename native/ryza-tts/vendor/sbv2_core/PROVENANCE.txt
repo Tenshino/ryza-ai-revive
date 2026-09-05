@@ -1,0 +1,3 @@
+Source: https://github.com/shadow01a/sbv2-api
+Revision: ffb0b591e55d82091c4db210772c069859be99e9
+Vendored path: crates/sbv2_core

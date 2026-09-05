@@ -387,8 +387,10 @@ TTS `language_type` 映射收口为唯一出口 `Langs.ttsLangType`
 - **TTS 双提供商**：`openai`（MiMo 克隆，实测 200 返回 RIFF wav）；`qwen`
   （百炼 DashScope `multimodal-generation`，`language_type` 跟随朗读槽，
   音频 URL 走新增的 `GET /_proxy` 回拉转 blob——口型 analyser 需同源）。
-  声音复刻 `voice-enrollment` 接受 **base64 data URI**（本地莱莎原声直接注册，
-  无需公网托管）→ voice_id 自动填入。
+  Qwen-TTS/Qwen3 声音复刻按当前接口发送
+  `model=qwen-voice-enrollment`、`action=create`、`audio.data=<base64 data URI>`，
+  读取 `output.voice`；Qwen-Audio/CosyVoice 继续使用旧版 `voice-enrollment` 请求和
+  `output.voice_id`。本地莱莎原声可直接注册，无需公网托管，音色 ID 自动填入。
   **实测边界**：Token Plan 个人版 key 在 dashscope 401（其条款亦禁止 API 调用），
   that compatible host has no TTS models（404）→ Qwen 槽必须用普通百炼 sk- key。
 - **TTS 端点/密钥按 provider 分离（2026-09-03）**：qwen 用自己的

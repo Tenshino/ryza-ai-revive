@@ -452,6 +452,13 @@
         if (!confirm(I18n.t('memory.clearLogAsk'))) return;
         App.memory = []; App.saveMemory(); App.renderMemory();
       };
+      var historyClearBtn = document.getElementById('btn-history-clear');
+      if (historyClearBtn) historyClearBtn.onclick = function () {
+        if (!window.ChatLog) return;
+        if (!confirm(I18n.t('history.confirmClear'))) return;
+        ChatLog.clear();
+        App.renderHistory();
+      };
       var addBtn = document.getElementById('btn-memory-add');
       if (addBtn) addBtn.onclick = function () { App._editMemory(null); };
       var flushBtn = document.getElementById('btn-memory-flush');
@@ -489,6 +496,7 @@
         Sound.setRoute('talk');
       }
       if (name === 'memory') App.renderMemory();
+      if (name === 'history') App.renderHistory();
       if (name === 'skin') { Welcome.mark('skin'); App.renderSkins(); }
       if (name === 'welcome') Welcome.render(document.getElementById('welcome-body'));
       if (name === 'alarm') Welcome.mark('alarm');
@@ -505,6 +513,8 @@
       if (d && d.classList.contains('active')) Daily.render(document.getElementById('daily-body'));
       if (!document.getElementById('sheet-status').classList.contains('hidden')) App.renderStatus();
       if (!document.getElementById('sheet-inv').classList.contains('hidden')) App.renderInv();
+      var hv = document.getElementById('view-history');
+      if (hv && hv.classList.contains('active')) App.renderHistory();
       App.refreshHud();
     },
 
@@ -960,7 +970,7 @@
         var row = document.createElement('div');
         row.className = 'inv-row';
         row.innerHTML = '<span class="inv-name"></span><span class="inv-n"></span>';
-        var name = (Game.ITEMS[it.id] && Game.ITEMS[it.id].name) || it.id;
+        var name = Game.itemName(it.id);
         row.querySelector('.inv-name').textContent = name;
         row.querySelector('.inv-n').textContent = '×' + (it.count || 1);
         row.onclick = function () {
@@ -1059,6 +1069,7 @@
          these used to keep the old language until you happened to reopen them) */
       if (document.getElementById('skin-grid')) App.renderSkins();
       if (document.getElementById('memory-list')) App.renderMemory();
+      if (document.getElementById('history-list')) App.renderHistory();
       if (window.Alarm && Alarm.render) {
         var al = document.getElementById('alarm-list');
         if (al) Alarm.render(al, App.playFile);
@@ -1198,8 +1209,11 @@
             role: 'assistant',
             content: Api.formatHistoryReply(reply.text)
           });
+          var logAsst = (window.ChatLog && ChatLog.addTurn)
+            ? ChatLog.addTurn(text, reply.text, { mode: st.mode })
+            : null;
           App.typeBubble(reply.text, function () {
-            App.speakThen(reply.text, reply.emotion);
+            App.speakThen(reply.text, reply.emotion, logAsst ? logAsst.id : null);
           });
 
           /* Talk-quests advance once per turn — if the LLM already reported
@@ -1218,7 +1232,7 @@
         });
     },
 
-    speakThen: function (text, emotion) {
+    speakThen: function (text, emotion, logId) {
       var st = Config.section('state');
       var app = Config.section('app');
       if (!app.voice || st.style === 'text' || Config.section('tts').mode === 'off') return;
@@ -1226,22 +1240,41 @@
          slot asks for a different one, translate first, then synthesize. */
       var replyL = (window.Langs && Langs.llm()) || 'ja';
       var ttsL = (window.Langs && Langs.tts()) || replyL;
-      var prep = (ttsL !== replyL && Api.translate)
-        ? Api.translate(text, ttsL) : Promise.resolve(text);
+      var prep = Api.prepareSpeechText
+        ? Api.prepareSpeechText(text, ttsL, replyL) : Promise.resolve(text);
       prep.then(function (speakText) {
         /* mode selects the per-mode TTS voice direction (ASMR whisper…) */
         return Api.speak(speakText, ttsL, st.mode);
-      }).then(function (url) {
+      }).then(function (voice) {
         /* Talking starts when the audio actually exists — before that the
            mouth sat closed (RMS target 0) for the whole TTS latency, and a
            failed synth left _talking stuck true forever. */
-        if (!url) return;
-        App.playUrl(url, Api.MODE_PLAY_FX[st.mode] || null);
+        if (!voice || !voice.url) return;
+        if (voice.blob && logId && window.ChatLog && ChatLog.saveVoice) {
+          App._persistAssistantVoice(logId, voice.blob);
+        }
+        App.playUrl(voice.url, Api.MODE_PLAY_FX[st.mode] || null);
       }).catch(function (e) {
         App.toast(e.message === 'NO_KEY' ? I18n.t('toast.needKey')
               : e.message === 'NO_MODEL' ? I18n.t('toast.needModel')
               : I18n.t('toast.ttsFail') + e.message, true);
       });
+    },
+
+    /* Save a synthesized assistant line into ChatLog + app-local voice dir.
+       Playback is not delayed: this runs in the background and only updates
+       the transcript when the file is ready. */
+    _persistAssistantVoice: function (logId, blob) {
+      if (!window.ChatLog || !ChatLog.saveVoice || !blob) return;
+      var ext = (String(blob.type || '').toLowerCase().indexOf('mpeg') >= 0 ||
+                 String(blob.type || '').toLowerCase().indexOf('mp3') >= 0) ? 'mp3' : 'wav';
+      var name = 'voice_' + String(logId).replace(/[^A-Za-z0-9_-]/g, '_') + '.' + ext;
+      ChatLog.saveVoice(name, blob).then(function (ref) {
+        if (!ref) return;
+        ChatLog.setVoice(logId, ref);
+        var hv = document.getElementById('view-history');
+        if (hv && hv.classList.contains('active')) App.renderHistory();
+      }).catch(function () {});
     },
 
     /* fx: optional { rate, gain } per-mode playback shaping (see
@@ -1261,7 +1294,7 @@
       a.onended = function () {
         a.playbackRate = 1;
         Avatar.setTalking(false);
-        URL.revokeObjectURL(url);
+        if (String(url).indexOf('blob:') === 0) URL.revokeObjectURL(url);
         App._bubbleHold(1600);   /* done talking → bubble steps aside */
       };
       Avatar.setTalking(true);
@@ -1677,7 +1710,8 @@
           el.innerHTML = '<div class="card-title"><span class="tag' +
             (m.who === 'ryza' ? '' : ' leaf') + ' t-who"></span></div>' +
             '<div class="card-sub t-text"></div>';
-          el.querySelector('.t-who').textContent = m.who === 'ryza' ? 'ライザ' : '你';
+          el.querySelector('.t-who').textContent = m.who === 'ryza'
+            ? I18n.tc('chara.ryza', '莱莎') : I18n.tc('chara.you', '你');
           el.querySelector('.t-text').textContent = m.text;
           root.appendChild(el);
         });
@@ -1685,6 +1719,100 @@
       if (!root.firstChild) {
         root.innerHTML = '<div class="empty">' + T('memory.empty') + '</div>';
       }
+    },
+
+    /* ------------------------------------------------------ chat history */
+    renderHistory: function () {
+      var root = document.getElementById('history-list');
+      if (!root) return;
+      root.innerHTML = '';
+      if (!window.ChatLog) {
+        root.innerHTML = '<div class="empty">' + I18n.t('history.empty') + '</div>';
+        return;
+      }
+      var entries = ChatLog.list();
+      if (!entries.length) {
+        root.innerHTML = '<div class="empty">' + I18n.t('history.empty') + '</div>';
+        return;
+      }
+      entries.slice().reverse().forEach(function (e) {
+        var who = e.role === 'user'
+          ? I18n.tc('chara.you', '你') : I18n.tc('chara.ryza', '莱莎');
+        var el = document.createElement('div');
+        el.className = 'card chat-history-row' + (e.role === 'user' ? ' from-user' : ' from-ryza');
+        var stamp = e.at ? new Date(e.at) : null;
+        var time = stamp && !isNaN(stamp.getTime())
+          ? stamp.getHours() + ':' + String(stamp.getMinutes()).padStart(2, '0') : '';
+        var text = String(e.text || '');
+        if (/^\[(emotion|attitude|undress|stage|tod)\s*:/.test(text)) {
+          text = text.replace(/^\[[^\]]+\]\s*\n?/, '');
+        }
+        el.innerHTML =
+          '<div class="card-title"><span class="tag' + (e.role === 'user' ? ' leaf' : '') +
+          ' t-who"></span><span class="t-time"></span></div>' +
+          '<div class="card-sub t-text"></div>' +
+          '<div class="card-acts">' +
+          '<button type="button" class="mini-btn t-replay hidden"></button>' +
+          '<button type="button" class="mini-btn t-regen hidden"></button>' +
+          '</div>';
+        el.querySelector('.t-who').textContent = who;
+        el.querySelector('.t-time').textContent = time;
+        el.querySelector('.t-text').textContent = text;
+        var replay = el.querySelector('.t-replay');
+        replay.textContent = I18n.t('history.replay');
+        if (e.role === 'assistant' && e.voice) replay.classList.remove('hidden');
+        replay.onclick = function () { App.replayVoice(e.voice); };
+        var regen = el.querySelector('.t-regen');
+        regen.textContent = I18n.t('history.regenerate');
+        if (e.role === 'assistant') regen.classList.remove('hidden');
+        regen.onclick = function () { App.regenerateVoice(e.id); };
+        root.appendChild(el);
+      });
+    },
+
+    replayVoice: function (ref) {
+      if (!ref || !window.ChatLog || !ChatLog.loadVoice) return;
+      ChatLog.loadVoice(ref).then(function (url) {
+        if (url) App.playUrl(url);
+      }).catch(function () {});
+    },
+
+    /* Re-synthesize one assistant history line. Uses the mode stored in the
+       log entry (falls back to the current talk mode) and follows the same
+       translate-then-speak path as live chat. */
+    regenerateVoice: function (logId) {
+      if (!window.ChatLog || !ChatLog.get) return;
+      var entry = ChatLog.get(logId);
+      if (!entry || entry.role !== 'assistant') return;
+      var st = Config.section('state');
+      var app = Config.section('app');
+      if (!app.voice || Config.section('tts').mode === 'off') {
+        App.toast(I18n.tc('history.voiceOff', '语音未开启，请先在设置中开启语音'), true);
+        return;
+      }
+      var mode = entry.mode || st.mode || 'chat';
+      var text = String(entry.text || '');
+      if (/^\[(emotion|attitude|undress|stage|tod)\s*:/.test(text)) {
+        text = text.replace(/^\[[^\]]+\]\s*\n?/, '');
+      }
+      if (!text) return;
+      App.toast('合成中…');
+      var replyL = (window.Langs && Langs.llm()) || 'ja';
+      var ttsL = (window.Langs && Langs.tts()) || replyL;
+      var prep = Api.prepareSpeechText
+        ? Api.prepareSpeechText(text, ttsL, replyL) : Promise.resolve(text);
+      prep.then(function (speakText) {
+        return Api.speak(speakText, ttsL, mode);
+      }).then(function (voice) {
+        if (!voice || !voice.url) return;
+        if (voice.blob) App._persistAssistantVoice(logId, voice.blob);
+        App.playUrl(voice.url, Api.MODE_PLAY_FX[mode] || null);
+        App.renderHistory();
+      }).catch(function (e) {
+        App.toast(e.message === 'NO_KEY' ? I18n.t('toast.needKey')
+              : e.message === 'NO_MODEL' ? I18n.t('toast.needModel')
+              : I18n.t('toast.ttsFail') + e.message, true);
+      });
     },
 
     _editMemory: function (id) {
@@ -1781,6 +1909,39 @@
       });
     },
 
+    _nativeTtsInstall: function (kind) {
+      if (!window.RyzaNativeTtsBridge || !RyzaNativeTtsBridge.available()) {
+        App.toast(I18n.t('settings.native.unavailable'), true); return;
+      }
+      App.toast(I18n.t('settings.native.importing'));
+      RyzaNativeTtsBridge.install(kind, (Config.section('tts') || {}).nativeVoiceId || 'ryza')
+        .then(function (result) {
+          if (!result || !result.canceled) App.toast(I18n.t('settings.native.imported'));
+          App.buildSettings();
+        }).catch(function (e) {
+          App.toast(I18n.t('settings.native.importFail') + ': ' + (e && e.message || e), true);
+        });
+    },
+
+    _nativeTtsStatus: function (node) {
+      var bridge = window.RyzaNativeTtsBridge;
+      if (!bridge || !bridge.available()) {
+        node.textContent = I18n.t('settings.native.unavailable'); return;
+      }
+      bridge.status((Config.section('tts') || {}).nativeVoiceId || 'ryza').then(function (s) {
+        if (!node.parentNode) return;
+        var parts = [
+          (s.runtimeAvailable ? '✓ ' : '✗ ') + I18n.t('settings.native.runtime'),
+          (s.debertaInstalled ? '✓ ' : '✗ ') + I18n.t('settings.native.deberta'),
+          (s.voiceInstalled ? '✓ ' : '✗ ') + I18n.t('settings.native.voice')
+        ];
+        node.textContent = parts.join('  ·  ');
+        node.classList.toggle('ready', !!(s.runtimeAvailable && s.debertaInstalled && s.voiceInstalled));
+      }).catch(function (e) {
+        node.textContent = I18n.t('settings.native.statusFail') + ': ' + (e && e.message || e);
+      });
+    },
+
     /* ------------------------------------------------------------- skins */
     renderSkins: function () {
       fetch('assets/_index/skins.json').then(function (r) { return r.json(); })
@@ -1845,6 +2006,9 @@
       lab.textContent = labelKey;
       var input = document.createElement(opts.multi ? 'textarea' : 'input');
       if (!opts.multi) input.type = opts.password ? 'password' : (opts.type || 'text');
+      ['min', 'max', 'step'].forEach(function (name) {
+        if (!opts.multi && opts[name] != null) input.setAttribute(name, opts[name]);
+      });
       input.value = value == null ? '' : value;
       var suggestions = opts.suggestions || [];
       if (opts.list || suggestions.length) {
@@ -2019,7 +2183,9 @@
       App._title(w, T('settings.tts'));
       App._select(w, T('settings.tts.provider'), Config.section('tts').provider || 'openai', [
         { v: 'openai', t: T('settings.tts.provider.openai') },
-        { v: 'qwen', t: T('settings.tts.provider.qwen') }
+        { v: 'qwen', t: T('settings.tts.provider.qwen') },
+        { v: 'local', t: T('settings.tts.provider.local') },
+        { v: 'lingchat', t: T('settings.tts.provider.lingchat') }
       ], function (v) { Config.set('tts.provider', v); App.buildSettings(); });
 
       if ((Config.section('tts').provider || 'openai') === 'qwen') {
@@ -2067,6 +2233,86 @@
           { v: 'clone', t: T('settings.ttsMode.clone') },
           { v: 'off', t: T('settings.ttsMode.off') }
         ], function (v) { Config.set('tts.mode', v); App.buildSettings(); });
+      } else if ((Config.section('tts').provider || 'openai') === 'lingchat') {
+        var nativeTts = Config.section('tts');
+        App._select(w, T('settings.ttsMode'), nativeTts.mode === 'off' ? 'off' : 'native', [
+          { v: 'native', t: T('settings.ttsMode.native') },
+          { v: 'off', t: T('settings.ttsMode.off') }
+        ], function (v) { Config.set('tts.mode', v === 'off' ? 'off' : 'clone'); App.buildSettings(); });
+        App._field(w, T('settings.native.voiceId'), nativeTts.nativeVoiceId || 'ryza',
+          function (v) { Config.set('tts.nativeVoiceId', v); },
+          { hint: T('settings.native.voiceId.hint') });
+        App._field(w, T('settings.native.styleId'), nativeTts.nativeStyleId,
+          function (v) { Config.set('tts.nativeStyleId', Math.max(0, parseInt(v, 10) || 0)); },
+          { type: 'number', min: 0, step: 1, hint: T('settings.native.styleId.hint') });
+        App._field(w, T('settings.native.speakerId'), nativeTts.nativeSpeakerId,
+          function (v) { Config.set('tts.nativeSpeakerId', Math.max(0, parseInt(v, 10) || 0)); },
+          { type: 'number', min: 0, step: 1 });
+        App._field(w, T('settings.native.sdpRatio'), nativeTts.nativeSdpRatio,
+          function (v) { Config.set('tts.nativeSdpRatio', Math.max(0, Math.min(1, parseFloat(v) || 0))); },
+          { type: 'number', min: 0, max: 1, step: .05, hint: T('settings.native.sdpRatio.hint') });
+        App._field(w, T('settings.native.lengthScale'), nativeTts.nativeLengthScale,
+          function (v) { var n = parseFloat(v); Config.set('tts.nativeLengthScale', isFinite(n) ? Math.max(.25, Math.min(4, n)) : 1); },
+          { type: 'number', min: .25, max: 4, step: .05, hint: T('settings.native.lengthScale.hint') });
+        App._field(w, T('settings.native.styleWeight'), nativeTts.nativeStyleWeight,
+          function (v) { var n = parseFloat(v); Config.set('tts.nativeStyleWeight', isFinite(n) ? Math.max(0, Math.min(4, n)) : 1); },
+          { type: 'number', min: 0, max: 4, step: .1 });
+        var nativeState = document.createElement('div');
+        nativeState.className = 'field native-tts-state';
+        var nativeStateLabel = document.createElement('label');
+        nativeStateLabel.textContent = T('settings.native.status');
+        var nativeStateValue = document.createElement('div');
+        nativeStateValue.className = 'hint';
+        nativeStateValue.textContent = T('settings.native.checking');
+        nativeState.appendChild(nativeStateLabel); nativeState.appendChild(nativeStateValue);
+        w.appendChild(nativeState);
+        App._nativeTtsStatus(nativeStateValue);
+        var nativeButtons = document.createElement('div');
+        nativeButtons.className = 'btn-row native-tts-actions';
+        [
+          ['deberta', 'settings.native.importDeberta'],
+          ['tokenizer', 'settings.native.importTokenizer'],
+          ['voice', 'settings.native.importVoice'],
+          ['voiceOnnx', 'settings.native.importVoiceOnnx'],
+          ['styleVectors', 'settings.native.importStyleVectors']
+        ].forEach(function (item) {
+          var button = document.createElement('button');
+          button.type = 'button'; button.className = 'btn'; button.textContent = T(item[1]);
+          button.onclick = function () { App._nativeTtsInstall(item[0]); };
+          nativeButtons.appendChild(button);
+        });
+        if (window.ryzaNativeTts) {
+          var folder = document.createElement('button');
+          folder.type = 'button'; folder.className = 'btn'; folder.textContent = T('settings.native.openFolder');
+          folder.onclick = function () {
+            RyzaNativeTtsBridge.openModelFolder().catch(function (e) { App.toast(e.message, true); });
+          };
+          nativeButtons.appendChild(folder);
+        }
+        w.appendChild(nativeButtons);
+        var nativeHint = document.createElement('div');
+        nativeHint.className = 'settings-note'; nativeHint.textContent = T('settings.native.jpOnly');
+        w.appendChild(nativeHint);
+      } else if ((Config.section('tts').provider || 'openai') === 'local') {
+        var ttsLocal = Config.section('tts');
+        App._field(w, T('settings.localBaseUrl'), ttsLocal.localBaseUrl,
+          function (v) { Config.set('tts.localBaseUrl', v); },
+          { hint: T('settings.localBaseUrl.hint') });
+        App._field(w, T('settings.localRefAudioPath'), ttsLocal.localRefAudioPath,
+          function (v) { Config.set('tts.localRefAudioPath', v); },
+          { hint: T('settings.localRefAudioPath.hint') });
+        App._field(w, T('settings.localPromptText'), ttsLocal.localPromptText,
+          function (v) { Config.set('tts.localPromptText', v); },
+          { hint: T('settings.localPromptText.hint'), multi: true });
+        App._field(w, T('settings.localPromptLang'), ttsLocal.localPromptLang,
+          function (v) { Config.set('tts.localPromptLang', v); },
+          { hint: T('settings.localPromptLang.hint') });
+        App._field(w, T('settings.localGptWeights'), ttsLocal.localGptWeights,
+          function (v) { Config.set('tts.localGptWeights', v); },
+          { hint: T('settings.localGptWeights.hint') });
+        App._field(w, T('settings.localSoVitsWeights'), ttsLocal.localSoVitsWeights,
+          function (v) { Config.set('tts.localSoVitsWeights', v); },
+          { hint: T('settings.localSoVitsWeights.hint') });
       } else {
       App._field(w, T('settings.baseUrl'), Config.section('tts').baseUrl,
         function (v) { Config.set('tts.baseUrl', v); });
@@ -2114,6 +2360,21 @@
       var lh = document.createElement('div');
       lh.className = 'hint'; lh.textContent = T('settings.lang.ttsHint');
       w.appendChild(lh);
+
+      var transCfg = Config.section('translation') || {};
+      App._switch(w, T('settings.translate.enabled'), !!transCfg.enabled,
+        function (v) { Config.set('translation.enabled', v); App.buildSettings(); });
+      if (transCfg.enabled) {
+        App._field(w, T('settings.translate.baseUrl'), transCfg.baseUrl || 'http://127.0.0.1:11434/v1',
+          function (v) { Config.set('translation.baseUrl', String(v || '').trim()); },
+          { hint: T('settings.translate.baseUrl.hint') });
+        App._field(w, T('settings.translate.model'), transCfg.model || 'qwen3:4b',
+          function (v) { Config.set('translation.model', String(v || '').trim()); },
+          { hint: T('settings.translate.model.hint') });
+        App._field(w, T('settings.translate.apiKey'), transCfg.apiKey || '',
+          function (v) { Config.set('translation.apiKey', String(v || '').trim()); },
+          { password: true });
+      }
 
       App._title(w, T('settings.app'));
       App._range(w, T('settings.volume'), Config.section('app').volume,
@@ -2282,19 +2543,34 @@
 
     _testTts: function () {
       var tts = Config.section('tts');
+      var isLocal = (tts.provider || 'openai') === 'local';
+      var isNative = (tts.provider || 'openai') === 'lingchat';
       var key = (tts.provider === 'qwen') ? tts.qwenApiKey : tts.apiKey;
-      if (!key) { App.toast(I18n.t('toast.needKey'), true); return; }
+      if (!isLocal && !isNative && !key) { App.toast(I18n.t('toast.needKey'), true); return; }
+      if (isLocal && !tts.localBaseUrl) {
+        App.toast('请填写本地 GPT-SoVITS 地址', true); return;
+      }
+      if (isNative && (!window.RyzaNativeTtsBridge || !RyzaNativeTtsBridge.available())) {
+        App.toast(I18n.t('settings.native.unavailable'), true); return;
+      }
       var model = (tts.provider === 'qwen') ? (tts.qwenModel || 'qwen3-tts-flash')
                 : (tts.mode === 'clone' ? tts.modelClone : tts.modelPreset);
-      if (Api.isPlaceholderModel(model)) {
+      if (!isLocal && !isNative && Api.isPlaceholderModel(model)) {
         App.toast(I18n.t('toast.needModel'), true); return;
       }
       App.toast('合成中…');
       /* no explicit mode → Api.speak uses the live talk mode, so this
          doubles as a preview of the per-mode voice direction. */
-      Api.speak('やあ、聞こえてる？').then(function (url) {
-        if (!url) { App.toast('语音已关闭'); return; }
-        App.playUrl(url);
+      var testText = 'やあ、聞こえてる？';
+      if (isLocal) {
+        var spkLang = (window.Langs && Langs.tts()) || 'zh';
+        testText = spkLang === 'ja' ? 'こんにちは、聞こえる？' : '你好，能听到吗？';
+      } else if (isNative) {
+        testText = 'こんにちは、聞こえる？';
+      }
+      Api.speak(testText).then(function (voice) {
+        if (!voice || !voice.url) { App.toast('语音已关闭'); return; }
+        App.playUrl(voice.url);
         App.toast('OK');
       }).catch(function (e) { App.toast('失败：' + e.message, true); });
     },

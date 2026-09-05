@@ -10,11 +10,12 @@
    index.html before page scripts). Chromium localStorage is only a cache. */
 'use strict';
 
-const { app, BrowserWindow, ipcMain, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, dialog, ipcMain, shell, protocol, net } = require('electron');
 const fs = require('fs');
 const path = require('path');
 const { pathToFileURL } = require('url');
 const webStorage = require('./web-storage');
+const { NativeTtsHost } = require('./native-tts');
 
 protocol.registerSchemesAsPrivileged([{
   scheme: 'ryza',
@@ -68,9 +69,27 @@ function jsonError(status, message) {
   });
 }
 
+function isPrivateHttpUrl(value) {
+  try {
+    const u = new URL(String(value || ''));
+    if (u.protocol !== 'http:') return false;
+    const h = (u.hostname || '').toLowerCase();
+    if (h === '127.0.0.1' || h === 'localhost' || h === '::1') return true;
+    if (h.startsWith('192.168.') || h.startsWith('10.')) return true;
+    if (h.startsWith('172.')) {
+      const second = parseInt(h.split('.')[1], 10);
+      return second >= 16 && second <= 31;
+    }
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
 async function proxyRequest(request, targetUrl) {
-  if (!String(targetUrl || '').startsWith('https://')) {
-    return jsonError(400, 'proxy target must be https');
+  if (!String(targetUrl || '').startsWith('https://') &&
+      !isPrivateHttpUrl(targetUrl)) {
+    return jsonError(400, 'proxy target must be https or private http');
   }
   const headers = { 'User-Agent': 'RyzaChat/1.2.13' };
   const ct = request.headers.get('content-type');
@@ -101,6 +120,23 @@ async function handleRyza(root, request) {
   if (u.pathname === '/_proxy' || u.pathname.startsWith('/_proxy')) {
     return proxyRequest(request, u.searchParams.get('u') || '');
   }
+  if (u.pathname.startsWith('/voices/')) {
+    const rel = decodeURIComponent(u.pathname.slice('/voices/'.length));
+    const safe = path.basename(rel);
+    if (!safe || safe !== rel || safe.includes('/') || safe.includes('\\') || safe.includes('..')) {
+      return new Response('forbidden', { status: 403 });
+    }
+    const voiceFile = path.join(app.getPath('userData'), 'voices', safe);
+    if (!fs.existsSync(voiceFile) || !fs.statSync(voiceFile).isFile()) {
+      return new Response('not found', { status: 404 });
+    }
+    const ext = path.extname(voiceFile).toLowerCase();
+    const type = MIME[ext] || 'application/octet-stream';
+    const resp = await net.fetch(pathToFileURL(voiceFile).href);
+    const headers = new Headers(resp.headers);
+    headers.set('content-type', type);
+    return new Response(resp.body, { status: resp.status, headers: headers });
+  }
   let pathname = u.pathname;
   if (pathname === '/' || pathname === '') pathname = '/index.html';
   const file = resolveUnder(root, pathname);
@@ -127,6 +163,14 @@ async function handleRyza(root, request) {
 let win = null;
 let topmost = false;
 let storeFile = '';
+const nativeTts = new NativeTtsHost(app, dialog);
+
+function requireTrustedRenderer(event) {
+  const frameUrl = event && event.senderFrame && event.senderFrame.url || '';
+  if (!win || event.sender !== win.webContents || !/^ryza:\/\/app(?:\/|$)/i.test(frameUrl)) {
+    throw new Error('untrusted renderer');
+  }
+}
 
 function createWindow() {
   win = new BrowserWindow({
@@ -188,6 +232,43 @@ ipcMain.on('storage:save-sync', (e, obj) => {
   webStorage.save(storeFile, obj);
   e.returnValue = true;
 });
+ipcMain.handle('shell:save-voice', (_e, name, base64) => {
+  try {
+    const safe = path.basename(String(name || ''));
+    if (!safe || safe.includes('/') || safe.includes('\\') || safe.includes('..')) return false;
+    const dir = path.join(app.getPath('userData'), 'voices');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, safe), Buffer.from(String(base64 || ''), 'base64'));
+    return true;
+  } catch (e) {
+    return false;
+  }
+});
+
+ipcMain.handle('native-tts:status', (event, voiceId) => {
+  requireTrustedRenderer(event);
+  return nativeTts.status(voiceId);
+});
+ipcMain.handle('native-tts:install', (event, kind, voiceId) => {
+  requireTrustedRenderer(event);
+  return nativeTts.install(win, String(kind || ''), voiceId);
+});
+ipcMain.handle('native-tts:open-model-folder', async (event) => {
+  requireTrustedRenderer(event);
+  const dir = nativeTts.openModelFolder();
+  const error = await shell.openPath(dir);
+  if (error) throw new Error(error);
+  return dir;
+});
+ipcMain.handle('native-tts:synthesize', (event, request) => {
+  requireTrustedRenderer(event);
+  return nativeTts.synthesize(request);
+});
+ipcMain.handle('native-tts:reset', (event) => {
+  requireTrustedRenderer(event);
+  nativeTts.reset();
+  return true;
+});
 
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
@@ -202,11 +283,10 @@ if (!gotLock) {
       createWindow();
       app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
     } catch (e) {
-      const { dialog } = require('electron');
       dialog.showErrorBox('Ryza Chat', '启动失败：' + (e && e.message || e));
       app.quit();
     }
   });
   app.on('window-all-closed', () => app.quit());
-  app.on('before-quit', () => { webStorage.flush(); });
+  app.on('before-quit', () => { nativeTts.reset(); webStorage.flush(); });
 }

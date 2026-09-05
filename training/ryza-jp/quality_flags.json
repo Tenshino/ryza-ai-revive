@@ -1,0 +1,58 @@
+[
+  {
+    "id": "normal__task__morning__04",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "はい、時間だよ。朝からお疲れ様。いい感じだね。"
+  },
+  {
+    "id": "normal__wellDone__daytime__04",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "お疲れ様。午前中よく頑張ったね。私が褒めてあげる。えらいえらい。"
+  },
+  {
+    "id": "normal__wellDone__evening__07",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "お疲れ様。頑張ったんだからさ、今日は大好きなもの食べよ。私が一緒に決めてあげる。"
+  },
+  {
+    "id": "normal__wellDone__night__04",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "お疲れ様。夜遅くまで頑張ったね。ほら、私の隣でちょっと休んでいきなよ。"
+  },
+  {
+    "id": "whisper__task__morning__04",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "はい、時間だよ。朝からお疲れ様。いい感じだね。"
+  },
+  {
+    "id": "whisper__wellDone__daytime__04",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "お疲れ様。午前中よく頑張ったね。私が褒めてあげる。えらいえらい。"
+  },
+  {
+    "id": "whisper__wellDone__evening__07",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "お疲れ様。頑張ったんだからさ、今日は大好きなもの食べよ。私が一緒に決めてあげる。"
+  },
+  {
+    "id": "whisper__wellDone__night__04",
+    "flags": [
+      "duplicate_x2"
+    ],
+    "text": "お疲れ様。夜遅くまで頑張ったね。ほら、私の隣でちょっと休んでいきなよ。"
+  }
+]

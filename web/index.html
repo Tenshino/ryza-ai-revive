@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>ライザと話す — Ryza Chat</title>
-<link rel="stylesheet" href="css/app.css?v=model-pick-1">
+<link rel="stylesheet" href="css/app.css?v=lingchat-native-1">
 </head>
 <body>
 <div id="phone">
@@ -60,6 +60,7 @@
     <li data-action="lang"><img src="assets/icons/language.svg" alt=""> <span data-i18n="nav.lang">语言</span></li>
     <li data-view="chara"><img src="assets/icons/profile.svg" alt=""> <span data-i18n="nav.profile">玩家档案</span></li>
     <li data-view="memory"><img src="assets/icons/save_data.svg" alt=""> <span data-i18n="nav.memory">回忆</span></li>
+    <li data-view="history"><img src="assets/icons/arrow_up.svg" alt=""> <span data-i18n="nav.history">聊天记录</span></li>
     <li data-action="newTalk"><img src="assets/icons/asterisk.svg" alt=""> <span data-i18n="nav.newTalk">新的对话</span></li>
     <li data-action="toggleChara"><img src="assets/icons/chara_hide.svg" alt="" id="ico-toggle-chara"> <span data-i18n="nav.toggleChara">显示/隐藏立绘</span></li>
     <li data-action="fullscreen"><img src="assets/icons/allscreen.svg" alt=""> <span data-i18n="nav.fullscreen">全屏</span></li>
@@ -169,6 +170,15 @@
     </div>
   </div>
   <div id="memory-list"></div>
+</section>
+
+<section id="view-history" class="view">
+  <div class="view-head"><h2 data-i18n="nav.history">聊天记录</h2>
+    <div class="head-actions">
+      <button class="mini-btn" id="btn-history-clear" data-i18n="history.clear">清空记录</button>
+    </div>
+  </div>
+  <div id="history-list" class="form-wrap"></div>
 </section>
 
 <section id="view-settings" class="view">
@@ -307,11 +317,12 @@
 
 <script src="vendor/spine-webgl.js"></script>
 <script src="js/util.js?v=hash-2"></script>
-<script src="js/config.js?v=cheat-1"></script>
-<script src="js/i18n.js?v=cheat-2"></script>
-<script src="js/api.js?v=undress-1"></script>
-<script src="js/memory.js?v=mem-1"></script>
-<script src="js/game.js?v=cheat-1"></script>
+<script src="js/native-tts.js?v=lingchat-native-1"></script>
+<script src="js/config.js?v=lingchat-native-3"></script>
+<script src="js/i18n.js?v=lingchat-native-2"></script>
+<script src="js/api.js?v=lingchat-native-4"></script>
+<script src="js/memory.js?v=mem-zh-1"></script>
+<script src="js/game.js?v=inv-zh-1"></script>
 <script src="js/quests.js?v=cheat-1"></script>
 <script src="js/daily.js?v=cheat-1"></script>
 <script src="js/avatar.js?v=emotion-keep-1"></script>
@@ -323,6 +334,7 @@
 <script src="js/fx.js?v=1"></script>
 <script src="js/shell.js?v=1"></script>
 <script src="js/kbd.js?v=1"></script>
-<script src="js/app.js?v=undress-1"></script>
+<script src="js/chatlog.js?v=chat-voice-1"></script>
+<script src="js/app.js?v=lingchat-native-2"></script>
 </body>
 </html>

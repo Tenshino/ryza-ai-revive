@@ -3,6 +3,8 @@ package com.ryza.chat;
 import android.content.res.AssetManager;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -15,6 +17,7 @@ import java.net.URLDecoder;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -26,10 +29,33 @@ import java.util.concurrent.Executors;
  */
 public final class AssetServer extends Thread {
     private final AssetManager assets;
-    private final int port;
+    private final File userDir;
+    private final int requestedPort;
+    private final String routePrefix = "/" + UUID.randomUUID().toString().replace("-", "");
     private volatile boolean running = true;
     private ServerSocket server;
     private final ExecutorService pool = Executors.newCachedThreadPool();
+
+    private static boolean isPrivateHttp(String target) {
+        if (target == null || target.length() < 7 ||
+                !target.regionMatches(true, 0, "http://", 0, 7)) return false;
+        String rest = target.substring(7);
+        int q = rest.indexOf('/');
+        if (q >= 0) rest = rest.substring(0, q);
+        int c = rest.lastIndexOf(':');
+        if (c >= 0) rest = rest.substring(0, c);
+        String h = rest.toLowerCase(Locale.US);
+        if (h.equals("127.0.0.1") || h.equals("localhost")) return true;
+        if (h.startsWith("192.168.") || h.startsWith("10.")) return true;
+        if (h.startsWith("172.")) {
+            try {
+                String[] parts = h.split("\\.");
+                int second = Integer.parseInt(parts[1]);
+                return second >= 16 && second <= 31;
+            } catch (Exception e) { return false; }
+        }
+        return false;
+    }
 
     private static final Map<String, String> MIME = new HashMap<>();
     static {
@@ -54,15 +80,31 @@ public final class AssetServer extends Thread {
     }
 
     public AssetServer(AssetManager assets, int port) {
+        this(assets, null, port);
+    }
+
+    public AssetServer(AssetManager assets, File userDir, int port) {
         this.assets = assets;
-        this.port = port;
+        this.userDir = userDir;
+        this.requestedPort = port;
         setName("asset-http");
         setDaemon(true);
     }
 
+    public synchronized String startServer() throws IOException {
+        if (server != null) throw new IllegalStateException("asset server already started");
+        server = new ServerSocket(requestedPort, 64, InetAddress.getByName("127.0.0.1"));
+        start();
+        return "http://127.0.0.1:" + server.getLocalPort() + routePrefix + "/";
+    }
+
+    public String getRoutePrefix() {
+        return routePrefix + "/";
+    }
+
     @Override public void run() {
         try {
-            server = new ServerSocket(port, 64, InetAddress.getByName("127.0.0.1"));
+            if (server == null) return;
             while (running) {
                 final Socket sock = server.accept();
                 pool.execute(() -> handle(sock));
@@ -88,13 +130,20 @@ public final class AssetServer extends Thread {
             if (parts.length < 2) { write(out, 400, "text/plain", "bad request"); return; }
             String method = parts[0].toUpperCase(Locale.US);
             Headers hs = readHeaders(in);
+            String rawUrl = parts[1];
+            if (!rawUrl.equals(routePrefix) && !rawUrl.startsWith(routePrefix + "/")
+                    && !rawUrl.startsWith(routePrefix + "?")) {
+                write(out, 404, "text/plain", "not found");
+                return;
+            }
+            rawUrl = rawUrl.substring(routePrefix.length());
+            if (rawUrl.isEmpty()) rawUrl = "/";
             if ("OPTIONS".equals(method)) {
                 writeBytes(out, 204, "text/plain", new byte[0],
                     "Access-Control-Allow-Headers: Authorization, Content-Type, api-key\r\n" +
                     "Access-Control-Allow-Methods: GET, HEAD, POST, OPTIONS\r\n");
                 return;
             }
-            String rawUrl = parts[1];
             if ("POST".equals(method) && rawUrl.startsWith("/_proxy")) {
                 proxy(rawUrl, hs, in, out);
                 return;
@@ -110,6 +159,25 @@ public final class AssetServer extends Thread {
             if (path.startsWith("/")) path = path.substring(1);
             if (path.isEmpty()) path = "index.html";
             if (path.contains("..")) { write(out, 403, "text/plain", "forbidden"); return; }
+            /* User TTS files live in the app's private files dir; the tiny
+               local server exposes only /voices/<file> so <audio> can replay
+               them over http://127.0.0.1 (file:// is disabled in WebView). */
+            if (path.startsWith("voices/")) {
+                if (userDir == null) { write(out, 404, "text/plain", "no voice store"); return; }
+                String name = path.substring("voices/".length());
+                if (name.isEmpty() || name.indexOf('/') >= 0 || name.indexOf('\\') >= 0) {
+                    write(out, 403, "text/plain", "forbidden"); return;
+                }
+                File vf = new File(new File(userDir, "voices"), name);
+                if (!vf.isFile()) { write(out, 404, "text/plain", "not found: " + path); return; }
+                String ext = "";
+                int dot = name.lastIndexOf('.');
+                if (dot >= 0) ext = name.substring(dot + 1).toLowerCase(Locale.US);
+                String mime = MIME.containsKey(ext) ? MIME.get(ext) : "application/octet-stream";
+                byte[] data = readAll(new FileInputStream(vf));
+                writeBytes(out, 200, mime, data, "");
+                return;
+            }
             /* providers.json never ships; answer 404 fast instead of a
                full asset scan per boot (hydrate() treats it as optional). */
             if (path.startsWith("config/")) { write(out, 404, "text/plain", "not bundled"); return; }
@@ -172,8 +240,8 @@ public final class AssetServer extends Thread {
                 off += n;
             }
         }
-        if (!target.startsWith("https://")) {
-            write(out, 400, "application/json", "{\"error\":{\"message\":\"proxy target must be https\"}}");
+        if (!target.startsWith("https://") && !isPrivateHttp(target)) {
+            write(out, 400, "application/json", "{\"error\":{\"message\":\"proxy target must be https or private http\"}}");
             return;
         }
         try {
@@ -216,8 +284,8 @@ public final class AssetServer extends Thread {
                 }
             }
         }
-        if (!target.startsWith("https://")) {
-            write(out, 400, "application/json", "{\"error\":{\"message\":\"proxy target must be https\"}}");
+        if (!target.startsWith("https://") && !isPrivateHttp(target)) {
+            write(out, 400, "application/json", "{\"error\":{\"message\":\"proxy target must be https or private http\"}}");
             return;
         }
         try {

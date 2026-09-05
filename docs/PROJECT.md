@@ -165,10 +165,12 @@ localStorage `ryza.daily.v1`。`dailyLogin.weekday.*` 周一～周日七格日�
     取自朗读语言；响应 `output.audio.url` 经 `GET /_proxy` 拉回转 blob
     （口型 analyser 需要同源）。**需要普通百炼 sk- key**——Token Plan 个人版 key 在
     dashscope 返回 401（且其条款禁止 API 调用），that host does not serve TTS 模型（404）。
-  - `Api.qwenCloneVoice()`：声音复刻——把 `assets/voice/ryza_wav/` 原声转 base64 data URI
-    发 `voice-enrollment`（接口接受 data URI，无需公网托管），返回 voice_id 自动填入设置。
-    参考 wav 随 exe/APK 打包且 git 跟踪，三端（serve.py/Electron/AssetServer）
-    同源相对路径解析已核（AUDIT §6.9）。
+  - `Api.qwenCloneVoice()`：声音复刻——把 `assets/voice/ryza_wav/` 原声转 base64 data URI。
+    Qwen-TTS/Qwen3 按当前接口发送 `qwen-voice-enrollment`、`action=create` 和
+    `audio.data`，读取 `output.voice`；Qwen-Audio/CosyVoice 保留旧版
+    `voice-enrollment` 协议兼容。返回的音色 ID 自动填入设置，且复刻目标模型必须与
+    合成模型完全一致。参考 wav 随 exe/APK 打包且 git 跟踪，三端
+    （serve.py/Electron/AssetServer）同源相对路径解析已核（AUDIT §6.9）。
 - **模式化 TTS 提示词**（AUDIT §8.1）：`Api.speak(text, lang, mode)` 第三参=
   聊天模式（缺省读 `state.mode`）。`MODE_TTS` 每模式一段日文「怎么说」指导，
   叠加在 `tts.styleHint`（「谁在说话」基底）上；`tts.modeHints[mode]` 可整段

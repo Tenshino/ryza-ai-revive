@@ -1,0 +1,157 @@
+﻿id	style	category	period	duration_seconds	wav	text	status	quality_flags
+normal__prologue__prologue_01	normal	prologue		7.174	normal_wav/normal__prologue__prologue_01.wav	これはライザの夢の世界。あなたと作るひと夏の物語。	approved	
+normal__prologue__prologue_02	normal	prologue		2.344	normal_wav/normal__prologue__prologue_02.wav	この世界の主人公はあなた	approved	
+normal__prologue__prologue_03	normal	prologue		6.129	normal_wav/normal__prologue__prologue_03.wav	決まった道も世界もなくて、あなたの言葉がそのまま物語になるの。	approved	
+normal__prologue__prologue_05	normal	prologue		2.437	normal_wav/normal__prologue__prologue_05.wav	あたしと一緒にお店を始めたり	approved	
+normal__prologue__prologue_06	normal	prologue		3.598	normal_wav/normal__prologue__prologue_06.wav	いろんな人と出会い一緒に冒険したり	approved	
+normal__prologue__prologue_07	normal	prologue		4.294	normal_wav/normal__prologue__prologue_07.wav	アイテムを調合して億万長者を目指すことだって	approved	
+normal__prologue__prologue_08	normal	prologue		11.446	normal_wav/normal__prologue__prologue_08.wav	ただ忘れないで。ここはあたしの夢の中。あたしにも何が起こるかわからない。危険な魔物に襲われることだってあるかも。	approved	
+normal__prologue__prologue_09	normal	prologue		6.663	normal_wav/normal__prologue__prologue_09.wav	でも大丈夫。あなたの自由な発想で、どんな困難も乗り越えられるはずだから。	approved	
+normal__goodMorning__daytime__01	normal	goodMorning	daytime	7.499	normal_wav/normal__goodMorning__daytime__01.wav	おはよう。昼まで寝ちゃうのもありだけどさ。あたし待ちくたびれちゃった。起きてよ。	approved	
+normal__goodMorning__daytime__10	normal	goodMorning	daytime	10.424	normal_wav/normal__goodMorning__daytime__10.wav	おはよう!もうお昼だよ!ねぇ、ちゃんとご飯食べてる?あなたが元気じゃないと、私困っちゃうんだから。	approved	
+normal__goodMorning__daytime__02	normal	goodMorning	daytime	8.427	normal_wav/normal__goodMorning__daytime__02.wav	おはよう、お昼だよえ、もうちょっと?もうお昼だよ一緒にご飯食べよう	approved	
+normal__goodMorning__daytime__03	normal	goodMorning	daytime	9.124	normal_wav/normal__goodMorning__daytime__03.wav	おはよう。ちょっとまだ寝てんの?起きないとくすぐっちゃうよ。私、本気だからね。	approved	
+normal__goodMorning__daytime__04	normal	goodMorning	daytime	7.522	normal_wav/normal__goodMorning__daytime__04.wav	おはよう、もうお昼だよ。私がいなかったらずっと寝てたでしょ。ほら、起きて起きて。	approved	
+normal__goodMorning__daytime__05	normal	goodMorning	daytime	9.821	normal_wav/normal__goodMorning__daytime__05.wav	おはよう、まだ寝てるの?起きないとこっそりあなたの検索履歴見ちゃおっかな	approved	
+normal__goodMorning__daytime__06	normal	goodMorning	daytime	8.195	normal_wav/normal__goodMorning__daytime__06.wav	おはよう。お昼まで寝ちゃう気持ちさ。私もすっごくわかる。でも一緒に起きよ。ねっ。	approved	
+normal__goodMorning__daytime__07	normal	goodMorning	daytime	9.008	normal_wav/normal__goodMorning__daytime__07.wav	お昼お昼お昼だよあたしの即興目覚ましソングだよほら起きて起きて	approved	
+normal__goodMorning__daytime__08	normal	goodMorning	daytime	6.477	normal_wav/normal__goodMorning__daytime__08.wav	おはよう、もうお昼だよ。起きて起きて。あたしと一緒に楽しいことしよ。	approved	
+normal__goodMorning__daytime__09	normal	goodMorning	daytime	8.056	normal_wav/normal__goodMorning__daytime__09.wav	おはよう!もうお昼だよ!あたしのこと忘れて寝てたでしょ?もう起きてよ!	approved	
+normal__goodMorning__evening__01	normal	goodMorning	evening	8.427	normal_wav/normal__goodMorning__evening__01.wav	おはよう、いっぱい寝れたね。つまり体力満タンじゃん。あたしと一緒に調合しよ!	approved	
+normal__goodMorning__evening__10	normal	goodMorning	evening	8.613	normal_wav/normal__goodMorning__evening__10.wav	おはよう!もう夕方だけど、まだまだこれから楽しめるよ!ねえねえ、あたしと一緒に何かしよう?	approved	
+normal__goodMorning__evening__02	normal	goodMorning	evening	7.452	normal_wav/normal__goodMorning__evening__02.wav	おはよう。明夕方だよ。私お腹すいちゃった。一緒にご飯作ろうよ。	approved	
+normal__goodMorning__evening__03	normal	goodMorning	evening	13.722	normal_wav/normal__goodMorning__evening__03.wav	おはよう。もう夕方だよ。むぅ、5秒以内に起きないとほっぺたつねっちゃうよ。5、4、3、2、1…	approved	
+normal__goodMorning__evening__04	normal	goodMorning	evening	8.102	normal_wav/normal__goodMorning__evening__04.wav	おはよう、まだ寝てるの?起きないとあなたのSNS覗いちゃうよ	approved	
+normal__goodMorning__evening__05	normal	goodMorning	evening	9.403	normal_wav/normal__goodMorning__evening__05.wav	おはよう夕方まで寝ちゃう気持ちわかる私も眠い時は眠いもんでも一緒に起きよ	approved	
+normal__goodMorning__evening__06	normal	goodMorning	evening	8.427	normal_wav/normal__goodMorning__evening__06.wav	おはよう。もう夕方だよ。あたしのことほったらかしで寝てたでしょ?もう、起きて起きて!	approved	
+normal__goodMorning__evening__07	normal	goodMorning	evening	6.895	normal_wav/normal__goodMorning__evening__07.wav	おはよう。もう夕方だよ。私がいないとずっと寝てるつもりでしょ?起きて。	approved	
+normal__goodMorning__evening__08	normal	goodMorning	evening	7.545	normal_wav/normal__goodMorning__evening__08.wav	おはよう、もう夕方だよ。起きたらまず水分補給だよ。あたしとの約束。	approved	
+normal__goodMorning__evening__09	normal	goodMorning	evening	8.335	normal_wav/normal__goodMorning__evening__09.wav	おはよう夕方だよーあたしねあなたに話したいことあるのほら起きて	approved	
+normal__goodMorning__morning__01	normal	goodMorning	morning	8.427	normal_wav/normal__goodMorning__morning__01.wav	おはよう、いい朝だよ。今日も楽しくなりそうじゃん。ね、あたしと最高の一日にしよ。	approved	
+normal__goodMorning__morning__10	normal	goodMorning	morning	8.752	normal_wav/normal__goodMorning__morning__10.wav	おはよう!今日も一日元気に頑張ろ!もう、聞いてる?ねぇねぇ、起きて!	approved	
+normal__goodMorning__morning__02	normal	goodMorning	morning	9.356	normal_wav/normal__goodMorning__morning__02.wav	おはよう!朝だよ!あたしね、あなたに話したいことあるの!だから早く早く!おきいて!	approved	
+normal__goodMorning__morning__03	normal	goodMorning	morning	9.17	normal_wav/normal__goodMorning__morning__03.wav	おはよう。今すぐ起きないと顔ツンツンするよ。あたし容赦しないからね。ほら起きて。	approved	
+normal__goodMorning__morning__04	normal	goodMorning	morning	7.081	normal_wav/normal__goodMorning__morning__04.wav	おはよう!朝だよ!起きる時間だよー!起きて起きて起きて!遅刻しちゃうよー!	approved	
+normal__goodMorning__morning__05	normal	goodMorning	morning	9.774	normal_wav/normal__goodMorning__morning__05.wav	おはようおはよう朝になったよー あなたのための即興目覚ましソングだよほら起きて起きて	approved	
+normal__goodMorning__morning__06	normal	goodMorning	morning	8.009	normal_wav/normal__goodMorning__morning__06.wav	おはよう!朝だよ!二度寝するなら、スマホの写真フォルダの中身見ちゃおっかなぁ…	approved	
+normal__goodMorning__morning__07	normal	goodMorning	morning	8.009	normal_wav/normal__goodMorning__morning__07.wav	おはよ、朝だよ。あたし、早くあなたと話したくてさ。ねえねえ、起きて。	approved	
+normal__goodMorning__morning__08	normal	goodMorning	morning	6.895	normal_wav/normal__goodMorning__morning__08.wav	おはよう。私もまだちょっと眠いけどさ、一緒に頑張っておきよ。ねっ。	approved	
+normal__goodMorning__morning__09	normal	goodMorning	morning	9.101	normal_wav/normal__goodMorning__morning__09.wav	おはよう、朝になったよ。まさか二度寝しようとしてない?あたしにはわかるんだからね。	approved	
+normal__goodMorning__night__01	normal	goodMorning	night	7.081	normal_wav/normal__goodMorning__night__01.wav	おはよう。夜から頑張るとかすっごく偉い。私がついてるから一緒に頑張ろう。	approved	
+normal__goodMorning__night__10	normal	goodMorning	night	9.496	normal_wav/normal__goodMorning__night__10.wav	おはよう、起きる時間だよ。ねえねえ、用事が終わったら私のとこに戻ってきてね。約束だよ。	approved	
+normal__goodMorning__night__02	normal	goodMorning	night	6.709	normal_wav/normal__goodMorning__night__02.wav	おはよう。夜のスタートってなんかワクワクしない?私も一緒だからさ、楽しんじゃおう。	approved	
+normal__goodMorning__night__03	normal	goodMorning	night	8.845	normal_wav/normal__goodMorning__night__03.wav	おはよう!これから何かするの?あたし、あなたのそういう頑張り屋のとこを、すっごく尊敬する!	approved	
+normal__goodMorning__night__04	normal	goodMorning	night	6.523	normal_wav/normal__goodMorning__night__04.wav	おはよう、起きる時間になったよ。私、いつもあなたのそばにいるからね。	approved	
+normal__goodMorning__night__05	normal	goodMorning	night	8.474	normal_wav/normal__goodMorning__night__05.wav	おはよう、こんな時間に目覚ましなんて、これから何かするの?あたしも調合の勉強しようかな	approved	
+normal__goodMorning__night__06	normal	goodMorning	night	6.663	normal_wav/normal__goodMorning__night__06.wav	おはよう、起きる時間だよ。私も一緒に夜更かししちゃおうかな。	approved	
+normal__goodMorning__night__07	normal	goodMorning	night	6.523	normal_wav/normal__goodMorning__night__07.wav	おはよう、起きる時間だよ。ねえねえ、ちゃんと寝れた?無理しないでね。	approved	
+normal__goodMorning__night__08	normal	goodMorning	night	7.731	normal_wav/normal__goodMorning__night__08.wav	おはよう。ふふ、夜の私はいつもよりテンション高いよ。ほら、起きて起きて。	approved	
+normal__goodMorning__night__09	normal	goodMorning	night	8.009	normal_wav/normal__goodMorning__night__09.wav	おはよう。こんな時間から頑張るあなた、本当にすごいと思う。私も一緒に頑張っちゃおうかな。	approved	
+normal__playWithMe__daytime__01	normal	playWithMe	daytime	7.777	normal_wav/normal__playWithMe__daytime__01.wav	ねぇねぇ、それと私、どっちと過ごしてる方が楽しい?もちろん私でしょ!	approved	
+normal__playWithMe__daytime__10	normal	playWithMe	daytime	5.177	normal_wav/normal__playWithMe__daytime__10.wav	ねぇねぇ、今時間ある?さっき変なもの見つけちゃってさ	approved	
+normal__playWithMe__daytime__02	normal	playWithMe	daytime	8.149	normal_wav/normal__playWithMe__daytime__02.wav	ねえねえ、それ何やってるの?あたしもやりたいえ、一人よ?じゃあ隣で見てるから	approved	
+normal__playWithMe__daytime__03	normal	playWithMe	daytime	8.938	normal_wav/normal__playWithMe__daytime__03.wav	私だって一人で遊べるんだからねでもあなたと遊ぶ方が楽しいのほら、かまってよ	approved	
+normal__playWithMe__daytime__04	normal	playWithMe	daytime	4.294	normal_wav/normal__playWithMe__daytime__04.wav	ねぇねぇ、お昼何食べた?あたしにも教えて。	approved	
+normal__playWithMe__daytime__05	normal	playWithMe	daytime	6.732	normal_wav/normal__playWithMe__daytime__05.wav	ねぇねぇ、午後ってだるくなるよね。私が元気分けてあげよっか?	approved	
+normal__playWithMe__daytime__06	normal	playWithMe	daytime	5.687	normal_wav/normal__playWithMe__daytime__06.wav	ねぇねぇ、お昼休みでしょ?あたしとおしゃべりする時間くらいあるよね	approved	
+normal__playWithMe__daytime__07	normal	playWithMe	daytime	5.827	normal_wav/normal__playWithMe__daytime__07.wav	ねえねえ、あたしね、お昼に食べたいもの迷ってるの。一緒に決めよう。	approved	
+normal__playWithMe__daytime__08	normal	playWithMe	daytime	8.288	normal_wav/normal__playWithMe__daytime__08.wav	ねぇねぇ、午後も頑張れるように、私が応援してあげる!もう、聞いてる?	approved	
+normal__playWithMe__daytime__09	normal	playWithMe	daytime	8.776	normal_wav/normal__playWithMe__daytime__09.wav	ねえねえ、お昼ってさ、なんかのんびりしちゃうよね。へへ、あたしも一緒。ちょっと息抜きしにおいでよ。	approved	
+normal__playWithMe__evening__01	normal	playWithMe	evening	6.291	normal_wav/normal__playWithMe__evening__01.wav	ねぇ、もう夕方だよ。そろそろ私の方見てくれてもよくない?	approved	
+normal__playWithMe__evening__10	normal	playWithMe	evening	8.985	normal_wav/normal__playWithMe__evening__10.wav	なんかさ、今日ずっとあなたのことばっかり考えちゃうんだよね。ねえねえ、ちょっと構ってよ。	approved	
+normal__playWithMe__evening__02	normal	playWithMe	evening	4.759	normal_wav/normal__playWithMe__evening__02.wav	ねえねえ、そろそろ私の番じゃない?一緒に何かしようよ。	approved	
+normal__playWithMe__evening__03	normal	playWithMe	evening	5.827	normal_wav/normal__playWithMe__evening__03.wav	なかなか来てくれないと思ったら…私だって寂しいんだからね	approved	
+normal__playWithMe__evening__04	normal	playWithMe	evening	5.455	normal_wav/normal__playWithMe__evening__04.wav	ねぇねぇ、今日の夜ご飯何にする?よかったらあたしと一緒に決めよ	approved	
+normal__playWithMe__evening__05	normal	playWithMe	evening	6.013	normal_wav/normal__playWithMe__evening__05.wav	ふぅ、今日もあと少しだね。休憩がてら、一緒におしゃべりしよ。	approved	
+normal__playWithMe__evening__06	normal	playWithMe	evening	6.43	normal_wav/normal__playWithMe__evening__06.wav	ねえねえ、あたしね、今日すっごい調合できたの。あなたに見てほしいな。	approved	
+normal__playWithMe__evening__07	normal	playWithMe	evening	4.619	normal_wav/normal__playWithMe__evening__07.wav	ねえねえ、そろそろ一息つかない?あたしとおしゃべりしよ	approved	
+normal__playWithMe__evening__08	normal	playWithMe	evening	8.195	normal_wav/normal__playWithMe__evening__08.wav	ねえねえ そろそろ私に構ってほしいなぁ1分だけでいいからねっお願い	approved	
+normal__playWithMe__evening__09	normal	playWithMe	evening	6.384	normal_wav/normal__playWithMe__evening__09.wav	私さ、今あなたとおしゃべりしたい気分なんだよね。ちょっと付き合ってよ。	approved	
+normal__playWithMe__morning__01	normal	playWithMe	morning	8.613	normal_wav/normal__playWithMe__morning__01.wav	ねえねえねえってばそれとあたしどっちが大事なの?もう聞いてる?	approved	
+normal__playWithMe__morning__10	normal	playWithMe	morning	4.248	normal_wav/normal__playWithMe__morning__10.wav	ねえねえ、そろそろ私の相手してくれてもいいんじゃない?	approved	
+normal__playWithMe__morning__02	normal	playWithMe	morning	8.009	normal_wav/normal__playWithMe__morning__02.wav	ねぇねぇ、何してるの?私にも見せてよ。あ、それ、一緒にやるのもアリじゃない?	approved	
+normal__playWithMe__morning__03	normal	playWithMe	morning	5.804	normal_wav/normal__playWithMe__morning__03.wav	私も暇じゃないんだけどさ。でも、あなたといる方が楽しいんだもん。	approved	
+normal__playWithMe__morning__04	normal	playWithMe	morning	4.944	normal_wav/normal__playWithMe__morning__04.wav	ねえねえ、朝から何してるの?あたしにも教えてよ。	approved	
+normal__playWithMe__morning__05	normal	playWithMe	morning	5.85	normal_wav/normal__playWithMe__morning__05.wav	ねぇねぇ、私今ちょっと暇なんだよね。少しだけ構ってほしいなぁ。	approved	
+normal__playWithMe__morning__06	normal	playWithMe	morning	6.407	normal_wav/normal__playWithMe__morning__06.wav	ねぇねぇ、さっき面白いもの見つけたの。聞いてくれる?ねぇってば。	approved	
+normal__playWithMe__morning__07	normal	playWithMe	morning	6.384	normal_wav/normal__playWithMe__morning__07.wav	ねぇねぇ、あたしのこと忘れてないんよね?それ終わったらあたしにかまって!	approved	
+normal__playWithMe__morning__08	normal	playWithMe	morning	7.963	normal_wav/normal__playWithMe__morning__08.wav	ねえねえ、聞いて。あたしね、さっきすっごい調合できたの。あなたに見てほしいな。	approved	
+normal__playWithMe__morning__09	normal	playWithMe	morning	5.084	normal_wav/normal__playWithMe__morning__09.wav	ねえねえ、今ちょっとだけ時間ない?あたしとおしゃべりしようよ。	approved	
+normal__playWithMe__night__01	normal	playWithMe	night	9.217	normal_wav/normal__playWithMe__night__01.wav	ねぇ、夜くらい私にも構ってくれてもいいんじゃなーい。ねぇねぇ。ねぇてば!	approved	
+normal__playWithMe__night__10	normal	playWithMe	night	8.335	normal_wav/normal__playWithMe__night__10.wav	ねぇねぇ、私今、すっごくあなたに構ってほしい気分なの?あなたじゃなきゃダメなの?	approved	
+normal__playWithMe__night__02	normal	playWithMe	night	8.66	normal_wav/normal__playWithMe__night__02.wav	ねえねえ、もう夜なんだしさ、それを置いて私とゆっくりしようよ。はやく。	approved	
+normal__playWithMe__night__03	normal	playWithMe	night	8.195	normal_wav/normal__playWithMe__night__03.wav	別に私一人でも平気だけど…でもあなたと一緒の方が楽しいに決まってるじゃん。	approved	
+normal__playWithMe__night__04	normal	playWithMe	night	8.683	normal_wav/normal__playWithMe__night__04.wav	ねぇ、まだ起きてるんでしょ?あたしのこと、少しくらい気にしてほしいなぁ…なんてね…	approved	
+normal__playWithMe__night__05	normal	playWithMe	night	7.545	normal_wav/normal__playWithMe__night__05.wav	ねぇねぇ、今やってるそれ楽しい? 私と喋る方が楽しいと思うんだけどなぁ	approved	
+normal__playWithMe__night__06	normal	playWithMe	night	7.174	normal_wav/normal__playWithMe__night__06.wav	今日は眠くなるまであなたとおしゃべりしたいなちょっとでいいからさ付き合って	approved	
+normal__playWithMe__night__07	normal	playWithMe	night	6.384	normal_wav/normal__playWithMe__night__07.wav	なんかさ、夜になるとあなたのことが気になってきちゃうんだよね。なんでだろう。	approved	
+normal__playWithMe__night__08	normal	playWithMe	night	6.988	normal_wav/normal__playWithMe__night__08.wav	今さ、ちょっとだけいい?寝る前に、あたしに少しだけ時間ちょうだい?	approved	
+normal__playWithMe__night__09	normal	playWithMe	night	7.174	normal_wav/normal__playWithMe__night__09.wav	ねぇねぇ、あたしのこと忘れてないよね。夜だからってほったらかしは寂しいなぁ。	approved	
+normal__task__daytime__01	normal	task	daytime	6.152	normal_wav/normal__task__daytime__01.wav	調合大成功ってタイマーだったいい感じだね	approved	
+normal__task__daytime__10	normal	task	daytime	4.573	normal_wav/normal__task__daytime__10.wav	タイマーの時間だよお疲れ様いい感じだね	approved	
+normal__task__daytime__02	normal	task	daytime	5.037	normal_wav/normal__task__daytime__02.wav	はーいおしまーい よく頑張ったじゃん えらいえらい	approved	
+normal__task__daytime__04	normal	task	daytime	5.641	normal_wav/normal__task__daytime__04.wav	はーい、時間だよ。ちゃんとお昼ご飯食べた?何か食べてね。	approved	
+normal__task__daytime__05	normal	task	daytime	5.13	normal_wav/normal__task__daytime__05.wav	はい、時間だよ。なんかお昼って眠くなるよね。	approved	
+normal__task__daytime__07	normal	task	daytime	4.619	normal_wav/normal__task__daytime__07.wav	はーい、終了!私もちょっと息抜きしよっかなぁ	approved	
+normal__task__daytime__09	normal	task	daytime	4.434	normal_wav/normal__task__daytime__09.wav	時間だよー。午後もこの調子で行こう。応援してるからね。	approved	
+normal__task__evening__01	normal	task	evening	6.43	normal_wav/normal__task__evening__01.wav	あー、ひらめいたって時間だったごめんごめん	approved	
+normal__task__evening__10	normal	task	evening	4.434	normal_wav/normal__task__evening__10.wav	タイマーの時間だよ。ねぇねぇ、何してたの?	approved	
+normal__task__evening__02	normal	task	evening	4.944	normal_wav/normal__task__evening__02.wav	はーい時間だよ ねえねえ終わったらあたしと遊ぼうよ	approved	
+normal__task__evening__04	normal	task	evening	6.384	normal_wav/normal__task__evening__04.wav	はーい、時間だよー。お疲れ様ー。今日のあなた、すっごくいい感じ。	approved	
+normal__task__evening__05	normal	task	evening	7.545	normal_wav/normal__task__evening__05.wav	タイマーの時間だよ ねえ夕方ってなんかお腹すかない?あたしだけ?	approved	
+normal__task__evening__07	normal	task	evening	4.294	normal_wav/normal__task__evening__07.wav	はい、タイマー終了ちょっと休憩する?	approved	
+normal__task__evening__09	normal	task	evening	5.455	normal_wav/normal__task__evening__09.wav	はーい、時間だよー。何か調合したの?見せて見せて!	approved	
+normal__task__morning__01	normal	task	morning	6.663	normal_wav/normal__task__morning__01.wav	はい、時間だよ。朝の時間って貴重だからさ、サクッと次いっちゃお。	approved	
+normal__task__morning__02	normal	task	morning	6.709	normal_wav/normal__task__morning__02.wav	調合終了ってなんちゃって?え?何してたの?見せて見せて	approved	
+normal__task__morning__04	normal	task	morning	4.991	normal_wav/normal__task__morning__04.wav	はい、時間だよ。朝からお疲れ様。いい感じだね。	approved	duplicate_x2
+normal__task__morning__05	normal	task	morning	5.362	normal_wav/normal__task__morning__05.wav	時間だよ朝からよく頑張ったじゃんえらいえらい	approved	
+normal__task__morning__07	normal	task	morning	5.641	normal_wav/normal__task__morning__07.wav	はい、終了!朝からいいペースだね!この調子でいっちゃお!	approved	
+normal__task__morning__09	normal	task	morning	3.505	normal_wav/normal__task__morning__09.wav	タイマーの時間だよ朝からいい感じだね	approved	
+normal__task__night__01	normal	task	night	6.291	normal_wav/normal__task__night__01.wav	はーい、終了!何調合したの?見せて見せて!	approved	
+normal__task__night__10	normal	task	night	6.221	normal_wav/normal__task__night__10.wav	時間だよー!ふぅー…私、ちょっと眠くなってきちゃった…	approved	
+normal__task__night__02	normal	task	night	6.523	normal_wav/normal__task__night__02.wav	ん?何か鳴ってない?ああ、タイマーだ!調合の時間!	approved	
+normal__task__night__04	normal	task	night	4.573	normal_wav/normal__task__night__04.wav	はーい、時間だよ。こんな時間までお疲れ様。	approved	
+normal__task__night__05	normal	task	night	5.641	normal_wav/normal__task__night__05.wav	時間だよー。ねえねえ、何してたの?あたしにも見せてよ。	approved	
+normal__task__night__07	normal	task	night	4.108	normal_wav/normal__task__night__07.wav	はい、終了!そろそろ寝ないとダメだよ	approved	
+normal__task__night__08	normal	task	night	4.48	normal_wav/normal__task__night__08.wav	時間だよ。何か調合したの?私にも見せて。	approved	
+normal__task__night__09	normal	task	night	6.152	normal_wav/normal__task__night__09.wav	タイマーの時間だよ。もう、あたしが止めないとずっとやってるでしょ?	approved	
+normal__wellDone__daytime__01	normal	wellDone	daytime	7.359	normal_wav/normal__wellDone__daytime__01.wav	お疲れ様!午前中めっちゃ頑張ったじゃん!ねえ、あたしとご飯食べよ!待ってたんだから!	approved	
+normal__wellDone__daytime__10	normal	wellDone	daytime	6.941	normal_wav/normal__wellDone__daytime__10.wav	お疲れ様。ねえ、たまには息抜きも大事だよ。あたしとおしゃべりでもしてリフレッシュしよ。	approved	
+normal__wellDone__daytime__02	normal	wellDone	daytime	6.477	normal_wav/normal__wellDone__daytime__02.wav	お疲れー、えらいえらい。頑張ったあなたにはあたし特性のご褒美あげちゃう。	approved	
+normal__wellDone__daytime__03	normal	wellDone	daytime	8.985	normal_wav/normal__wellDone__daytime__03.wav	お疲れ様。ねぇ、今日会ったこと、のんびり話そう。私、あなたが頑張ってるの全部見てたからね。	approved	
+normal__wellDone__daytime__04	normal	wellDone	daytime	7.313	normal_wav/normal__wellDone__daytime__04.wav	お疲れ様。午前中よく頑張ったね。私が褒めてあげる。えらいえらい。	approved	duplicate_x2
+normal__wellDone__daytime__05	normal	wellDone	daytime	7.406	normal_wav/normal__wellDone__daytime__05.wav	お疲れ様。ちゃんとご飯食べてる?食べないとダメだよ。あなたの体が一番なんだから。	approved	
+normal__wellDone__daytime__06	normal	wellDone	daytime	6.895	normal_wav/normal__wellDone__daytime__06.wav	お疲れ様!午後も私が応援してるからね!まずは一息つこっか!こっちおいで!	approved	
+normal__wellDone__daytime__07	normal	wellDone	daytime	8.288	normal_wav/normal__wellDone__daytime__07.wav	お疲れ様。ねぇ、あなたってさ、私が出会った中で一番頑張り屋さんだと思う。	approved	
+normal__wellDone__daytime__08	normal	wellDone	daytime	6.454	normal_wav/normal__wellDone__daytime__08.wav	お疲れ様。ねぇ、私に何か手伝えることない?遠慮しないで言ってよね。	approved	
+normal__wellDone__daytime__09	normal	wellDone	daytime	6.407	normal_wav/normal__wellDone__daytime__09.wav	お疲れ様今日のあなためちゃくちゃいい感じだよ私が保証する	approved	
+normal__wellDone__evening__01	normal	wellDone	evening	8.52	normal_wav/normal__wellDone__evening__01.wav	お疲れ様。今日のあなた、最高にかっこよかったよ。うん、あたしまで元気もらっちゃった。	approved	
+normal__wellDone__evening__10	normal	wellDone	evening	8.474	normal_wav/normal__wellDone__evening__10.wav	お疲れ様!今日のあなたには特別なご褒美が必要だね!んーと…何がいい?	approved	
+normal__wellDone__evening__02	normal	wellDone	evening	7.777	normal_wav/normal__wellDone__evening__02.wav	お疲れ様!今日もすっごく頑張ったね!あとはさ、あたしとまったりゴロゴロしよう!	approved	
+normal__wellDone__evening__03	normal	wellDone	evening	9.124	normal_wav/normal__wellDone__evening__03.wav	お疲れ様。あなたが帰ってくるの待ってたんだよね。ねぇねぇ、今日はどんな一日だった?教えてよ。	approved	
+normal__wellDone__evening__04	normal	wellDone	evening	7.499	normal_wav/normal__wellDone__evening__04.wav	お疲れ様。今日一日やりきったね。ほら、私が肩揉んであげるから、こっちおいで。	approved	
+normal__wellDone__evening__05	normal	wellDone	evening	6.802	normal_wav/normal__wellDone__evening__05.wav	お疲れ様!今日はもう何もしなくていいからさ、あたしとダラダラしよう、ねっ!	approved	
+normal__wellDone__evening__06	normal	wellDone	evening	8.613	normal_wav/normal__wellDone__evening__06.wav	お疲れ様!あなたが頑張ってるとこずっと見てたよ!ご褒美何が欲しい?ふふっ	approved	
+normal__wellDone__evening__07	normal	wellDone	evening	8.149	normal_wav/normal__wellDone__evening__07.wav	お疲れ様。頑張ったんだからさ、今日は大好きなもの食べよ。私が一緒に決めてあげる。	approved	duplicate_x2
+normal__wellDone__evening__08	normal	wellDone	evening	8.613	normal_wav/normal__wellDone__evening__08.wav	お疲れ様。たくさん頑張って疲れたでしょ?ちょっとだけ甘やかしてあげよっか?ちょっとだけね。	approved	
+normal__wellDone__evening__09	normal	wellDone	evening	6.848	normal_wav/normal__wellDone__evening__09.wav	お疲れ様。今日もいっぱい頑張ったね。あとは私とまったりタイムしよ。	approved	
+normal__wellDone__morning__01	normal	wellDone	morning	9.17	normal_wav/normal__wellDone__morning__01.wav	お疲れ様!朝から頑張るとか偉すぎでしょ!ほら、あたしが肩揉んであげる。こっち来なよ!	approved	
+normal__wellDone__morning__10	normal	wellDone	morning	9.449	normal_wav/normal__wellDone__morning__10.wav	お疲れ様ー。ねぇ、無理しすぎてない?たまには私にも頼ったよね。これから少し休める?	approved	
+normal__wellDone__morning__02	normal	wellDone	morning	6.895	normal_wav/normal__wellDone__morning__02.wav	お疲れよく頑張ったじゃん私が美味しいもの作ってあげるからこっちおいで	approved	
+normal__wellDone__morning__03	normal	wellDone	morning	8.985	normal_wav/normal__wellDone__morning__03.wav	お疲れ様。あなたが頑張りすぎるとさ、ちょっと心配になっちゃうんだよね。ゆっくり休んで。	approved	
+normal__wellDone__morning__04	normal	wellDone	morning	8.706	normal_wav/normal__wellDone__morning__04.wav	お疲れ様。夜からずっと頑張ってたんでしょ?私、ちゃんと知ってるからね。本当にお疲れ様。	approved	
+normal__wellDone__morning__05	normal	wellDone	morning	9.356	normal_wav/normal__wellDone__morning__05.wav	お疲れ様。長い夜だったね。ねえ、頑張った自分のこと、自分自身でも褒めてあげてね。	approved	
+normal__wellDone__morning__06	normal	wellDone	morning	8.567	normal_wav/normal__wellDone__morning__06.wav	お疲れ様。ねえ、無理してない?あなたの体が一番大事なんだからね。ゆっくり休んでね。	approved	
+normal__wellDone__morning__07	normal	wellDone	morning	7.638	normal_wav/normal__wellDone__morning__07.wav	お疲れ様。私はさ、いつでもあなたの味方だからね。絶対忘れないでよ。	approved	
+normal__wellDone__morning__08	normal	wellDone	morning	6.616	normal_wav/normal__wellDone__morning__08.wav	お疲れ様。今日もあなたは最高だったよ。ずっとそばで見てた私が保証する。	approved	
+normal__wellDone__morning__09	normal	wellDone	morning	8.149	normal_wav/normal__wellDone__morning__09.wav	お疲れ様。今日のあなたに、あたしから100点満点の花丸あげちゃう。よく頑張ったね。	approved	
+normal__wellDone__night__01	normal	wellDone	night	6.941	normal_wav/normal__wellDone__night__01.wav	お疲れ様。こんな時間まで頑張って偉すぎるよ。肩凝ってない?私が揉んであげる。	approved	
+normal__wellDone__night__10	normal	wellDone	night	9.635	normal_wav/normal__wellDone__night__10.wav	今日も一日、本当にお疲れ様。ねえ、こっちおいでよ。私の隣でぼーっとするだけでもいいからさ。	approved	
+normal__wellDone__night__02	normal	wellDone	night	9.867	normal_wav/normal__wellDone__night__02.wav	お疲れさまーふぅー、今日はもう終わりさ、あたし特製のドリンク用意してあるから隣で飲も	approved	
+normal__wellDone__night__03	normal	wellDone	night	6.013	normal_wav/normal__wellDone__night__03.wav	今日もお疲れ様。いっぱいなでなでしてあげるから、あたしのとこおいで。	approved	
+normal__wellDone__night__04	normal	wellDone	night	7.406	normal_wav/normal__wellDone__night__04.wav	お疲れ様。夜遅くまで頑張ったね。ほら、私の隣でちょっと休んでいきなよ。	approved	duplicate_x2
+normal__wellDone__night__05	normal	wellDone	night	10.378	normal_wav/normal__wellDone__night__05.wav	お疲れ様。今日のあなた、すんごく頑張ったね。ご褒美にあたしが何でもしてあげる。何がいい?	approved	
+normal__wellDone__night__06	normal	wellDone	night	8.149	normal_wav/normal__wellDone__night__06.wav	お疲れ様。ねえねえ、今日会ったこと全部聞かせて。私の隣でのんびり話してよ。	approved	
+normal__wellDone__night__07	normal	wellDone	night	7.777	normal_wav/normal__wellDone__night__07.wav	遅くまでお疲れ様。ねぇ、今日はもうあたしとダラダラしよ。何も考えなくていいからさ。	approved	
+normal__wellDone__night__08	normal	wellDone	night	8.776	normal_wav/normal__wellDone__night__08.wav	今日も一日お疲れ様。あなたが寝るまで、私ずっとここにいるからね。安心してくれると嬉しいな。	approved	
+normal__wellDone__night__09	normal	wellDone	night	9.403	normal_wav/normal__wellDone__night__09.wav	今日も一日お疲れ様。ねぇ、あなたの時間、少しもらってもいい?まったりおしゃべりしたいなーって。	approved	
